@@ -97,14 +97,43 @@ export default {
       return true
     }
 
+    const calculateSHA256 = async (rawFile) => {
+      const buffer = await rawFile.arrayBuffer()
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+      return Array.from(new Uint8Array(hashBuffer))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+    }
+
     const handleUpload = async (uploadFile) => {
       const rawFile = uploadFile.raw
       if (!rawFile || !validateFile(rawFile)) return
 
       uploading.value = true
       try {
+        const fileSHA256 = await calculateSHA256(rawFile)
+        const precheck = await api.post('/file/precheck', {
+          original_name: rawFile.name,
+          file_sha256: fileSHA256,
+          size: rawFile.size
+        })
+        if (!precheck.data || precheck.data.status_code !== 1000) {
+          ElMessage.error(precheck.data?.status_msg || '上传预检失败')
+          return
+        }
+        if (precheck.data.reused) {
+          ElMessage.success('文件上传成功')
+          await loadFiles()
+          return
+        }
+        if (!precheck.data.need_upload) {
+          ElMessage.error('上传预检失败')
+          return
+        }
+
         const formData = new FormData()
         formData.append('file', rawFile)
+        formData.append('file_sha256', fileSHA256)
         const response = await api.post('/file/upload', formData)
         if (response.data && response.data.status_code === 1000) {
           ElMessage.success('文件上传成功')

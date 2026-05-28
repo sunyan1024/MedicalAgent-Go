@@ -79,6 +79,7 @@ func migration() error {
 		new(model.User),
 		new(model.Session),
 		new(model.Message),
+		new(model.StoredFile),
 		new(model.KnowledgeFile),
 	)
 }
@@ -104,6 +105,12 @@ func prepareKnowledgeFileMigration() error {
 			return fmt.Errorf("drop knowledge_files file_md5 column failed: %w", err)
 		}
 		log.Printf("[MySQL][migration] dropped legacy knowledge_files file_md5 column")
+	}
+	if migrator.HasColumn(&model.KnowledgeFile{}, "file_path") {
+		if err := migrator.DropColumn(&model.KnowledgeFile{}, "file_path"); err != nil {
+			return fmt.Errorf("drop knowledge_files file_path column failed: %w", err)
+		}
+		log.Printf("[MySQL][migration] dropped legacy knowledge_files file_path column")
 	}
 	return nil
 }

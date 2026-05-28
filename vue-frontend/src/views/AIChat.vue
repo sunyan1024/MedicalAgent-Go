@@ -530,6 +530,14 @@ export default {
       }
     }
 
+    const calculateSHA256 = async (rawFile) => {
+      const buffer = await rawFile.arrayBuffer()
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+      return Array.from(new Uint8Array(hashBuffer))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+    }
+
     const handleFileUpload = async (event) => {
       const file = event.target.files[0]
       if (!file) return
@@ -547,8 +555,28 @@ export default {
 
       try {
         uploading.value = true
+        const fileSHA256 = await calculateSHA256(file)
+        const precheck = await api.post('/file/precheck', {
+          original_name: file.name,
+          file_sha256: fileSHA256,
+          size: file.size
+        })
+        if (!precheck.data || precheck.data.status_code !== 1000) {
+          ElMessage.error(precheck.data?.status_msg || '上传预检失败')
+          return
+        }
+        if (precheck.data.reused) {
+          ElMessage.success('文件上传成功')
+          return
+        }
+        if (!precheck.data.need_upload) {
+          ElMessage.error('上传预检失败')
+          return
+        }
+
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('file_sha256', fileSHA256)
 
         // 使用axios的baseURL配置，无需手动添加/api前缀
         const response = await api.post('/file/upload', formData, 

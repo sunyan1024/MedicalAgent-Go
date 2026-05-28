@@ -372,39 +372,33 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
-	// 获取用户上传的所有文件名，每个文件对应一个独立的 Redis 向量索引。
-	userDir := fmt.Sprintf("uploads/%s", username)
-	files, err := os.ReadDir(userDir)
-	if err != nil || len(files) == 0 {
-		log.Printf("[RAG][Query] no uploaded files username=%s dir=%s files=%d err=%v", username, userDir, len(files), err)
-		return nil, fmt.Errorf("no uploaded file found for user %s", username)
-	}
-	log.Printf("[RAG][Query] uploaded files found username=%s dir=%s files=%d", username, userDir, len(files))
-
 	originalNameByStoredName := map[string]string{}
 	knowledgeFiles, err := fileDao.GetKnowledgeFilesByUserName(username)
 	if err != nil {
-		log.Printf("[RAG][Query] load knowledge file metadata failed username=%s err=%v", username, err)
-	} else {
-		for _, knowledgeFile := range knowledgeFiles {
-			storedName := strings.TrimSpace(knowledgeFile.StoredName)
-			originalName := strings.TrimSpace(knowledgeFile.OriginalName)
-			if storedName == "" || originalName == "" {
-				continue
-			}
-			originalNameByStoredName[storedName] = originalName
-		}
-		log.Printf("[RAG][Query] knowledge file metadata loaded username=%s files=%d mapped=%d", username, len(knowledgeFiles), len(originalNameByStoredName))
+		log.Printf("[RAG][Query] load knowledge files failed username=%s err=%v", username, err)
+		return nil, err
 	}
-
-	rdb := redisPkg.Rdb
-	retrievers := make([]retriever.Retriever, 0, len(files))
-	for _, f := range files {
-		if f.IsDir() {
+	if len(knowledgeFiles) == 0 {
+		log.Printf("[RAG][Query] no uploaded files username=%s", username)
+		return nil, fmt.Errorf("no uploaded file found for user %s", username)
+	}
+	for _, knowledgeFile := range knowledgeFiles {
+		storedName := strings.TrimSpace(knowledgeFile.StoredName)
+		originalName := strings.TrimSpace(knowledgeFile.OriginalName)
+		if storedName == "" || originalName == "" {
 			continue
 		}
+		originalNameByStoredName[storedName] = originalName
+	}
+	log.Printf("[RAG][Query] knowledge files loaded username=%s files=%d mapped=%d", username, len(knowledgeFiles), len(originalNameByStoredName))
 
-		filename := f.Name()
+	rdb := redisPkg.Rdb
+	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
+	for _, knowledgeFile := range knowledgeFiles {
+		filename := strings.TrimSpace(knowledgeFile.StoredName)
+		if filename == "" {
+			continue
+		}
 		originalName := originalNameByStoredName[filename]
 		indexKey := BuildFileIndexKey(username, filename)
 		indexName := redisPkg.GenerateIndexName(indexKey)

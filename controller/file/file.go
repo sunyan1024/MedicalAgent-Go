@@ -21,11 +21,57 @@ type (
 		controller.Response
 	}
 
+	PrecheckRequest struct {
+		OriginalName string `json:"original_name"`
+		FileSHA256   string `json:"file_sha256"`
+		Size         int64  `json:"size"`
+	}
+
+	PrecheckResponse struct {
+		NeedUpload bool                 `json:"need_upload"`
+		Reused     bool                 `json:"reused"`
+		File       *model.KnowledgeFile `json:"file,omitempty"`
+		controller.Response
+	}
+
 	ListFileResponse struct {
 		Files []model.KnowledgeFile `json:"files"`
 		controller.Response
 	}
 )
+
+func PrecheckRagFile(c *gin.Context) {
+	res := new(PrecheckResponse)
+
+	username := c.GetString("userName")
+	if username == "" {
+		log.Println("[PrecheckRagFile] Username not found in context")
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
+		return
+	}
+
+	var req PrecheckRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Println("[PrecheckRagFile] bind fail ", err)
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+
+	result, err := file.PrecheckRagFile(username, req.OriginalName, req.FileSHA256, req.Size)
+	if err != nil {
+		log.Println("[PrecheckRagFile] fail ", err)
+		res.CodeOf(code.CodeInvalidParams)
+		res.StatusMsg = err.Error()
+		c.JSON(http.StatusOK, res)
+		return
+	}
+
+	res.Success()
+	res.NeedUpload = result.NeedUpload
+	res.Reused = result.Reused
+	res.File = result.File
+	c.JSON(http.StatusOK, res)
+}
 
 func UploadRagFile(c *gin.Context) {
 	res := new(UploadFileResponse)
@@ -47,10 +93,14 @@ func UploadRagFile(c *gin.Context) {
 	}
 
 	//indexer 会在 service 层根据实际文件名创建
-	knowledgeFile, err := file.UploadRagFile(username, uploadedFile)
+	fileSHA256 := c.PostForm("file_sha256")
+	knowledgeFile, err := file.UploadRagFile(username, uploadedFile, fileSHA256)
 	if err != nil {
 		log.Println("[UploadRagFile] fail ", err)
-		if strings.Contains(err.Error(), "文件类型不正确") || errors.Is(err, file.ErrDuplicateFile) {
+		if strings.Contains(err.Error(), "文件类型不正确") ||
+			strings.Contains(err.Error(), "SHA-256") ||
+			errors.Is(err, file.ErrDuplicateFile) ||
+			errors.Is(err, file.ErrHashMismatch) {
 			res.CodeOf(code.CodeInvalidParams)
 			res.StatusMsg = err.Error()
 			c.JSON(http.StatusOK, res)
