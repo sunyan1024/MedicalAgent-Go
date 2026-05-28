@@ -5,6 +5,7 @@ import (
 	"GoAI/controller"
 	"GoAI/model"
 	"GoAI/service/file"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -49,7 +50,7 @@ func UploadRagFile(c *gin.Context) {
 	knowledgeFile, err := file.UploadRagFile(username, uploadedFile)
 	if err != nil {
 		log.Println("[UploadRagFile] fail ", err)
-		if strings.Contains(err.Error(), "文件类型不正确") {
+		if strings.Contains(err.Error(), "文件类型不正确") || errors.Is(err, file.ErrDuplicateFile) {
 			res.CodeOf(code.CodeInvalidParams)
 			res.StatusMsg = err.Error()
 			c.JSON(http.StatusOK, res)

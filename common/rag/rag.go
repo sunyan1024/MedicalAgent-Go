@@ -43,6 +43,13 @@ type RAGQuery struct {
 	retrievers []retriever.Retriever
 }
 
+func BuildFileIndexKey(username string, storedName string) string {
+	if strings.TrimSpace(username) != "" {
+		return fmt.Sprintf("%s:%s", username, storedName)
+	}
+	return storedName
+}
+
 var (
 	unidocLicenseOnce sync.Once
 	unidocLicenseErr  error
@@ -399,7 +406,8 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 
 		filename := f.Name()
 		originalName := originalNameByStoredName[filename]
-		indexName := redisPkg.GenerateIndexName(filename)
+		indexKey := BuildFileIndexKey(username, filename)
+		indexName := redisPkg.GenerateIndexName(indexKey)
 		retrieverConfig := &redisRetriever.RetrieverConfig{
 			Client:       rdb,
 			Index:        indexName,

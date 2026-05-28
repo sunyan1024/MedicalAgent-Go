@@ -22,6 +22,12 @@ func GetKnowledgeFileByID(userName string, fileID string) (*model.KnowledgeFile,
 	return &file, err
 }
 
+func GetKnowledgeFileByUserNameAndStoredName(userName string, storedName string) (*model.KnowledgeFile, error) {
+	var file model.KnowledgeFile
+	err := mysql.DB.Where("user_name = ? AND stored_name = ?", userName, storedName).First(&file).Error
+	return &file, err
+}
+
 func DeleteKnowledgeFileByID(userName string, fileID string) error {
 	return mysql.DB.Where("user_name = ? AND id = ?", userName, fileID).Delete(&model.KnowledgeFile{}).Error
 }

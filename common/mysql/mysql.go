@@ -4,6 +4,7 @@ import (
 	"GoAI/config"
 	"GoAI/model"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -70,10 +71,39 @@ func InitMysql() error {
 
 // 自动数据迁移
 func migration() error {
+	if err := prepareKnowledgeFileMigration(); err != nil {
+		return err
+	}
+
 	return DB.AutoMigrate( // 自动迁移以下模型
 		new(model.User),
 		new(model.Session),
 		new(model.Message),
 		new(model.KnowledgeFile),
 	)
+}
+
+func prepareKnowledgeFileMigration() error {
+	migrator := DB.Migrator()
+	for _, indexName := range []string{
+		"idx_knowledge_files_stored_name",
+		"uni_knowledge_files_stored_name",
+		"idx_user_file_md5",
+		"stored_name",
+	} {
+		if !migrator.HasIndex(&model.KnowledgeFile{}, indexName) {
+			continue
+		}
+		if err := migrator.DropIndex(&model.KnowledgeFile{}, indexName); err != nil {
+			return fmt.Errorf("drop knowledge_files stored_name unique index %s failed: %w", indexName, err)
+		}
+		log.Printf("[MySQL][migration] dropped legacy knowledge_files stored_name index: %s", indexName)
+	}
+	if migrator.HasColumn(&model.KnowledgeFile{}, "file_md5") {
+		if err := migrator.DropColumn(&model.KnowledgeFile{}, "file_md5"); err != nil {
+			return fmt.Errorf("drop knowledge_files file_md5 column failed: %w", err)
+		}
+		log.Printf("[MySQL][migration] dropped legacy knowledge_files file_md5 column")
+	}
+	return nil
 }

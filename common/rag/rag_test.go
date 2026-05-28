@@ -59,3 +59,12 @@ func TestBuildRAGPromptReturnsQueryForEmptyContext(t *testing.T) {
 		t.Fatalf("nil-only docs: got %q, want %q", got, query)
 	}
 }
+
+func TestBuildFileIndexKey(t *testing.T) {
+	if got := BuildFileIndexKey("user1", "abc.pdf"); got != "user1:abc.pdf" {
+		t.Fatalf("scoped key: got %q", got)
+	}
+	if got := BuildFileIndexKey("", "fallback.pdf"); got != "fallback.pdf" {
+		t.Fatalf("empty username key: got %q", got)
+	}
+}
