@@ -268,11 +268,11 @@ func createUserFileFromStoredFile(username string, originalName string, storedNa
 	indexKey := rag.BuildFileIndexKey(username, storedName)
 	indexer, err := rag.NewRAGIndexer(indexKey)
 	if err != nil {
-		return nil, err
+		return nil, normalizeRAGIndexError(err)
 	}
 	if err := indexer.IndexFile(context.Background(), storedFile.FilePath); err != nil {
 		rag.DeleteIndex(context.Background(), indexKey)
-		return nil, err
+		return nil, normalizeRAGIndexError(err)
 	}
 
 	knowledgeFile := &model.KnowledgeFile{
@@ -297,4 +297,36 @@ func createUserFileFromStoredFile(username string, originalName string, storedNa
 	}
 
 	return knowledgeFile, nil
+}
+
+func normalizeRAGIndexError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "RediSearch") ||
+		strings.Contains(msg, "redis index") ||
+		strings.Contains(msg, "FT.INFO") ||
+		strings.Contains(msg, "FT.CREATE"):
+		return fmt.Errorf("知识库索引服务不可用，请检查 Redis Stack/RediSearch: %w", err)
+	case strings.Contains(msg, "failed to extract pdf text") ||
+		strings.Contains(msg, "failed to create pdf reader") ||
+		strings.Contains(msg, "failed to get pdf page count") ||
+		strings.Contains(msg, "failed to load pdf page") ||
+		strings.Contains(msg, "failed to create extractor") ||
+		strings.Contains(msg, "failed to extract text from pdf") ||
+		strings.Contains(msg, "unidocConfig.licenseApiKey"):
+		return fmt.Errorf("PDF 文本解析失败: %w", err)
+	case strings.Contains(msg, "failed to create embedder") ||
+		strings.Contains(msg, "failed to store document") ||
+		strings.Contains(strings.ToLower(msg), "embedding"):
+		return fmt.Errorf("文档向量化失败，请检查模型配置或网络: %w", err)
+	case strings.Contains(msg, "empty content") ||
+		strings.Contains(msg, "无法提取文本"):
+		return fmt.Errorf("文件内容为空或无法提取文本: %w", err)
+	default:
+		return fmt.Errorf("知识库文件解析或索引失败: %w", err)
+	}
 }

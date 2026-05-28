@@ -68,7 +68,8 @@
 
 import { ref, nextTick, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../utils/api'
+import api, { getApiErrorMessage } from '../utils/api'
+import { calculateFileSHA256 } from '../utils/hash'
 
 export default {
   name: 'AIChat',
@@ -530,14 +531,6 @@ export default {
       }
     }
 
-    const calculateSHA256 = async (rawFile) => {
-      const buffer = await rawFile.arrayBuffer()
-      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-      return Array.from(new Uint8Array(hashBuffer))
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join('')
-    }
-
     const handleFileUpload = async (event) => {
       const file = event.target.files[0]
       if (!file) return
@@ -555,7 +548,7 @@ export default {
 
       try {
         uploading.value = true
-        const fileSHA256 = await calculateSHA256(file)
+        const fileSHA256 = await calculateFileSHA256(file)
         const precheck = await api.post('/file/precheck', {
           original_name: file.name,
           file_sha256: fileSHA256,
@@ -595,7 +588,7 @@ export default {
         }
       } catch (error) {
         console.error('File upload error:', error)
-        ElMessage.error('文件上传失败')
+        ElMessage.error(getApiErrorMessage(error, '文件上传失败'))
       } finally {
         uploading.value = false
         // 清空文件输入

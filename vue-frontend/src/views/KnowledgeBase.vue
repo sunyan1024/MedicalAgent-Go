@@ -56,7 +56,8 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Document, Refresh, Upload } from '@element-plus/icons-vue'
-import api from '../utils/api'
+import api, { getApiErrorMessage } from '../utils/api'
+import { calculateFileSHA256 } from '../utils/hash'
 
 export default {
   name: 'KnowledgeBase',
@@ -97,21 +98,13 @@ export default {
       return true
     }
 
-    const calculateSHA256 = async (rawFile) => {
-      const buffer = await rawFile.arrayBuffer()
-      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-      return Array.from(new Uint8Array(hashBuffer))
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join('')
-    }
-
     const handleUpload = async (uploadFile) => {
       const rawFile = uploadFile.raw
       if (!rawFile || !validateFile(rawFile)) return
 
       uploading.value = true
       try {
-        const fileSHA256 = await calculateSHA256(rawFile)
+        const fileSHA256 = await calculateFileSHA256(rawFile)
         const precheck = await api.post('/file/precheck', {
           original_name: rawFile.name,
           file_sha256: fileSHA256,
@@ -143,7 +136,7 @@ export default {
         }
       } catch (error) {
         console.error('Upload knowledge file error:', error)
-        ElMessage.error('文件上传失败')
+        ElMessage.error(getApiErrorMessage(error, '文件上传失败'))
       } finally {
         uploading.value = false
       }
