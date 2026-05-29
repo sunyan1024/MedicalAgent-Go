@@ -115,7 +115,7 @@ export default {
           return
         }
         if (precheck.data.reused) {
-          ElMessage.success('文件上传成功')
+          ElMessage.success('秒传成功')
           await loadFiles()
           return
         }
