@@ -82,10 +82,6 @@ type MCPConfig struct {
 	MCPBaseUrl string `toml:"baseUrl"`
 }
 
-type UniDocConfig struct {
-	UniDocLicenseAPIKey string `toml:"licenseApiKey"`
-}
-
 type Config struct {
 	EmailConfig    `toml:"emailConfig"`
 	RedisConfig    `toml:"redisConfig"`
@@ -98,7 +94,6 @@ type Config struct {
 	OllamaConfig   `toml:"ollamaConfig"`
 	TTSConfig      `toml:"ttsConfig"`
 	MCPConfig      `toml:"mcpConfig"`
-	UniDocConfig   `toml:"unidocConfig"`
 }
 
 // 管理 Redis 键名前缀

@@ -6,13 +6,13 @@ import (
 	fileDao "GoAI/dao/file"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	embeddingArk "github.com/cloudwego/eino-ext/components/embedding/ark"
@@ -21,10 +21,8 @@ import (
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
+	"github.com/ledongthuc/pdf"
 	"github.com/redis/go-redis/v9"
-	"github.com/unidoc/unipdf/v4/common/license"
-	unipdfextractor "github.com/unidoc/unipdf/v4/extractor"
-	unipdfmodel "github.com/unidoc/unipdf/v4/model"
 )
 
 // RAGIndexer 是一个检索增强生成(RAG)系统的索引器结构体
@@ -50,11 +48,6 @@ func BuildFileIndexKey(username string, storedName string) string {
 	return storedName
 }
 
-var (
-	unidocLicenseOnce sync.Once
-	unidocLicenseErr  error
-)
-
 const (
 	defaultChunkSize    = 2000
 	defaultChunkOverlap = 200
@@ -70,71 +63,24 @@ func previewForLog(text string) string {
 	return string(runes[:logPreviewRunes]) + "..."
 }
 
-func initUniDocLicense() error {
-	unidocLicenseOnce.Do(func() {
-		conf := config.GetConfig()
-		apiKey := strings.TrimSpace(conf.UniDocConfig.UniDocLicenseAPIKey)
-		if apiKey == "" {
-			unidocLicenseErr = fmt.Errorf("unidocConfig.licenseApiKey is required for PDF extraction")
-			return
-		}
-
-		unidocLicenseErr = license.SetMeteredKey(apiKey)
-	})
-
-	return unidocLicenseErr
-}
-
 func extractPDFText(filePath string) (string, error) {
-	if err := initUniDocLicense(); err != nil {
-		return "", err
-	}
-
-	file, err := os.Open(filePath)
+	file, reader, err := pdf.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open pdf file: %w", err)
 	}
 	defer file.Close()
 
-	reader, err := unipdfmodel.NewPdfReader(file)
+	plainTextReader, err := reader.GetPlainText()
 	if err != nil {
-		return "", fmt.Errorf("failed to create pdf reader: %w", err)
+		return "", fmt.Errorf("failed to extract pdf text: %w", err)
 	}
 
-	pageCount, err := reader.GetNumPages()
+	content, err := io.ReadAll(plainTextReader)
 	if err != nil {
-		return "", fmt.Errorf("failed to get pdf page count: %w", err)
+		return "", fmt.Errorf("failed to read pdf text: %w", err)
 	}
 
-	var textBuilder strings.Builder
-	for pageNum := 1; pageNum <= pageCount; pageNum++ {
-		page, err := reader.GetPage(pageNum)
-		if err != nil {
-			return "", fmt.Errorf("failed to load pdf page %d: %w", pageNum, err)
-		}
-
-		ex, err := unipdfextractor.New(page)
-		if err != nil {
-			return "", fmt.Errorf("failed to create extractor for pdf page %d: %w", pageNum, err)
-		}
-
-		pageText, err := ex.ExtractText()
-		if err != nil {
-			return "", fmt.Errorf("failed to extract text from pdf page %d: %w", pageNum, err)
-		}
-
-		pageText = strings.TrimSpace(pageText)
-		if pageText == "" {
-			continue
-		}
-
-		if textBuilder.Len() > 0 {
-			textBuilder.WriteString("\n\n")
-		}
-		textBuilder.WriteString(pageText)
-	}
-
-	text := strings.TrimSpace(textBuilder.String())
+	text := strings.TrimSpace(string(content))
 	if text == "" {
 		return "", fmt.Errorf("failed to extract pdf text: empty content")
 	}
