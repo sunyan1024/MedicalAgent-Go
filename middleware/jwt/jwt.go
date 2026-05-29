@@ -40,7 +40,7 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
-		log.Println("[Auth] token is", token)
+		log.Println("[Auth] token is", maskToken(token))
 
 		// 解析并验证token
 		userName, ok := myjwt.ParseToken(token)
@@ -55,4 +55,13 @@ func Auth() gin.HandlerFunc {
 		c.Set("userName", userName)
 		c.Next()
 	}
+}
+
+func maskToken(token string) string {
+	const visibleChars = 10
+	if len(token) <= visibleChars*2 {
+		return "<redacted>"
+	}
+
+	return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
 }
