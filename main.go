@@ -2,6 +2,7 @@ package main
 
 import (
 	"GoAI/common/aihelper"
+	"GoAI/common/logging"
 	"GoAI/common/mysql"
 	"GoAI/common/rabbitmq"
 	"GoAI/common/redis"
@@ -59,6 +60,8 @@ func readDataFromDB() error {
 }
 
 func main() {
+	logging.InitColoredStdLogger()
+
 	// 初始化 config
 	conf := config.GetConfig()
 	host := conf.MainConfig.Host
