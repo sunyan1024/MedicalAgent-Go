@@ -131,6 +131,20 @@ func CheckCaptchaForEmail(email, userInput string) (bool, error) {
 	}
 }
 
+func AcquireLock(ctx context.Context, key string, token string, expiration time.Duration) (bool, error) {
+	return Rdb.SetNX(ctx, key, token, expiration).Result()
+}
+
+func ReleaseLock(ctx context.Context, key string, token string) error {
+	const script = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+end
+return 0
+`
+	return Rdb.Eval(ctx, script, []string{key}, token).Err()
+}
+
 // InitRedisIndex 初始化 Redis 索引，支持按文件名区分
 func InitRedisIndex(ctx context.Context, filename string, dimension int) error {
 	// 生成索引名称

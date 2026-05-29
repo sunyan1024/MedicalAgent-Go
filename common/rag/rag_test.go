@@ -68,3 +68,9 @@ func TestBuildFileIndexKey(t *testing.T) {
 		t.Fatalf("empty username key: got %q", got)
 	}
 }
+
+func TestBuildStoredFileIndexKey(t *testing.T) {
+	if got := BuildStoredFileIndexKey("abc"); got != "stored:abc" {
+		t.Fatalf("stored file key: got %q", got)
+	}
+}

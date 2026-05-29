@@ -3,6 +3,7 @@ package file
 import (
 	"GoAI/common/mysql"
 	"GoAI/model"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -49,6 +50,42 @@ func GetStoredFileByID(id string) (*model.StoredFile, error) {
 	var storedFile model.StoredFile
 	err := mysql.DB.Where("id = ?", id).First(&storedFile).Error
 	return &storedFile, err
+}
+
+func GetStoredFileByIDUnscoped(id string) (*model.StoredFile, error) {
+	var storedFile model.StoredFile
+	err := mysql.DB.Unscoped().Where("id = ?", id).First(&storedFile).Error
+	return &storedFile, err
+}
+
+func UpdateStoredFileIndexPending(storedFileID string) error {
+	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
+		Where("id = ?", storedFileID).
+		Updates(map[string]interface{}{
+			"index_status": model.StoredFileIndexStatusPending,
+			"index_error":  "",
+			"indexed_at":   nil,
+		}).Error
+}
+
+func UpdateStoredFileIndexReady(storedFileID string, indexedAt time.Time) error {
+	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
+		Where("id = ?", storedFileID).
+		Updates(map[string]interface{}{
+			"index_status": model.StoredFileIndexStatusReady,
+			"index_error":  "",
+			"indexed_at":   indexedAt,
+		}).Error
+}
+
+func UpdateStoredFileIndexFailed(storedFileID string, indexError string) error {
+	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
+		Where("id = ?", storedFileID).
+		Updates(map[string]interface{}{
+			"index_status": model.StoredFileIndexStatusFailed,
+			"index_error":  indexError,
+			"indexed_at":   nil,
+		}).Error
 }
 
 func IncrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {

@@ -3,6 +3,7 @@ package file
 import (
 	"GoAI/common/mysql"
 	"GoAI/common/rag"
+	redisPkg "GoAI/common/redis"
 	fileDao "GoAI/dao/file"
 	"GoAI/model"
 	"GoAI/utils"
@@ -18,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -25,6 +27,7 @@ import (
 var (
 	ErrDuplicateFile = errors.New("文件已存在，请勿重复上传")
 	ErrHashMismatch  = errors.New("文件 SHA-256 校验失败，请重新上传")
+	ErrFileIndexing  = errors.New("文件正在处理中，请稍后重试")
 	sha256Pattern    = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
 )
 
@@ -147,11 +150,7 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 		return err
 	}
 
-	indexKey := rag.BuildFileIndexKey(username, knowledgeFile.StoredName)
-	if err := rag.DeleteIndex(context.Background(), indexKey); err != nil {
-		return err
-	}
-
+	deleteStoredIndex := false
 	if err := mysql.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_name = ? AND id = ?", username, fileID).Delete(&model.KnowledgeFile{}).Error; err != nil {
 			return err
@@ -168,10 +167,18 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 			if err := fileDao.DeleteStoredFileByID(tx, storedFile.ID); err != nil {
 				return err
 			}
+			deleteStoredIndex = true
 		}
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	if deleteStoredIndex {
+		indexKey := rag.BuildStoredFileIndexKey(storedFile.ID)
+		if err := rag.DeleteIndex(context.Background(), indexKey); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -238,13 +245,14 @@ func createStoredFileFromTemp(fileSHA256 string, ext string, tempPath string, sh
 	}
 
 	storedFile := &model.StoredFile{
-		ID:         utils.GenerateUUID(),
-		FileSHA256: fileSHA256,
-		Ext:        ext,
-		StoredName: storedName,
-		FilePath:   filePath,
-		Size:       size,
-		RefCount:   0,
+		ID:          utils.GenerateUUID(),
+		FileSHA256:  fileSHA256,
+		Ext:         ext,
+		StoredName:  storedName,
+		FilePath:    filePath,
+		Size:        size,
+		RefCount:    0,
+		IndexStatus: model.StoredFileIndexStatusPending,
 	}
 	if _, err := fileDao.CreateStoredFile(storedFile); err != nil {
 		if strings.Contains(err.Error(), "idx_sha256_ext") || strings.Contains(err.Error(), "Duplicate entry") {
@@ -258,14 +266,8 @@ func createStoredFileFromTemp(fileSHA256 string, ext string, tempPath string, sh
 }
 
 func createUserFileFromStoredFile(username string, originalName string, storedName string, size int64, storedFile *model.StoredFile) (*model.KnowledgeFile, error) {
-	indexKey := rag.BuildFileIndexKey(username, storedName)
-	indexer, err := rag.NewRAGIndexer(indexKey)
-	if err != nil {
-		return nil, normalizeRAGIndexError(err)
-	}
-	if err := indexer.IndexFile(context.Background(), storedFile.FilePath); err != nil {
-		rag.DeleteIndex(context.Background(), indexKey)
-		return nil, normalizeRAGIndexError(err)
+	if err := ensureStoredFileIndexed(storedFile); err != nil {
+		return nil, err
 	}
 
 	knowledgeFile := &model.KnowledgeFile{
@@ -282,7 +284,6 @@ func createUserFileFromStoredFile(username string, originalName string, storedNa
 		}
 		return fileDao.IncrementStoredFileRefCount(tx, storedFile.ID)
 	}); err != nil {
-		rag.DeleteIndex(context.Background(), indexKey)
 		if strings.Contains(err.Error(), "idx_user_stored_name") || strings.Contains(err.Error(), "Duplicate entry") {
 			return nil, ErrDuplicateFile
 		}
@@ -290,6 +291,60 @@ func createUserFileFromStoredFile(username string, originalName string, storedNa
 	}
 
 	return knowledgeFile, nil
+}
+
+func ensureStoredFileIndexed(storedFile *model.StoredFile) error {
+	if storedFile == nil {
+		return fmt.Errorf("stored file is nil")
+	}
+	if storedFile.IndexStatus == model.StoredFileIndexStatusReady {
+		return nil
+	}
+
+	ctx := context.Background()
+	lockKey := fmt.Sprintf("rag:index:lock:%s", storedFile.ID)
+	lockToken := utils.GenerateUUID()
+	locked, err := redisPkg.AcquireLock(ctx, lockKey, lockToken, 10*time.Minute)
+	if err != nil {
+		return normalizeRAGIndexError(err)
+	}
+	if !locked {
+		return ErrFileIndexing
+	}
+	defer func() {
+		if err := redisPkg.ReleaseLock(ctx, lockKey, lockToken); err != nil {
+			log.Printf("[ensureStoredFileIndexed] release lock failed stored_file_id=%s err=%v", storedFile.ID, err)
+		}
+	}()
+
+	latest, err := fileDao.GetStoredFileByIDUnscoped(storedFile.ID)
+	if err != nil {
+		return err
+	}
+	if latest.IndexStatus == model.StoredFileIndexStatusReady {
+		return nil
+	}
+
+	indexKey := rag.BuildStoredFileIndexKey(latest.ID)
+	if err := fileDao.UpdateStoredFileIndexPending(latest.ID); err != nil {
+		return err
+	}
+
+	indexer, err := rag.NewRAGIndexer(indexKey)
+	if err != nil {
+		fileDao.UpdateStoredFileIndexFailed(latest.ID, err.Error())
+		return normalizeRAGIndexError(err)
+	}
+	if err := indexer.IndexFile(ctx, latest.FilePath); err != nil {
+		rag.DeleteIndex(ctx, indexKey)
+		fileDao.UpdateStoredFileIndexFailed(latest.ID, err.Error())
+		return normalizeRAGIndexError(err)
+	}
+
+	if err := fileDao.UpdateStoredFileIndexReady(latest.ID, time.Now()); err != nil {
+		return err
+	}
+	return nil
 }
 
 func normalizeRAGIndexError(err error) error {

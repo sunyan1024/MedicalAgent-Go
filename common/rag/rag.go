@@ -48,6 +48,10 @@ func BuildFileIndexKey(username string, storedName string) string {
 	return storedName
 }
 
+func BuildStoredFileIndexKey(storedFileID string) string {
+	return fmt.Sprintf("stored:%s", storedFileID)
+}
+
 const (
 	defaultChunkSize    = 2000
 	defaultChunkOverlap = 200
@@ -318,7 +322,6 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
-	originalNameByStoredName := map[string]string{}
 	knowledgeFiles, err := fileDao.GetKnowledgeFilesByUserName(username)
 	if err != nil {
 		log.Printf("[RAG][Query] load knowledge files failed username=%s err=%v", username, err)
@@ -328,25 +331,18 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		log.Printf("[RAG][Query] no uploaded files username=%s", username)
 		return nil, fmt.Errorf("no uploaded file found for user %s", username)
 	}
-	for _, knowledgeFile := range knowledgeFiles {
-		storedName := strings.TrimSpace(knowledgeFile.StoredName)
-		originalName := strings.TrimSpace(knowledgeFile.OriginalName)
-		if storedName == "" || originalName == "" {
-			continue
-		}
-		originalNameByStoredName[storedName] = originalName
-	}
-	log.Printf("[RAG][Query] knowledge files loaded username=%s files=%d mapped=%d", username, len(knowledgeFiles), len(originalNameByStoredName))
+	log.Printf("[RAG][Query] knowledge files loaded username=%s files=%d", username, len(knowledgeFiles))
 
 	rdb := redisPkg.Rdb
 	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
 	for _, knowledgeFile := range knowledgeFiles {
 		filename := strings.TrimSpace(knowledgeFile.StoredName)
-		if filename == "" {
+		storedFileID := strings.TrimSpace(knowledgeFile.StoredFileID)
+		if filename == "" || storedFileID == "" {
 			continue
 		}
-		originalName := originalNameByStoredName[filename]
-		indexKey := BuildFileIndexKey(username, filename)
+		originalName := strings.TrimSpace(knowledgeFile.OriginalName)
+		indexKey := BuildStoredFileIndexKey(storedFileID)
 		indexName := redisPkg.GenerateIndexName(indexKey)
 		retrieverConfig := &redisRetriever.RetrieverConfig{
 			Client:       rdb,
