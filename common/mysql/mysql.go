@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"GoAI/common/logging"
 	"GoAI/config"
 	"GoAI/model"
 	"fmt"
@@ -32,12 +33,16 @@ func InitMysql() error {
 
 	// 配置 GORM 日志
 	// 根据 Gin 的运行环境(debug/release)配置不同的日志级别
-	var log logger.Interface
+	logLevel := logger.Warn
 	if gin.Mode() == "debug" {
-		log = logger.Default.LogMode(logger.Info)
-	} else {
-		log = logger.Default
+		logLevel = logger.Info
 	}
+	gormLogger := logger.New(logging.NewColoredLogger(), logger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logLevel,
+		IgnoreRecordNotFoundError: false,
+		Colorful:                  true,
+	})
 
 	// 用 GORM 打开 MySQL 连接
 	db, err := gorm.Open(mysql.New(mysql.Config{
@@ -48,7 +53,7 @@ func InitMysql() error {
 		DontSupportRenameColumn:   true,  // 不支持重命名列
 		SkipInitializeWithVersion: false, // 跳过版本初始化
 	}), &gorm.Config{
-		Logger: log,
+		Logger: gormLogger,
 	})
 	if err != nil {
 		return err

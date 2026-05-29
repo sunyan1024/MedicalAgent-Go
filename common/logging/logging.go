@@ -39,3 +39,7 @@ func InitColoredStdLogger() {
 	log.SetFlags(0)
 	log.SetOutput(coloredTimeWriter{out: os.Stderr})
 }
+
+func NewColoredLogger() *log.Logger {
+	return log.New(coloredTimeWriter{out: os.Stderr}, "", 0)
+}
