@@ -1,7 +1,11 @@
 package router
 
 import (
+	"GoAI/common/logging"
 	"GoAI/middleware/jwt"
+	"fmt"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,7 +17,27 @@ import (
 // - /api/v2/image: 需要 JWT 认证的图像相关路由
 // - /api/v2/file: 需要 JWT 认证的文件相关路由
 func InitRouter() *gin.Engine {
-	r := gin.Default()
+	gin.DefaultWriter = logging.NewColoredTimeWriter(os.Stdout)
+	gin.DefaultErrorWriter = logging.NewColoredTimeWriter(os.Stderr)
+
+	r := gin.New()
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
+		Output: os.Stdout,
+		Formatter: func(param gin.LogFormatterParams) string {
+			return fmt.Sprintf("%s [GIN] |%s %3d %s| %13v | %15s |%-7s %#v\n%s",
+				logging.ColoredDateTime(param.TimeStamp),
+				param.StatusCodeColor(),
+				param.StatusCode,
+				param.ResetColor(),
+				param.Latency.Truncate(time.Microsecond),
+				param.ClientIP,
+				param.MethodColor()+param.Method+param.ResetColor(),
+				param.Path,
+				param.ErrorMessage,
+			)
+		},
+	}))
+	r.Use(gin.RecoveryWithWriter(gin.DefaultErrorWriter))
 
 	enterRouter := r.Group("/api/v2")
 

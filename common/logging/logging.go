@@ -19,15 +19,7 @@ type coloredTimeWriter struct {
 }
 
 func (w coloredTimeWriter) Write(p []byte) (int, error) {
-	now := time.Now()
-	prefix := fmt.Sprintf("%s%s%s %s%s%s ",
-		colorCyan,
-		now.Format("2006/01/02"),
-		colorReset,
-		colorYellow,
-		now.Format("15:04:05"),
-		colorReset,
-	)
+	prefix := ColoredDateTime(time.Now()) + " "
 	_, err := fmt.Fprintf(w.out, "%s%s", prefix, p)
 	if err != nil {
 		return 0, err
@@ -42,4 +34,19 @@ func InitColoredStdLogger() {
 
 func NewColoredLogger() *log.Logger {
 	return log.New(coloredTimeWriter{out: os.Stderr}, "", 0)
+}
+
+func NewColoredTimeWriter(out io.Writer) io.Writer {
+	return coloredTimeWriter{out: out}
+}
+
+func ColoredDateTime(t time.Time) string {
+	return fmt.Sprintf("%s%s%s %s%s%s",
+		colorCyan,
+		t.Format("2006/01/02"),
+		colorReset,
+		colorYellow,
+		t.Format("15:04:05"),
+		colorReset,
+	)
 }
