@@ -121,7 +121,7 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 	if err != nil {
 		if createdStoredFile {
 			os.Remove(storedFile.FilePath)
-			mysql.DB.Delete(&model.StoredFile{}, "id = ?", storedFile.ID)
+			fileDao.HardDeleteStoredFileByID(mysql.DB, storedFile.ID)
 		}
 		return nil, err
 	}
@@ -152,7 +152,6 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 		return err
 	}
 
-	deletePhysical := false
 	if err := mysql.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_name = ? AND id = ?", username, fileID).Delete(&model.KnowledgeFile{}).Error; err != nil {
 			return err
@@ -169,18 +168,12 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 			if err := fileDao.DeleteStoredFileByID(tx, storedFile.ID); err != nil {
 				return err
 			}
-			deletePhysical = true
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	if deletePhysical {
-		if err := os.Remove(storedFile.FilePath); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
 	return nil
 }
 

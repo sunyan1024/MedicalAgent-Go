@@ -41,7 +41,7 @@ func CreateStoredFile(storedFile *model.StoredFile) (*model.StoredFile, error) {
 
 func GetStoredFileBySHA256AndExt(fileSHA256 string, ext string) (*model.StoredFile, error) {
 	var storedFile model.StoredFile
-	err := mysql.DB.Where("file_sha256 = ? AND ext = ?", fileSHA256, ext).First(&storedFile).Error
+	err := mysql.DB.Unscoped().Where("file_sha256 = ? AND ext = ?", fileSHA256, ext).First(&storedFile).Error
 	return &storedFile, err
 }
 
@@ -52,9 +52,12 @@ func GetStoredFileByID(id string) (*model.StoredFile, error) {
 }
 
 func IncrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
-	return tx.Model(&model.StoredFile{}).
+	return tx.Unscoped().Model(&model.StoredFile{}).
 		Where("id = ?", storedFileID).
-		UpdateColumn("ref_count", gorm.Expr("ref_count + ?", 1)).Error
+		Updates(map[string]interface{}{
+			"ref_count":  gorm.Expr("ref_count + ?", 1),
+			"deleted_at": nil,
+		}).Error
 }
 
 func DecrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
@@ -65,4 +68,8 @@ func DecrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
 
 func DeleteStoredFileByID(tx *gorm.DB, storedFileID string) error {
 	return tx.Where("id = ?", storedFileID).Delete(&model.StoredFile{}).Error
+}
+
+func HardDeleteStoredFileByID(tx *gorm.DB, storedFileID string) error {
+	return tx.Unscoped().Where("id = ?", storedFileID).Delete(&model.StoredFile{}).Error
 }
