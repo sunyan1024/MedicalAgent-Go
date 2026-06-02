@@ -30,14 +30,6 @@
           <input type="checkbox" id="streamingMode" v-model="isStreaming" />
           流式响应
         </label>
-        <button class="upload-btn" @click="triggerFileUpload" :disabled="uploading">📎 上传文档(.md/.txt/.pdf)</button>
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".md,.txt,.pdf,text/markdown,text/plain,application/pdf"
-          style="display: none"
-          @change="handleFileUpload"
-        />
       </div>
 
       <div class="chat-messages" ref="messagesRef">
@@ -68,8 +60,7 @@
 
 import { ref, nextTick, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api, { getApiErrorMessage } from '../utils/api'
-import { calculateFileSHA256 } from '../utils/hash'
+import api from '../utils/api'
 
 export default {
   name: 'AIChat',
@@ -85,8 +76,6 @@ export default {
     const messageInput = ref(null)
     const selectedModel = ref('qwen')
     const isStreaming = ref(false)
-    const uploading = ref(false)
-    const fileInput = ref(null)
 
 
     const renderMarkdown = (text) => {
@@ -525,79 +514,6 @@ export default {
       }
     }
 
-    const triggerFileUpload = () => {
-      if (fileInput.value) {
-        fileInput.value.click()
-      }
-    }
-
-    const handleFileUpload = async (event) => {
-      const file = event.target.files[0]
-      if (!file) return
-
-      // 前端校验：只允许 .md、.txt 或 .pdf 文件
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.md') && !fileName.endsWith('.txt') && !fileName.endsWith('.pdf')) {
-        ElMessage.error('只允许上传 .md、.txt 或 .pdf 文件')
-        // 清空文件输入
-        if (fileInput.value) {
-          fileInput.value.value = ''
-        }
-        return
-      }
-
-      try {
-        uploading.value = true
-        const fileSHA256 = await calculateFileSHA256(file)
-        const precheck = await api.post('/file/precheck', {
-          original_name: file.name,
-          file_sha256: fileSHA256,
-          size: file.size
-        })
-        if (!precheck.data || precheck.data.status_code !== 1000) {
-          ElMessage.error(precheck.data?.status_msg || '上传预检失败')
-          return
-        }
-        if (precheck.data.reused) {
-          ElMessage.success('秒传成功')
-          return
-        }
-        if (!precheck.data.need_upload) {
-          ElMessage.error('上传预检失败')
-          return
-        }
-
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('file_sha256', fileSHA256)
-
-        // 使用axios的baseURL配置，无需手动添加/api前缀
-        const response = await api.post('/file/upload', formData, 
-          // 移除 headers 配置，让 axios 自动处理
-          // {
-          //   headers: {
-          //     'Content-Type': 'multipart/form-data'
-          //   }
-          // }
-        )
-
-        if (response.data && response.data.status_code === 1000) {
-          ElMessage.success(`文件上传成功`)
-        } else {
-          ElMessage.error(response.data?.status_msg || '上传失败')
-        }
-      } catch (error) {
-        console.error('File upload error:', error)
-        ElMessage.error(getApiErrorMessage(error, '文件上传失败'))
-      } finally {
-        uploading.value = false
-        // 清空文件输入
-        if (fileInput.value) {
-          fileInput.value.value = ''
-        }
-      }
-    }
-
     onMounted(() => {
       loadSessions()
     })
@@ -615,16 +531,12 @@ export default {
       messageInput,
       selectedModel,
       isStreaming,
-      uploading,
-      fileInput,
       renderMarkdown,
       playTTS,
       createNewSession,
       switchSession,
       syncHistory,
-      sendMessage,
-      triggerFileUpload,
-      handleFileUpload
+      sendMessage
     }
   }
 }
@@ -726,8 +638,7 @@ export default {
 }
 
 .back-btn,
-.sync-btn,
-.upload-btn {
+.sync-btn {
   height: 34px;
   padding: 0 12px;
   border-radius: var(--app-radius);
@@ -748,12 +659,6 @@ export default {
   border: none;
 }
 
-.upload-btn {
-  background: var(--app-primary);
-  color: white;
-  border: none;
-}
-
 .back-btn:hover {
   border-color: #bfdbfe;
   color: var(--app-primary);
@@ -764,12 +669,7 @@ export default {
   background: #15803d;
 }
 
-.upload-btn:hover:not(:disabled) {
-  background: var(--app-primary-hover);
-}
-
-.sync-btn:disabled,
-.upload-btn:disabled {
+.sync-btn:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
 }
