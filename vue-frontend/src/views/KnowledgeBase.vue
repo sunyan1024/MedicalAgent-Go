@@ -202,7 +202,7 @@ export default {
 .knowledge-page {
   min-height: 100vh;
   padding: 24px;
-  background: #f5f7fa;
+  background: var(--app-bg);
 }
 
 .page-header {
@@ -216,25 +216,32 @@ export default {
 
 .page-header h1 {
   margin: 0;
-  color: #1f2937;
+  color: var(--app-text);
   font-size: 28px;
   font-weight: 700;
 }
 
 .page-header p {
   margin: 6px 0 0;
-  color: #6b7280;
+  color: var(--app-text-muted);
   font-size: 14px;
 }
 
 .icon-btn {
   width: 44px;
   height: 44px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background: white;
-  color: #303133;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  color: var(--app-text);
   cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.icon-btn:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
 }
 
 .icon-btn:disabled {
@@ -258,23 +265,25 @@ export default {
 
 .upload :deep(.el-upload-dragger) {
   width: 100%;
-  border-radius: 8px;
+  border-radius: var(--app-radius);
   padding: 28px;
+  background: var(--app-surface);
 }
 
 .upload-icon {
-  color: #409eff;
+  color: var(--app-primary);
   font-size: 34px;
 }
 
 .upload-text {
-  color: #4b5563;
+  color: var(--app-text-muted);
   font-size: 15px;
 }
 
 .file-table {
-  border-radius: 8px;
+  border-radius: var(--app-radius);
   overflow: hidden;
+  border: 1px solid var(--app-border-soft);
 }
 
 .file-name {
