@@ -99,8 +99,8 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 		return nil, ErrHashMismatch
 	}
 
-	sharedDir := filepath.Join("uploads", "shared")
-	if err := os.MkdirAll(sharedDir, 0755); err != nil {
+	storedDir := filepath.Join("uploads", "stored")
+	if err := os.MkdirAll(storedDir, 0755); err != nil {
 		os.Remove(tempPath)
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 	createdStoredFile := false
 	storedFile, err := fileDao.GetStoredFileBySHA256AndExt(serverSHA256, ext)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		storedFile, createdStoredFile, err = createStoredFileFromTemp(serverSHA256, ext, tempPath, sharedDir, file.Size)
+		storedFile, createdStoredFile, err = createStoredFileFromTemp(serverSHA256, ext, tempPath, storedDir, file.Size)
 		if err != nil {
 			os.Remove(tempPath)
 			return nil, err
@@ -233,9 +233,9 @@ func saveUploadedFileAndHash(file *multipart.FileHeader, tempPath string) (strin
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func createStoredFileFromTemp(fileSHA256 string, ext string, tempPath string, sharedDir string, size int64) (*model.StoredFile, bool, error) {
+func createStoredFileFromTemp(fileSHA256 string, ext string, tempPath string, storedDir string, size int64) (*model.StoredFile, bool, error) {
 	storedName := fileSHA256 + ext
-	filePath := filepath.Join(sharedDir, storedName)
+	filePath := filepath.Join(storedDir, storedName)
 	if err := os.Rename(tempPath, filePath); err != nil {
 		if _, statErr := os.Stat(filePath); statErr == nil {
 			storedFile, lookupErr := fileDao.GetStoredFileBySHA256AndExt(fileSHA256, ext)
