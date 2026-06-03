@@ -2,8 +2,6 @@ package utils
 
 import (
 	"GoAI/model"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"mime/multipart"
@@ -31,13 +29,6 @@ func GetRandomNumbers(num int) string {
 		code += strconv.Itoa(digit)
 	}
 	return code
-}
-
-// MD5加密
-func MD5(str string) string {
-	m := md5.New()
-	m.Write([]byte(str))
-	return hex.EncodeToString(m.Sum(nil))
 }
 
 // GenerateFromPassword bcrypt 生成加密后的密码

@@ -51,20 +51,6 @@ func IsExistUserByUsernameOrEmail(identifier string) (bool, *model.User) {
 	return IsExistUser(identifier)
 }
 
-// 处理用户注册 使用MD5加密密码
-func RegisterMD5(username, email, password string) (*model.User, bool) {
-	if user, err := InsertUser(&model.User{
-		Email:    email,
-		Name:     username,
-		Username: username,
-		Password: utils.MD5(password), // 使用MD5加密密码
-	}); err != nil {
-		return nil, false
-	} else {
-		return user, true
-	}
-}
-
 // 处理用户注册 使用bcrypt加密密码
 func Register(username, email, password string) (*model.User, bool) {
 	hashedPassword, err := utils.GenerateFromPassword(password) // 使用bcrypt加密密码
