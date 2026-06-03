@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	embeddingArk "github.com/cloudwego/eino-ext/components/embedding/ark"
 	redisIndexer "github.com/cloudwego/eino-ext/components/indexer/redis"
@@ -56,6 +57,7 @@ const (
 	defaultChunkSize    = 2000
 	defaultChunkOverlap = 200
 	logPreviewRunes     = 120
+	pdfGarbledThreshold = 0.20
 )
 
 func previewForLog(text string) string {
@@ -65,6 +67,45 @@ func previewForLog(text string) string {
 		return text
 	}
 	return string(runes[:logPreviewRunes]) + "..."
+}
+
+func isGarbledRune(r rune) bool {
+	if r == unicode.ReplacementChar {
+		return true
+	}
+	if r >= 0x80 && r <= 0x9f {
+		return true
+	}
+	if unicode.IsControl(r) {
+		return true
+	}
+	return unicode.In(r, unicode.Co, unicode.Cs)
+}
+
+func validateExtractedPDFText(text string) error {
+	checkedRunes := 0
+	garbledRunes := 0
+
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		checkedRunes++
+		if isGarbledRune(r) {
+			garbledRunes++
+		}
+	}
+
+	if checkedRunes == 0 {
+		return fmt.Errorf("failed to extract pdf text: empty content")
+	}
+
+	ratio := float64(garbledRunes) / float64(checkedRunes)
+	if ratio > pdfGarbledThreshold {
+		return fmt.Errorf("failed to extract pdf text: garbled content ratio too high, ratio=%.2f threshold=%.2f", ratio, pdfGarbledThreshold)
+	}
+
+	return nil
 }
 
 func extractPDFText(filePath string) (string, error) {
@@ -87,6 +128,9 @@ func extractPDFText(filePath string) (string, error) {
 	text := strings.TrimSpace(string(content))
 	if text == "" {
 		return "", fmt.Errorf("failed to extract pdf text: empty content")
+	}
+	if err := validateExtractedPDFText(text); err != nil {
+		return "", err
 	}
 
 	return text, nil

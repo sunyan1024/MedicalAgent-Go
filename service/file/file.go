@@ -361,7 +361,8 @@ func normalizeRAGIndexError(err error) error {
 		return fmt.Errorf("知识库索引服务不可用，请检查 Redis Stack/RediSearch: %w", err)
 	case strings.Contains(msg, "failed to extract pdf text") ||
 		strings.Contains(msg, "failed to open pdf file") ||
-		strings.Contains(msg, "failed to read pdf text"):
+		strings.Contains(msg, "failed to read pdf text") ||
+		strings.Contains(msg, "garbled content ratio"):
 		return fmt.Errorf("PDF 文本解析失败: %w", err)
 	case strings.Contains(msg, "failed to create embedder") ||
 		strings.Contains(msg, "failed to store document") ||
