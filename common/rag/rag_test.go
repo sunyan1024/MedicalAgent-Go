@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
+	pdftotext "github.com/heussd/pdftotext-go"
 )
 
 func TestBuildRAGPromptUsesOriginalName(t *testing.T) {
@@ -72,6 +73,29 @@ func TestBuildFileIndexKey(t *testing.T) {
 func TestBuildStoredFileIndexKey(t *testing.T) {
 	if got := BuildStoredFileIndexKey("abc"); got != "stored:abc" {
 		t.Fatalf("stored file key: got %q", got)
+	}
+}
+
+func TestJoinPDFPageTextSortsPagesAndSkipsEmptyContent(t *testing.T) {
+	pages := []pdftotext.PdfPage{
+		{Number: 2, Content: " 第二页 "},
+		{Number: 1, Content: "第一页"},
+		{Number: 3, Content: " \n\t "},
+	}
+
+	if got := joinPDFPageText(pages); got != "第一页\n第二页" {
+		t.Fatalf("joined pages: got %q", got)
+	}
+}
+
+func TestJoinPDFPageTextReturnsEmptyForBlankPages(t *testing.T) {
+	pages := []pdftotext.PdfPage{
+		{Number: 1, Content: " \n\t "},
+		{Number: 2, Content: ""},
+	}
+
+	if got := joinPDFPageText(pages); got != "" {
+		t.Fatalf("blank pages should produce empty text, got %q", got)
 	}
 }
 

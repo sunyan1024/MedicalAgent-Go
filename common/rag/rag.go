@@ -6,7 +6,6 @@ import (
 	fileDao "GoAI/dao/file"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ import (
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
-	"github.com/ledongthuc/pdf"
+	pdftotext "github.com/heussd/pdftotext-go"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -108,24 +107,34 @@ func validateExtractedPDFText(text string) error {
 	return nil
 }
 
+func joinPDFPageText(pages []pdftotext.PdfPage) string {
+	sort.SliceStable(pages, func(i, j int) bool {
+		return pages[i].Number < pages[j].Number
+	})
+
+	contents := make([]string, 0, len(pages))
+	for _, page := range pages {
+		content := strings.TrimSpace(page.Content)
+		if content != "" {
+			contents = append(contents, content)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(contents, "\n"))
+}
+
 func extractPDFText(filePath string) (string, error) {
-	file, reader, err := pdf.Open(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open pdf file: %w", err)
 	}
-	defer file.Close()
 
-	plainTextReader, err := reader.GetPlainText()
+	pages, err := pdftotext.ExtractOrError(content)
 	if err != nil {
 		return "", fmt.Errorf("failed to extract pdf text: %w", err)
 	}
 
-	content, err := io.ReadAll(plainTextReader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read pdf text: %w", err)
-	}
-
-	text := strings.TrimSpace(string(content))
+	text := joinPDFPageText(pages)
 	if text == "" {
 		return "", fmt.Errorf("failed to extract pdf text: empty content")
 	}
