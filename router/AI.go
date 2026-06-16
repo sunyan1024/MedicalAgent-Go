@@ -23,6 +23,8 @@ func AIRouter(r *gin.RouterGroup) {
 
 		r.POST("/chat/history", session.ChatHistory)
 
+		r.POST("/rag/evaluate", session.RAGEvaluate)
+
 		// TTS相关接口
 		r.POST("/chat/tts", tts.CreateTTSTask)
 		r.GET("/chat/tts/query", tts.QueryTTSTask)
