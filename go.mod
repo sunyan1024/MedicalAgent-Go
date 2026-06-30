@@ -6,6 +6,7 @@ toolchain go1.24.10
 
 require (
 	github.com/BurntSushi/toml v0.3.1
+	github.com/PaddlePaddle/PaddleOCR/api_sdk/go v0.2.0
 	github.com/cloudwego/eino v0.8.13
 	github.com/cloudwego/eino-ext/components/embedding/ark v0.1.1
 	github.com/cloudwego/eino-ext/components/indexer/redis v0.0.0-20260509111509-dbda66119839

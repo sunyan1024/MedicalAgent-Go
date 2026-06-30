@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	paddleocr "github.com/PaddlePaddle/PaddleOCR/api_sdk/go"
 	embeddingArk "github.com/cloudwego/eino-ext/components/embedding/ark"
 	redisIndexer "github.com/cloudwego/eino-ext/components/indexer/redis"
 	redisRetriever "github.com/cloudwego/eino-ext/components/retriever/redis"
@@ -29,6 +30,7 @@ import (
 // embedding 字段用于处理文本嵌入
 // indexer 字段是与Redis交互的索引器实例
 type RAGIndexer struct {
+	indexKey  string
 	embedding embedding.Embedder
 	indexer   *redisIndexer.Indexer
 }
@@ -53,11 +55,26 @@ func BuildStoredFileIndexKey(storedFileID string) string {
 }
 
 const (
-	defaultChunkSize    = 2000
-	defaultChunkOverlap = 200
-	logPreviewRunes     = 120
-	pdfGarbledThreshold = 0.20
+	defaultChunkSize      = 2000
+	defaultChunkOverlap   = 200
+	logPreviewRunes       = 120
+	pdfGarbledThreshold   = 0.20
+	sparsePDFMinFileBytes = 1 << 20
+	sparsePDFTextBytes    = 4096
+	sparsePDFTextRatio    = 0.003
+	defaultOCRTimeout     = 600
+	defaultOCRModel       = paddleocr.PaddleOCRVL16
 )
+
+var (
+	nativePDFTextExtractor = extractPDFText
+	ocrPDFTextExtractor    = extractPDFTextWithOCR
+	newPaddleDocParser     = newPaddleOCRDocParser
+)
+
+type paddleDocumentParser interface {
+	ParseDocument(context.Context, *paddleocr.DocParsingRequest) (*paddleocr.DocParsingResult, error)
+}
 
 func previewForLog(text string) string {
 	text = strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
@@ -142,7 +159,221 @@ func extractPDFText(filePath string) (string, error) {
 		return "", err
 	}
 
+	if info, statErr := os.Stat(filePath); statErr == nil {
+		ratio := pdfTextRatio(len(text), info.Size())
+		log.Printf("[RAG][PDF] native text extraction success file=%s pages=%d native_bytes=%d file_bytes=%d ratio=%.6f preview=%q", filePath, len(pages), len(text), info.Size(), ratio, previewForLog(text))
+	}
+
 	return text, nil
+}
+
+func extractPDFTextWithFallback(filePath string) (string, error) {
+	text, err := nativePDFTextExtractor(filePath)
+	if err == nil {
+		if shouldFallbackToOCRForSparseNativeText(filePath, text) {
+			log.Printf("[RAG][PDF] native text is sparse, fallback to PaddleOCR file=%s native_bytes=%d", filePath, len(text))
+			return extractAndValidateOCRPDFText(filePath, fmt.Errorf("sparse native text"))
+		}
+		return text, nil
+	}
+
+	log.Printf("[RAG][PDF] native text extraction failed, fallback to PaddleOCR file=%s err=%v", filePath, err)
+	return extractAndValidateOCRPDFText(filePath, err)
+}
+
+func shouldFallbackToOCRForSparseNativeText(filePath string, text string) bool {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	fileBytes := info.Size()
+	nativeBytes := len(strings.TrimSpace(text))
+	ratio := pdfTextRatio(nativeBytes, fileBytes)
+	if fileBytes < sparsePDFMinFileBytes {
+		log.Printf("[RAG][PDF] native text sparse check skipped file=%s native_bytes=%d file_bytes=%d ratio=%.6f min_file_bytes=%d", filePath, nativeBytes, fileBytes, ratio, sparsePDFMinFileBytes)
+		return false
+	}
+
+	shouldFallback := nativeBytes < sparsePDFTextBytes || ratio < sparsePDFTextRatio
+	log.Printf("[RAG][PDF] native text sparse check file=%s native_bytes=%d file_bytes=%d ratio=%.6f text_threshold=%d ratio_threshold=%.6f fallback=%t", filePath, nativeBytes, fileBytes, ratio, sparsePDFTextBytes, sparsePDFTextRatio, shouldFallback)
+	return shouldFallback
+}
+
+func pdfTextRatio(textBytes int, fileBytes int64) float64 {
+	if fileBytes <= 0 {
+		return 0
+	}
+	return float64(textBytes) / float64(fileBytes)
+}
+
+func extractAndValidateOCRPDFText(filePath string, nativeErr error) (string, error) {
+	ocrText, ocrErr := ocrPDFTextExtractor(filePath)
+	if ocrErr != nil {
+		return "", fmt.Errorf("PDF text extraction failed and PaddleOCR fallback failed: native=%v ocr=%w", nativeErr, ocrErr)
+	}
+
+	ocrText = strings.TrimSpace(ocrText)
+	if ocrText == "" {
+		return "", fmt.Errorf("failed to extract pdf text with PaddleOCR: empty content")
+	}
+	if validateErr := validateExtractedPDFText(ocrText); validateErr != nil {
+		return "", fmt.Errorf("failed to validate PaddleOCR pdf text: %w", validateErr)
+	}
+
+	log.Printf("[RAG][PDF] PaddleOCR fallback success file=%s bytes=%d preview=%q", filePath, len(ocrText), previewForLog(ocrText))
+	return ocrText, nil
+}
+
+func extractPDFTextWithOCR(filePath string) (string, error) {
+	conf := config.GetConfig()
+	token := strings.TrimSpace(conf.RagModelConfig.OCRAccessToken)
+	if token == "" {
+		return "", fmt.Errorf("PaddleOCR access token is required: set ragModelConfig.ocrAccessToken in config/config.toml")
+	}
+
+	timeoutSeconds := conf.RagModelConfig.OCRTimeoutSeconds
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = defaultOCRTimeout
+	}
+	model := strings.TrimSpace(conf.RagModelConfig.OCRModel)
+	if model == "" {
+		model = defaultOCRModel
+	}
+	if !paddleocr.IsDocumentParsingModel(model) {
+		return "", fmt.Errorf("PaddleOCR model %q is not a document parsing model", model)
+	}
+
+	timeout := time.Duration(timeoutSeconds) * time.Second
+	client, err := newPaddleDocParser(token, timeout)
+	if err != nil {
+		return "", fmt.Errorf("failed to create PaddleOCR client: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	result, err := client.ParseDocument(ctx, &paddleocr.DocParsingRequest{
+		Model:    model,
+		FilePath: filePath,
+		Options:  docParsingOptionsForModel(model),
+	})
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("PaddleOCR document parsing timed out after %ds", timeoutSeconds)
+	}
+	if err != nil {
+		return "", fmt.Errorf("PaddleOCR document parsing failed: %w", err)
+	}
+
+	return extractDocParsingText(result), nil
+}
+
+func newPaddleOCRDocParser(token string, timeout time.Duration) (paddleDocumentParser, error) {
+	return paddleocr.NewClient(
+		paddleocr.WithToken(token),
+		paddleocr.WithTimeout(timeout),
+	)
+}
+
+func docParsingOptionsForModel(model string) paddleocr.DocParsingOptionsProvider {
+	prettifyMarkdown := true
+	returnMarkdownImages := false
+	switch model {
+	case paddleocr.PaddleOCRVL, paddleocr.PaddleOCRVL15, paddleocr.PaddleOCRVL16:
+		return &paddleocr.PaddleOCRVLOptions{
+			PrettifyMarkdown:     &prettifyMarkdown,
+			ReturnMarkdownImages: &returnMarkdownImages,
+		}
+	default:
+		return &paddleocr.PPStructureV3Options{
+			PrettifyMarkdown:     &prettifyMarkdown,
+			ReturnMarkdownImages: &returnMarkdownImages,
+		}
+	}
+}
+
+func extractDocParsingText(result *paddleocr.DocParsingResult) string {
+	if result == nil || len(result.Pages) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(result.Pages))
+	for _, page := range result.Pages {
+		if text := strings.TrimSpace(page.MarkdownText); text != "" {
+			parts = append(parts, text)
+			continue
+		}
+		if text := strings.TrimSpace(stringValueFromMap(page.Markdown, "text")); text != "" {
+			parts = append(parts, text)
+			continue
+		}
+		if text := strings.TrimSpace(recursiveText(page.PrunedResult)); text != "" {
+			parts = append(parts, text)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func stringValueFromMap(m map[string]interface{}, key string) string {
+	if m == nil {
+		return ""
+	}
+	value, _ := m[key].(string)
+	return value
+}
+
+func recursiveText(value interface{}) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case []string:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := strings.TrimSpace(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case []interface{}:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := strings.TrimSpace(recursiveText(item)); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]string:
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			if text := strings.TrimSpace(typed[key]); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]interface{}:
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			if text := strings.TrimSpace(recursiveText(typed[key])); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
+	}
 }
 
 func readIndexableContent(filePath string) (string, error) {
@@ -155,7 +386,7 @@ func readIndexableContent(filePath string) (string, error) {
 		return string(content), nil
 	}
 
-	return extractPDFText(filePath)
+	return extractPDFTextWithFallback(filePath)
 }
 
 func splitTextIntoChunks(text string) []string {
@@ -295,6 +526,7 @@ func NewRAGIndexer(filename string) (*RAGIndexer, error) {
 	// 后续只需要调用它，就可以把文档加入知识库
 	log.Printf("[RAG][Indexer] init success filename=%s dimension=%d elapsed=%s", filename, dimension, time.Since(start))
 	return &RAGIndexer{
+		indexKey:  filename,
 		embedding: embedder,
 		indexer:   idx,
 	}, nil
@@ -332,13 +564,23 @@ func (r *RAGIndexer) IndexFile(ctx context.Context, filePath string) error {
 	}
 
 	// 使用 indexer 存储文档（会自动进行向量化）
-	_, err = r.indexer.Store(ctx, docs)
+	ids, err := r.indexer.Store(ctx, docs)
 	if err != nil {
 		log.Printf("[RAG][IndexFile] store documents failed file=%s docs=%d err=%v", filePath, len(docs), err)
 		return fmt.Errorf("failed to store document: %w", err)
 	}
 
-	log.Printf("[RAG][IndexFile] success file=%s docs=%d elapsed=%s", filePath, len(docs), time.Since(start))
+	redisPrefix := redisPkg.GenerateIndexNamePrefix(r.indexKey)
+	redisKeyCount, sampleKeys, err := redisPkg.CountRedisDataByPrefix(ctx, redisPrefix, 3)
+	if err != nil {
+		log.Printf("[RAG][IndexFile] verify redis keys failed file=%s prefix=%s err=%v", filePath, redisPrefix, err)
+		return fmt.Errorf("failed to verify redis index data: %w", err)
+	}
+	if redisKeyCount == 0 {
+		return fmt.Errorf("failed to verify redis index data: no keys found with prefix %s", redisPrefix)
+	}
+
+	log.Printf("[RAG][IndexFile] success file=%s docs=%d stored_ids=%d redis_prefix=%s redis_keys=%d sample_keys=%v elapsed=%s", filePath, len(docs), len(ids), redisPrefix, redisKeyCount, sampleKeys, time.Since(start))
 	return nil
 }
 
@@ -402,7 +644,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 			Index:        indexName,
 			Dialect:      2,
 			ReturnFields: []string{"content", "metadata", "distance"},
-			TopK:         5,
+			TopK:         10,
 			VectorField:  "vector",
 			// 由于 Redis 存储的文档格式和 Eino 框架内部定义的 schema.Document 格式不同
 			// 因此在查询时需要通过 DocumentConverter 进行相应的转换。
@@ -475,8 +717,8 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		return documentDistance(allDocs[i]) < documentDistance(allDocs[j])
 	})
 
-	if len(allDocs) > 5 {
-		allDocs = allDocs[:5]
+	if len(allDocs) > 10 {
+		allDocs = allDocs[:10]
 	}
 	for i, doc := range allDocs {
 		docID := ""

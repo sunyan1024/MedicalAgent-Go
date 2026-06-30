@@ -63,6 +63,9 @@ type RagModelConfig struct {
 	RagDimension      int    `toml:"dimension"`
 	RagDocDir         string `toml:"docDir"`
 	EnableThinking    bool   `toml:"enable_thinking"`
+	OCRAccessToken    string `toml:"ocrAccessToken"`
+	OCRTimeoutSeconds int    `toml:"ocrTimeoutSeconds"`
+	OCRModel          string `toml:"ocrModel"`
 }
 
 type OllamaConfig struct {

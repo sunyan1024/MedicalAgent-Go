@@ -252,3 +252,33 @@ func DeleteRedisDataByPrefix(ctx context.Context, prefix string) error {
 	log.Printf("[DeleteRedisDataByPrefix] 成功删除前缀 %s 的所有数据\n", prefix)
 	return nil
 }
+
+func CountRedisDataByPrefix(ctx context.Context, prefix string, sampleLimit int) (int, []string, error) {
+	var cursor uint64
+	pattern := prefix + "*"
+	count := 0
+	samples := make([]string, 0, sampleLimit)
+
+	for {
+		keys, nextCursor, err := Rdb.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return 0, nil, fmt.Errorf("扫描 Redis 键失败: %w", err)
+		}
+
+		count += len(keys)
+		if sampleLimit > 0 && len(samples) < sampleLimit {
+			remaining := sampleLimit - len(samples)
+			if len(keys) < remaining {
+				remaining = len(keys)
+			}
+			samples = append(samples, keys[:remaining]...)
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return count, samples, nil
+}
