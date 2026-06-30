@@ -179,6 +179,9 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 		if err := rag.DeleteIndex(context.Background(), indexKey); err != nil {
 			return err
 		}
+		if err := fileDao.UpdateStoredFileIndexPending(storedFile.ID); err != nil {
+			return err
+		}
 	}
 
 	return nil
