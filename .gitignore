@@ -1,6 +1,7 @@
 uploads/
 dist/
 logs/*
+output/
 
 node_modules/
 
