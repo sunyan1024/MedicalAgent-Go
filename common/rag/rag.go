@@ -390,40 +390,318 @@ func readIndexableContent(filePath string) (string, error) {
 }
 
 func splitTextIntoChunks(text string) []string {
-	text = strings.TrimSpace(text)
+	text = normalizeChunkText(text)
 	if text == "" {
 		return nil
 	}
 
-	runes := []rune(text)
-	if len(runes) <= defaultChunkSize {
+	units := splitTextIntoChunkUnits(text)
+	if len(units) == 0 {
+		return nil
+	}
+
+	chunks := make([]string, 0, len(units))
+	current := ""
+	for _, unit := range units {
+		unit = strings.TrimSpace(unit)
+		if unit == "" {
+			continue
+		}
+
+		if current == "" {
+			current = unit
+			continue
+		}
+
+		combined := joinChunkText(current, unit)
+		if runeLen(combined) <= defaultChunkSize {
+			current = combined
+			continue
+		}
+
+		chunks = append(chunks, current)
+		current = joinChunkWithOverlap(current, unit)
+	}
+
+	if strings.TrimSpace(current) != "" {
+		chunks = append(chunks, current)
+	}
+
+	return chunks
+}
+
+func normalizeChunkText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = strings.TrimSpace(text)
+	return text
+}
+
+func splitTextIntoChunkUnits(text string) []string {
+	if text == "" {
+		return nil
+	}
+
+	paragraphs := splitTextIntoParagraphs(text)
+	units := make([]string, 0, len(paragraphs))
+	for _, paragraph := range paragraphs {
+		paragraph = strings.TrimSpace(paragraph)
+		if paragraph == "" {
+			continue
+		}
+		if runeLen(paragraph) <= defaultChunkSize {
+			units = append(units, paragraph)
+			continue
+		}
+		units = append(units, splitLongTextBySentences(paragraph, defaultChunkSize)...)
+	}
+
+	return units
+}
+
+func splitTextIntoParagraphs(text string) []string {
+	lines := strings.Split(text, "\n")
+	paragraphs := make([]string, 0, len(lines))
+	var current []string
+
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		paragraph := strings.TrimSpace(strings.Join(current, "\n"))
+		if paragraph != "" {
+			paragraphs = append(paragraphs, paragraph)
+		}
+		current = nil
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			flush()
+			continue
+		}
+		if isMarkdownHeading(trimmed) {
+			flush()
+			paragraphs = append(paragraphs, trimmed)
+			continue
+		}
+		current = append(current, trimmed)
+	}
+	flush()
+
+	return paragraphs
+}
+
+func isMarkdownHeading(line string) bool {
+	if !strings.HasPrefix(line, "#") {
+		return false
+	}
+	hashes := 0
+	for _, r := range line {
+		if r != '#' {
+			break
+		}
+		hashes++
+	}
+	if hashes == 0 || hashes > 6 {
+		return false
+	}
+	runes := []rune(line)
+	return len(runes) == hashes || unicode.IsSpace(runes[hashes])
+}
+
+func splitLongTextBySentences(text string, maxSize int) []string {
+	sentences := splitTextIntoSentences(text)
+	if len(sentences) == 0 {
+		return splitTextByRuneWindow(text, maxSize)
+	}
+
+	chunks := make([]string, 0, len(sentences))
+	current := ""
+	for _, sentence := range sentences {
+		sentence = strings.TrimSpace(sentence)
+		if sentence == "" {
+			continue
+		}
+		if runeLen(sentence) > maxSize {
+			if current != "" {
+				chunks = append(chunks, current)
+				current = ""
+			}
+			chunks = append(chunks, splitTextByRuneWindow(sentence, maxSize)...)
+			continue
+		}
+		if current == "" {
+			current = sentence
+			continue
+		}
+		combined := joinInlineText(current, sentence)
+		if runeLen(combined) <= maxSize {
+			current = combined
+			continue
+		}
+		chunks = append(chunks, current)
+		current = sentence
+	}
+	if current != "" {
+		chunks = append(chunks, current)
+	}
+	return chunks
+}
+
+func splitTextIntoSentences(text string) []string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) == 0 {
+		return nil
+	}
+
+	sentences := make([]string, 0)
+	start := 0
+	for i, r := range runes {
+		if !isSentenceEnd(r) {
+			continue
+		}
+		end := i + 1
+		for end < len(runes) && isClosingSentencePunctuation(runes[end]) {
+			end++
+		}
+		sentence := strings.TrimSpace(string(runes[start:end]))
+		if sentence != "" {
+			sentences = append(sentences, sentence)
+		}
+		start = end
+	}
+	if start < len(runes) {
+		tail := strings.TrimSpace(string(runes[start:]))
+		if tail != "" {
+			sentences = append(sentences, tail)
+		}
+	}
+	return sentences
+}
+
+func splitTextByRuneWindow(text string, maxSize int) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	if maxSize <= 0 {
 		return []string{text}
 	}
 
-	chunks := make([]string, 0, len(runes)/defaultChunkSize+1)
-	for start := 0; start < len(runes); {
-		end := start + defaultChunkSize
+	runes := []rune(text)
+	if len(runes) <= maxSize {
+		return []string{text}
+	}
+
+	chunks := make([]string, 0, len(runes)/maxSize+1)
+	for start := 0; start < len(runes); start += maxSize {
+		end := start + maxSize
 		if end > len(runes) {
 			end = len(runes)
 		}
-
 		chunk := strings.TrimSpace(string(runes[start:end]))
 		if chunk != "" {
 			chunks = append(chunks, chunk)
 		}
-
-		if end == len(runes) {
-			break
-		}
-
-		nextStart := end - defaultChunkOverlap
-		if nextStart <= start {
-			nextStart = end
-		}
-		start = nextStart
 	}
 
 	return chunks
+}
+
+func joinChunkWithOverlap(previous string, next string) string {
+	next = strings.TrimSpace(next)
+	if next == "" {
+		return ""
+	}
+
+	separatorLen := 2
+	availableOverlap := defaultChunkSize - runeLen(next) - separatorLen
+	overlap := trailingSentenceOverlap(previous, defaultChunkOverlap, availableOverlap)
+	if overlap == "" {
+		return next
+	}
+	return joinChunkText(overlap, next)
+}
+
+func trailingSentenceOverlap(text string, maxOverlap int, maxAllowed int) string {
+	text = strings.TrimSpace(text)
+	if text == "" || maxOverlap <= 0 || maxAllowed <= 0 {
+		return ""
+	}
+
+	limit := maxOverlap
+	if maxAllowed < limit {
+		limit = maxAllowed
+	}
+
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+
+	minStart := len(runes) - limit
+	for i := minStart; i < len(runes)-1; i++ {
+		if isSentenceEnd(runes[i]) {
+			start := i + 1
+			for start < len(runes) && isClosingSentencePunctuation(runes[start]) {
+				start++
+			}
+			overlap := strings.TrimSpace(string(runes[start:]))
+			if overlap != "" {
+				return overlap
+			}
+		}
+	}
+
+	return strings.TrimSpace(string(runes[minStart:]))
+}
+
+func joinChunkText(a string, b string) string {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + "\n\n" + b
+}
+
+func joinInlineText(a string, b string) string {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + " " + b
+}
+
+func isSentenceEnd(r rune) bool {
+	switch r {
+	case '。', '！', '？', '；', '.', '!', '?', ';':
+		return true
+	default:
+		return false
+	}
+}
+
+func isClosingSentencePunctuation(r rune) bool {
+	switch r {
+	case '"', '\'', ')', ']', '}', '”', '’', '）', '】', '》':
+		return true
+	default:
+		return false
+	}
+}
+
+func runeLen(text string) int {
+	return len([]rune(text))
 }
 
 // 构建知识库索引
@@ -550,7 +828,7 @@ func (r *RAGIndexer) IndexFile(ctx context.Context, filePath string) error {
 		log.Printf("[RAG][IndexFile] empty content after split file=%s", filePath)
 		return fmt.Errorf("failed to index file: empty content")
 	}
-	log.Printf("[RAG][IndexFile] chunks prepared file=%s chunks=%d chunk_size=%d chunk_overlap=%d", filePath, len(chunks), defaultChunkSize, defaultChunkOverlap)
+	log.Printf("[RAG][IndexFile] chunks prepared file=%s chunks=%d max_chunk_size=%d max_overlap=%d splitter=semantic", filePath, len(chunks), defaultChunkSize, defaultChunkOverlap)
 
 	docs := make([]*schema.Document, 0, len(chunks))
 	for i, chunk := range chunks {
@@ -644,7 +922,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 			Index:        indexName,
 			Dialect:      2,
 			ReturnFields: []string{"content", "metadata", "distance"},
-			TopK:         10,
+			TopK:         5,
 			VectorField:  "vector",
 			// 由于 Redis 存储的文档格式和 Eino 框架内部定义的 schema.Document 格式不同
 			// 因此在查询时需要通过 DocumentConverter 进行相应的转换。
@@ -713,13 +991,14 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		return nil, fmt.Errorf("failed to retrieve documents")
 	}
 
+	// 多路检索结果合并后，按文档与用户 query 的相似度距离做排序。排序完成后，接着取 top-5 送入 LLM 的 prompt
 	sort.SliceStable(allDocs, func(i, j int) bool {
 		return documentDistance(allDocs[i]) < documentDistance(allDocs[j])
 	})
-
-	if len(allDocs) > 10 {
-		allDocs = allDocs[:10]
+	if len(allDocs) > 5 {
+		allDocs = allDocs[:5]
 	}
+
 	for i, doc := range allDocs {
 		docID := ""
 		filename := ""
@@ -809,7 +1088,12 @@ func BuildRAGPrompt(query string, docs []*schema.Document) string {
 		return query
 	}
 
-	prompt := fmt.Sprintf(`基于以下参考文档回答用户的问题。如果文档中没有相关信息，请说明无法找到相关信息。回答中引用资料时，请使用参考文档标题中的文件名。
+	prompt := fmt.Sprintf(`基于以下参考文档回答用户的问题。
+如果文档中没有相关信息，请说明无法找到相关信息。
+回答中引用资料时，请使用参考文档标题中的文件名。
+必须优先使用参考文档中的原文术语、数字、名称。
+如果问题包含多个要点，请逐项回答。
+不要省略数字、版本号、命令、路径。
 
 参考文档：
 %s

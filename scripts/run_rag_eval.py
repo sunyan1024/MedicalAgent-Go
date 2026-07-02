@@ -89,7 +89,37 @@ def load_dataset(path: Path) -> dict[str, Any]:
     cases = data.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("input JSON must contain a non-empty 'cases' array")
+    data = dict(data)
+    data["cases"] = [normalize_case(case, index) for index, case in enumerate(cases)]
     return data
+
+
+def normalize_case(case: Any, index: int) -> dict[str, Any]:
+    if not isinstance(case, dict):
+        raise ValueError(f"cases[{index}] must be an object")
+
+    normalized = dict(case)
+    if "id" in normalized and normalized["id"] is not None:
+        normalized["id"] = str(normalized["id"])
+
+    question = normalized.get("question")
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError(f"cases[{index}].question must be a non-empty string")
+
+    for field in (
+        "expected_keywords",
+        "forbidden_keywords",
+        "expected_sources",
+    ):
+        value = normalized.get(field)
+        if value is not None and not is_string_list(value):
+            raise ValueError(f"cases[{index}].{field} must be an array of strings")
+
+    return normalized
+
+
+def is_string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
 def call_eval_api(

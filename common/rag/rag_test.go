@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"GoAI/config"
 	paddleocr "github.com/PaddlePaddle/PaddleOCR/api_sdk/go"
@@ -633,5 +634,101 @@ func TestExtractPDFTextWithFallbackRejectsGarbledPaddleOCRText(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "garbled content ratio too high") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSplitTextIntoChunksReturnsNilForBlankText(t *testing.T) {
+	if chunks := splitTextIntoChunks(" \n\t "); chunks != nil {
+		t.Fatalf("blank text should return nil, got %#v", chunks)
+	}
+}
+
+func TestSplitTextIntoChunksKeepsSmallTextAsSingleChunk(t *testing.T) {
+	text := "# 标题\n\n这是一段较短的中文内容。\n\nThis is a short paragraph."
+
+	chunks := splitTextIntoChunks(text)
+	if len(chunks) != 1 {
+		t.Fatalf("small text should produce one chunk, got %d: %#v", len(chunks), chunks)
+	}
+	if chunks[0] != text {
+		t.Fatalf("small text changed: got %q", chunks[0])
+	}
+}
+
+func TestSplitTextIntoChunksCombinesMarkdownHeadingsAndParagraphs(t *testing.T) {
+	text := "# 第一章\n\n第一段内容。\n\n## 第二节\n\n第二段内容。"
+
+	chunks := splitTextIntoChunks(text)
+	if len(chunks) != 1 {
+		t.Fatalf("expected one combined chunk, got %d: %#v", len(chunks), chunks)
+	}
+	for _, want := range []string{"# 第一章", "第一段内容。", "## 第二节", "第二段内容。"} {
+		if !strings.Contains(chunks[0], want) {
+			t.Fatalf("combined chunk missing %q: %q", want, chunks[0])
+		}
+	}
+}
+
+func TestSplitTextIntoChunksSplitsLongParagraphAtSentenceBoundaries(t *testing.T) {
+	text := strings.Repeat("甲", 1000) + "。" +
+		strings.Repeat("乙", 1000) + "。" +
+		strings.Repeat("丙", 1000) + "。"
+
+	chunks := splitTextIntoChunks(text)
+	if len(chunks) != 3 {
+		t.Fatalf("expected sentence chunks, got %d", len(chunks))
+	}
+	for i, chunk := range chunks {
+		if runeLen(chunk) > defaultChunkSize {
+			t.Fatalf("chunk %d exceeds max size: %d", i, runeLen(chunk))
+		}
+		if !strings.HasSuffix(chunk, "。") {
+			runes := []rune(chunk)
+			start := len(runes) - 20
+			if start < 0 {
+				start = 0
+			}
+			t.Fatalf("chunk %d should end at sentence punctuation: %q", i, string(runes[start:]))
+		}
+		if strings.ContainsRune(chunk, unicode.ReplacementChar) {
+			t.Fatalf("chunk %d contains replacement char: %q", i, chunk)
+		}
+	}
+}
+
+func TestSplitTextIntoChunksOverlapPrefersSentenceBoundary(t *testing.T) {
+	firstParagraph := strings.Repeat("甲", 1850) + "。关键尾句。"
+	secondParagraph := strings.Repeat("下一段内容", 40) + "。"
+
+	chunks := splitTextIntoChunks(firstParagraph + "\n\n" + secondParagraph)
+	if len(chunks) != 2 {
+		t.Fatalf("expected two chunks, got %d", len(chunks))
+	}
+	if !strings.HasPrefix(chunks[1], "关键尾句。\n\n下一段内容") {
+		t.Fatalf("overlap should start at sentence boundary, got prefix %q", []rune(chunks[1])[:20])
+	}
+	if runeLen(chunks[1]) > defaultChunkSize {
+		t.Fatalf("overlap chunk exceeds max size: %d", runeLen(chunks[1]))
+	}
+}
+
+func TestSplitTextIntoChunksFallsBackToRuneWindowWithoutBreakingUTF8(t *testing.T) {
+	text := strings.Repeat("中文🙂", 900)
+
+	chunks := splitTextIntoChunks(text)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks for long text, got %d", len(chunks))
+	}
+	joined := strings.Join(chunks, "")
+	for i, chunk := range chunks {
+		if runeLen(chunk) > defaultChunkSize {
+			t.Fatalf("chunk %d exceeds max size: %d", i, runeLen(chunk))
+		}
+		if strings.ContainsRune(chunk, unicode.ReplacementChar) {
+			t.Fatalf("chunk %d contains replacement char: %q", i, chunk)
+		}
+	}
+	if strings.ContainsRune(joined, unicode.ReplacementChar) {
+		t.Fatalf("joined chunks contain replacement char")
 	}
 }

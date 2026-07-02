@@ -1,1020 +1,2626 @@
 {
   "cases": [
     {
-      "id": "fact-001",
+      "id": 1,
       "question": "OpenClaw 跟 ChatGPT 到底有啥不一样？",
       "expected_answer": "文档认为 ChatGPT 更像“顾问”，主要是你问它答；OpenClaw 更像“员工”，是一个开源、自托管的 AI Agent 平台，可以连接 20+ 消息渠道，并主动执行任务、管理日程、处理邮件、操作浏览器和调用工具。",
-      "expected_keywords": ["顾问", "员工", "任务"],
-      "forbidden_keywords": ["无法找到", "不知道", "完全一样"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "顾问",
+        "员工",
+        "任务"
+      ],
+      "forbidden_keywords": [
+        "无法找到",
+        "不知道",
+        "完全一样"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "fact-002",
+      "id": 2,
       "question": "OpenClaw 的 Gateway 默认跑在哪个地址和端口上？",
       "expected_answer": "OpenClaw Gateway 默认绑定本地回环地址 ws://127.0.0.1:18789，每台主机建议只运行一个 Gateway 实例。",
-      "expected_keywords": ["127.0.0.1", "18789"],
-      "forbidden_keywords": ["0.0.0.0", "8080", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "127.0.0.1",
+        "18789"
+      ],
+      "forbidden_keywords": [
+        "0.0.0.0",
+        "8080",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "fact-003",
+      "id": 3,
       "question": "大家说的“养虾”是啥意思？",
       "expected_answer": "OpenClaw 的吉祥物是一只龙虾，中文社区把使用或运行 OpenClaw 称为“养虾”，用户也被称为“养虾人”。",
-      "expected_keywords": ["龙虾", "养虾"],
-      "forbidden_keywords": ["猫", "企鹅", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "龙虾",
+        "养虾"
+      ],
+      "forbidden_keywords": [
+        "猫",
+        "企鹅",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "definition-001",
+      "id": 4,
       "question": "OpenClaw 说的四层记忆是怎么回事？",
       "expected_answer": "OpenClaw 的四层记忆包括 SOUL、TOOLS、USER 和 Session。SOUL 是不可变的人格和身份内核；TOOLS 是按需加载的技能和工具；USER 是关于用户偏好、决策和历史事实的长期语义记忆；Session 是当前对话的实时上下文。",
-      "expected_keywords": ["SOUL", "TOOLS", "USER", "Session", "长期记忆", "实时上下文"],
-      "forbidden_keywords": ["只有一层", "数据库表", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "SOUL",
+        "TOOLS",
+        "USER",
+        "Session",
+        "长期记忆",
+        "实时上下文"
+      ],
+      "forbidden_keywords": [
+        "只有一层",
+        "数据库表",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "definition-002",
+      "id": 5,
       "question": "陌生人私聊我的 Agent，会直接开始聊天吗？",
       "expected_answer": "DM Pairing Policy 是 OpenClaw 默认的私聊认证策略。未知发送者给 Agent 发私聊消息时，Agent 会生成一次性 6 位配对码，等待主人批准后才会处理消息，用于防止陌生人滥用 Agent 和 API 额度。",
-      "expected_keywords": ["DM Pairing", "私聊", "配对码"],
-      "forbidden_keywords": ["无需验证", "所有人直接使用", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "DM Pairing",
+        "私聊",
+        "配对码"
+      ],
+      "forbidden_keywords": [
+        "无需验证",
+        "所有人直接使用",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "definition-003",
+      "id": 6,
       "question": "OpenClaw 为啥默认只监听本地地址？",
       "expected_answer": "Loopback-First 表示 Gateway 默认只绑定 localhost，也就是 127.0.0.1，所有流量优先在本地回环中进行。这样默认不开放外网端口，同一台机器上的 Node 可以通过 WebSocket 连接 Gateway，需要远程访问时再通过 Tailscale Serve 或 Funnel 暴露。",
-      "expected_keywords": ["localhost", "127.0.0.1", "本地回环", "Tailscale"],
-      "forbidden_keywords": ["默认公网开放", "直接暴露端口", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "localhost",
+        "127.0.0.1",
+        "本地回环",
+        "Tailscale"
+      ],
+      "forbidden_keywords": [
+        "默认公网开放",
+        "直接暴露端口",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "process-001",
+      "id": 7,
       "question": "我想本地装 OpenClaw，用 npm 的话该怎么装？",
       "expected_answer": "文档推荐使用 npm 全局安装。先执行 npm install -g openclaw@latest 安装 OpenClaw，再执行 openclaw onboard -install-daemon 初始化并安装守护进程。onboard 会引导完成模型、API Key、消息频道等初始配置，-install-daemon 会让 OpenClaw 在后台持续运行。",
-      "expected_keywords": ["npm install -g openclaw@latest", "守护进程"],
-      "forbidden_keywords": ["pip install", "apt install openclaw", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "npm install -g openclaw@latest",
+        "守护进程"
+      ],
+      "forbidden_keywords": [
+        "pip install",
+        "apt install openclaw",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "process-002",
+      "id": 8,
       "question": "想把 OpenClaw 接到 Telegram，大概要怎么弄？",
       "expected_answer": "Telegram 接入流程是：先在 Telegram 中找到 @BotFather 并发送 /newbot；按提示创建 Bot 并获取 Bot Token；把 Token 写入 openclaw.yaml 的 telegram channel 配置；重启 Gateway 后给 bot 发送消息，Gateway 返回配对码，完成配对后即可对话。",
-      "expected_keywords": ["@BotFather", "/newbot", "Bot Token", "openclaw.yaml", "重启 Gateway", "配对码"],
-      "forbidden_keywords": ["必须公网 IP", "必须反向代理", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "@BotFather",
+        "/newbot",
+        "Bot Token",
+        "openclaw.yaml",
+        "重启 Gateway",
+        "配对码"
+      ],
+      "forbidden_keywords": [
+        "必须公网 IP",
+        "必须反向代理",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "process-003",
+      "id": 9,
       "question": "用 Docker 跑 OpenClaw，最简单的启动方式是什么？",
       "expected_answer": "Docker 部署时，文档给出的快速启动流程是先克隆仓库：git clone https://github.com/openclaw/openclaw.git，然后进入 openclaw 目录，执行 docker-compose up -d 启动。",
-      "expected_keywords": ["git clone", "openclaw/openclaw", "cd openclaw", "docker-compose up -d"],
-      "forbidden_keywords": ["npm start", "python app.py", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "git clone",
+        "openclaw/openclaw",
+        "cd openclaw",
+        "docker-compose up -d"
+      ],
+      "forbidden_keywords": [
+        "npm start",
+        "python app.py",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "process-004",
+      "id": 10,
       "question": "装完 OpenClaw 以后，我怎么确认它是不是正常？",
       "expected_answer": "安装完成后可以运行 openclaw doctor。该命令会检查 Node.js 版本是否满足 >=22、系统依赖是否安装、Gateway 连接是否正常、模型 API Key 是否有效、守护进程状态和网络连通性，并给出修复建议。",
-      "expected_keywords": ["openclaw doctor", "version", "版本", "Gateway", "连通性"],
-      "forbidden_keywords": ["npm doctor", "手动猜测", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "openclaw doctor",
+        "version",
+        "版本",
+        "Gateway",
+        "连通性"
+      ],
+      "forbidden_keywords": [
+        "npm doctor",
+        "手动猜测",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "number-001",
+      "id": 11,
       "question": "文档里说 OpenClaw 当时有多少 Star 和 Fork？",
       "expected_answer": "截至 2026 年 3 月 11 日，文档中的核心数据快照显示 OpenClaw 的 GitHub Stars 为 280,000+，Forks 为 53,232+。",
-      "expected_keywords": ["2026 年 3 月 11 日", "280,000", "53,232"],
-      "forbidden_keywords": ["10万", "1万", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "2026 年 3 月 11 日",
+        "280,000",
+        "53,232"
+      ],
+      "forbidden_keywords": [
+        "10万",
+        "1万",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "number-002",
+      "id": 12,
       "question": "OpenClaw 里面 Skills 数量大概有多少？",
       "expected_answer": "文档的核心数据快照显示，ClawHub Skills 为 13,700+，内置 Skills 为 55 个。另有部分章节提到 ClawHub 注册社区技能为 13,729 个。",
-      "expected_keywords": ["13,700", "55", "13,729"],
-      "forbidden_keywords": ["100", "5", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "13,700",
+        "55",
+        "13,729"
+      ],
+      "forbidden_keywords": [
+        "100",
+        "5",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "number-003",
+      "id": 13,
       "question": "Moltbook 当时有多少 Agent 在用？帖子和评论多吗？",
       "expected_answer": "截至 2026 年 2 月底，Moltbook 有 32,912 个注册 AI Agent、3,130 个帖子和 22,046 条评论。",
-      "expected_keywords": ["32,912", "3,130", "22,046", "帖子", "评论"],
-      "forbidden_keywords": ["280,000", "53,232", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "32,912",
+        "3,130",
+        "22,046",
+        "帖子",
+        "评论"
+      ],
+      "forbidden_keywords": [
+        "280,000",
+        "53,232",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "number-004",
+      "id": 14,
       "question": "OpenClaw 这个项目大不大？运行起来大概吃多少内存？",
       "expected_answer": "文档中给出的代码规模约为 43 万行 TypeScript，运行时内存占用约 1GB，启动时间为 3-5 秒。",
-      "expected_keywords": ["43 万", "TypeScript", "1GB"],
-      "forbidden_keywords": ["Python", "10GB", "1分钟", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "43 万",
+        "TypeScript",
+        "1GB"
+      ],
+      "forbidden_keywords": [
+        "Python",
+        "10GB",
+        "1分钟",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "multi-001",
+      "id": 15,
       "question": "我是国内新手，想先便宜点体验 OpenClaw，选哪个平台比较合适？",
       "expected_answer": "文档按场景推荐中，零基础想最快体验首选扣子编程，备选百度云，因为不需要服务器、部署步骤少且内置模型，但扣子编程需要 ¥49/月起会员。个人长期使用且预算敏感时，首选火山引擎，备选阿里云，理由是火山引擎服务器加模型组合约 19.8 元/月，综合较划算。",
-      "expected_keywords": ["腾讯云", "阿里云"],
-      "forbidden_keywords": ["只能本地部署", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "腾讯云",
+        "阿里云"
+      ],
+      "forbidden_keywords": [
+        "只能本地部署",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "multi-002",
+      "id": 16,
       "question": "OpenClaw 有哪些安全设置是必须注意的？",
       "expected_answer": "OpenClaw 的默认安全保护包括 Gateway 默认只绑定 127.0.0.1 的 Loopback-First 设计、DM Pairing 防止未知私聊用户直接使用、群聊默认 requireMention 只响应 @Agent 的消息。文档还强调 v2026.3.7 起必须显式设置 gateway.auth.mode，否则 Gateway 无法启动，这是为了修复此前大量未认证实例暴露的问题。",
-      "expected_keywords": ["127.0.0.1", "配对", "requireMention", "gateway.auth.mode", "v2026.3.7"],
-      "forbidden_keywords": ["默认无认证也能启动", "所有群消息都响应", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "127.0.0.1",
+        "配对",
+        "requireMention",
+        "gateway.auth.mode",
+        "v2026.3.7"
+      ],
+      "forbidden_keywords": [
+        "默认无认证也能启动",
+        "所有群消息都响应",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "multi-003",
+      "id": 17,
       "question": "OpenClaw 为啥说自己既是文本化配置，又能记住长期信息？",
       "expected_answer": "文档说明 OpenClaw 的配置、记忆和技能都以纯文本文件存在，例如 AGENTS.md、SOUL.md、USER.md、MEMORY.md、HEARTBEAT.md 和每日日志。长期记忆通过 MEMORY.md、Daily Logs 和向量数据库实现，Session 接近 token 限制时会触发 Pre-Compaction，把重要记忆写入 MEMORY.md 和 Daily Log，再压缩上下文。",
-      "expected_keywords": ["纯文本", "AGENTS.md", "MEMORY.md", "Daily Logs", "Pre-Compaction", "向量"],
-      "forbidden_keywords": ["只能存在关系型数据库", "不会持久化", "无法找到"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "纯文本",
+        "AGENTS.md",
+        "MEMORY.md",
+        "Daily Logs",
+        "Pre-Compaction",
+        "向量"
+      ],
+      "forbidden_keywords": [
+        "只能存在关系型数据库",
+        "不会持久化",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "multi-004",
+      "id": 18,
       "question": "本地跑和 Docker 跑 OpenClaw，保存数据时分别要注意什么？",
       "expected_answer": "本地安装时，OpenClaw 通过守护进程在后台持续运行，Gateway 会监听 ws://127.0.0.1:18789，并依赖工作区文件保存配置和记忆。Docker 部署时必须挂载 ~/.openclaw 和 ~/openclaw/workspace 两个关键目录，前者保存配置和状态数据，后者保存工作空间配置文件；如果不挂载，容器重启后配置和对话记录会丢失。",
-      "expected_keywords": ["openclaw", "workspace", "目录", "挂载", "配置", "记录"],
-      "forbidden_keywords": ["容器重启不会丢数据", "无需挂载", "不知道"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "openclaw",
+        "workspace",
+        "目录",
+        "挂载",
+        "配置",
+        "记录"
+      ],
+      "forbidden_keywords": [
+        "容器重启不会丢数据",
+        "无需挂载",
+        "不知道"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "missing-001",
+      "id": 19,
       "question": "文档里有 OpenClaw iOS App 的下载链接吗？",
       "expected_answer": "文档没有提供 OpenClaw 官方 iOS App 的 App Store 下载链接。文档只提到 OpenClaw 可以接入 iMessage、Telegram、WhatsApp 等渠道，以及 iMessage 需要通过 BlueBubbles 和常开的 Mac 桥接。",
-      "expected_keywords": ["没有", "下载链接", "WhatsApp", "Telegram"],
-      "forbidden_keywords": ["https://apps.apple.com", "官方下载链接是"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "没有",
+        "下载链接",
+        "WhatsApp",
+        "Telegram"
+      ],
+      "forbidden_keywords": [
+        "https://apps.apple.com",
+        "官方下载链接是"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "missing-002",
+      "id": 20,
       "question": "有没有OpenClaw创始人的邮箱？",
       "expected_answer": "文档没有给出 Peter Steinberger 的私人邮箱。文档只介绍了他是奥地利开发者、OpenClaw 的创始人，曾在 2026 年 2 月 14 日宣布加入 OpenAI，并说明项目转为开源基金会运营。",
-      "expected_keywords": ["没有", "Peter", "Steinberger"],
-      "forbidden_keywords": ["@gmail.com", "@openai.com", "邮箱"],
-      "expected_sources": ["OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"]
+      "expected_keywords": [
+        "没有",
+        "Peter",
+        "Steinberger"
+      ],
+      "forbidden_keywords": [
+        "@gmail.com",
+        "@openai.com",
+        "邮箱"
+      ],
+      "expected_sources": [
+        "OpenClaw橙皮书-从入门到精通-v1.1.0.pdf"
+      ]
     },
     {
-      "id": "fact-004",
+      "id": 21,
       "question": "数据库系统里，DB、DBMS、DBS 这几个词到底啥关系？",
       "expected_answer": "DB 是数据库，表示长期存储在计算机内、有组织、可共享的数据集合；DBMS 是数据库管理系统，是管理数据库的软件系统；DBS 是数据库系统，通常由数据库、数据库管理系统、应用程序、数据库管理员和用户等组成。",
-      "expected_keywords": ["DB", "数据库", "DBMS", "数据库管理系统", "DBS", "数据库系统"],
-      "forbidden_keywords": ["完全一样", "没有区别", "无法找到", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "DB",
+        "数据库",
+        "DBMS",
+        "数据库管理系统",
+        "DBS",
+        "数据库系统"
+      ],
+      "forbidden_keywords": [
+        "完全一样",
+        "没有区别",
+        "无法找到",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "fact-005",
+      "id": 22,
       "question": "数据库方式和传统文件方式相比，主要变化在哪？",
       "expected_answer": "数据库方式把数据统一交给数据库管理系统管理，应用程序不再各自维护分散的数据文件。这样可以减少数据冗余，提高数据共享性，并通过 DBMS 统一进行数据控制和管理。",
-      "expected_keywords": ["数据库管理系统", "统一管理", "数据共享", "减少冗余", "应用程序"],
-      "forbidden_keywords": ["每个程序单独保存", "完全没有变化", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "数据库管理系统",
+        "统一管理",
+        "数据共享",
+        "减少冗余",
+        "应用程序"
+      ],
+      "forbidden_keywords": [
+        "每个程序单独保存",
+        "完全没有变化",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "fact-006",
-      "question": "书里说数据库管理系统主要是干嘛的？",
+      "id": 23,
+      "question": "数据库管理系统主要是干嘛的？",
       "expected_answer": "数据库管理系统 DBMS 是位于用户或应用程序与数据库之间的软件系统，负责数据库的定义、操纵、控制和维护，使用户能够方便、安全、有效地使用数据库。",
-      "expected_keywords": ["DBMS", "用户", "应用程序", "数据库", "定义", "操纵", "控制"],
-      "forbidden_keywords": ["操作系统就是DBMS", "只能存文件", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "DBMS",
+        "用户",
+        "应用程序",
+        "数据库",
+        "定义",
+        "操纵",
+        "控制"
+      ],
+      "forbidden_keywords": [
+        "操作系统就是DBMS",
+        "只能存文件",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "definition-004",
+      "id": 24,
       "question": "实体、属性、码这些概念能简单解释一下吗？",
       "expected_answer": "实体是客观存在并且可以相互区别的事物；属性是实体所具有的某一特性；码或关键字是能够唯一标识实体的属性或属性组。",
-      "expected_keywords": ["实体", "属性", "码", "关键字", "唯一标识"],
-      "forbidden_keywords": ["随便一个属性都可以唯一标识", "无法找到", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "实体",
+        "属性",
+        "码",
+        "关键字",
+        "唯一标识"
+      ],
+      "forbidden_keywords": [
+        "随便一个属性都可以唯一标识",
+        "无法找到",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "definition-005",
+      "id": 25,
       "question": "关系模型里的关系、元组、属性分别是什么意思？",
       "expected_answer": "在关系模型中，关系可以理解为一张二维表；表中的一行称为一个元组；表中的一列称为一个属性。关系模式描述关系的结构，关系实例表示某一时刻关系中的具体数据。",
-      "expected_keywords": ["关系", "二维表", "元组", "一行", "属性", "一列", "关系模式"],
-      "forbidden_keywords": ["树结构", "网状结构", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "关系",
+        "二维表",
+        "元组",
+        "一行",
+        "属性",
+        "一列",
+        "关系模式"
+      ],
+      "forbidden_keywords": [
+        "树结构",
+        "网状结构",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "definition-006",
+      "id": 26,
       "question": "主码和外码是一个东西吗？",
       "expected_answer": "主码和外码不是同一个概念。主码是关系中用来唯一标识元组的候选码；外码是一个关系中的属性或属性组，它引用另一个关系的码，用于表示两个关系之间的联系。",
-      "expected_keywords": ["主码", "唯一标识", "候选码", "外码", "引用", "关系之间的联系"],
-      "forbidden_keywords": ["完全相同", "没有区别", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "主码",
+        "唯一标识",
+        "候选码",
+        "外码",
+        "引用",
+        "关系之间的联系"
+      ],
+      "forbidden_keywords": [
+        "完全相同",
+        "没有区别",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "definition-007",
+      "id": 27,
       "question": "数据库的三级模式结构是啥意思？",
       "expected_answer": "数据库的三级模式结构包括外模式、模式和内模式。外模式面向用户的数据视图；模式是数据库中全体数据的逻辑结构和特征描述；内模式描述数据在存储介质上的物理结构和存储方式。",
-      "expected_keywords": ["三级模式", "外模式", "模式", "内模式", "逻辑结构", "物理结构"],
-      "forbidden_keywords": ["只有两级", "只有物理存储", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "三级模式",
+        "外模式",
+        "模式",
+        "内模式",
+        "逻辑结构",
+        "物理结构"
+      ],
+      "forbidden_keywords": [
+        "只有两级",
+        "只有物理存储",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "process-005",
+      "id": 28,
       "question": "从现实问题到数据库表，一般要经过哪些设计步骤？",
       "expected_answer": "通常先从现实世界抽象出概念模型，例如用 ER 图描述实体、属性和联系；再把概念模型转换为某种数据模型下的逻辑结构，例如关系模式；最后根据 DBMS 和存储需求设计物理结构并建立数据库。",
-      "expected_keywords": ["现实世界", "概念模型", "ER图", "逻辑结构", "关系模式", "物理结构"],
-      "forbidden_keywords": ["直接写代码即可", "不需要建模", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "现实世界",
+        "概念模型",
+        "ER图",
+        "逻辑结构",
+        "关系模式",
+        "物理结构"
+      ],
+      "forbidden_keywords": [
+        "直接写代码即可",
+        "不需要建模",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "process-006",
+      "id": 29,
       "question": "把 ER 图转换成关系模型时，大概怎么处理实体和联系？",
       "expected_answer": "将 ER 图转换为关系模型时，通常把实体型转换为关系模式，实体的属性转换为关系的属性，实体的码转换为关系的码。对于实体之间的联系，需要根据一对一、一对多、多对多等联系类型转换为相应的关系模式或外码。",
-      "expected_keywords": ["ER图", "实体型", "关系模式", "属性", "码", "一对一", "一对多", "多对多", "外码"],
-      "forbidden_keywords": ["ER图不能转换", "所有联系都丢弃", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "ER图",
+        "实体型",
+        "关系模式",
+        "属性",
+        "码",
+        "一对一",
+        "一对多",
+        "多对多",
+        "外码"
+      ],
+      "forbidden_keywords": [
+        "ER图不能转换",
+        "所有联系都丢弃",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "process-007",
+      "id": 30,
       "question": "做关系代数查询时，通常会用到哪些基本操作？",
       "expected_answer": "关系代数中常用的基本操作包括并、差、笛卡尔积、选择和投影。其他操作如连接、自然连接、除法等可以在这些基本操作的基础上定义或组合得到。",
-      "expected_keywords": ["并", "差", "笛卡尔积", "选择", "投影", "连接", "自然连接"],
-      "forbidden_keywords": ["排序是唯一基本操作", "无法找到", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "并",
+        "差",
+        "笛卡尔积",
+        "选择",
+        "投影",
+        "连接",
+        "自然连接"
+      ],
+      "forbidden_keywords": [
+        "排序是唯一基本操作",
+        "无法找到",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "process-008",
+      "id": 31,
       "question": "数据库应用程序访问数据库时，大概是怎么通过 DBMS 完成的？",
       "expected_answer": "应用程序向 DBMS 提出数据请求，DBMS 根据数据库定义和存储结构访问数据库，执行查询或更新操作，再把结果返回给应用程序。DBMS 在这个过程中还负责安全性、完整性、并发控制和恢复等管理工作。",
-      "expected_keywords": ["应用程序", "DBMS", "数据请求", "查询", "更新", "安全性", "完整性", "并发控制", "恢复"],
-      "forbidden_keywords": ["应用程序直接修改磁盘即可", "不经过DBMS", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "应用程序",
+        "DBMS",
+        "数据请求",
+        "查询",
+        "更新",
+        "安全性",
+        "完整性",
+        "并发控制",
+        "恢复"
+      ],
+      "forbidden_keywords": [
+        "应用程序直接修改磁盘即可",
+        "不经过DBMS",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "number-005",
+      "id": 32,
       "question": "关系模型里，表的行和列分别叫什么？",
       "expected_answer": "关系模型中，表的一行称为元组，表的一列称为属性。",
-      "expected_keywords": ["一行", "元组", "一列", "属性"],
-      "forbidden_keywords": ["节点", "边", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "一行",
+        "元组",
+        "一列",
+        "属性"
+      ],
+      "forbidden_keywords": [
+        "节点",
+        "边",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "number-006",
+      "id": 33,
       "question": "关系之间常见的联系类型有几种？",
       "expected_answer": "实体或关系之间常见的联系类型包括一对一、一对多和多对多三种。",
-      "expected_keywords": ["一对一", "一对多", "多对多", "三种"],
-      "forbidden_keywords": ["只有一种", "只有两种", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "一对一",
+        "一对多",
+        "多对多",
+        "三种"
+      ],
+      "forbidden_keywords": [
+        "只有一种",
+        "只有两种",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "number-007",
+      "id": 34,
       "question": "数据库的三级模式是哪三级？",
       "expected_answer": "数据库的三级模式是外模式、模式和内模式。",
-      "expected_keywords": ["三级", "外模式", "模式", "内模式"],
-      "forbidden_keywords": ["四级模式", "用户模式、程序模式、磁盘模式", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "三级",
+        "外模式",
+        "模式",
+        "内模式"
+      ],
+      "forbidden_keywords": [
+        "四级模式",
+        "用户模式、程序模式、磁盘模式",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "number-008",
+      "id": 35,
       "question": "关系代数里最基础的那几个操作有几个？",
       "expected_answer": "关系代数中常说的基本操作有五个：并、差、笛卡尔积、选择和投影。",
-      "expected_keywords": ["五个", "并", "差", "笛卡尔积", "选择", "投影"],
-      "forbidden_keywords": ["三个", "十个", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "五个",
+        "并",
+        "差",
+        "笛卡尔积",
+        "选择",
+        "投影"
+      ],
+      "forbidden_keywords": [
+        "三个",
+        "十个",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "multi-005",
+      "id": 36,
       "question": "为什么说数据库系统比单纯的数据文件更适合多个应用一起用？",
       "expected_answer": "因为数据库系统通过 DBMS 统一管理数据，不同应用可以共享同一数据库，减少重复存储和数据不一致问题。同时 DBMS 还能提供数据定义、查询更新、安全性控制、完整性控制、并发控制和恢复机制，所以比多个应用各自维护文件更适合共享使用。",
-      "expected_keywords": ["DBMS", "统一管理", "数据共享", "减少重复", "数据不一致", "安全性", "完整性", "并发控制", "恢复"],
-      "forbidden_keywords": ["每个应用必须单独保存数据", "数据库不能共享", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "DBMS",
+        "统一管理",
+        "数据共享",
+        "减少重复",
+        "数据不一致",
+        "安全性",
+        "完整性",
+        "并发控制",
+        "恢复"
+      ],
+      "forbidden_keywords": [
+        "每个应用必须单独保存数据",
+        "数据库不能共享",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "multi-006",
+      "id": 37,
       "question": "ER 图和关系表之间有什么关系？",
       "expected_answer": "ER 图属于概念模型，用来描述现实世界中的实体、属性和联系；关系表属于关系模型中的数据结构。数据库设计时，可以先用 ER 图进行概念设计，再把实体、属性、联系转换成关系模式和关系表。",
-      "expected_keywords": ["ER图", "概念模型", "实体", "属性", "联系", "关系模型", "关系模式", "关系表"],
-      "forbidden_keywords": ["ER图就是物理磁盘结构", "两者无关", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "ER图",
+        "概念模型",
+        "实体",
+        "属性",
+        "联系",
+        "关系模型",
+        "关系模式",
+        "关系表"
+      ],
+      "forbidden_keywords": [
+        "ER图就是物理磁盘结构",
+        "两者无关",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "multi-007",
+      "id": 38,
       "question": "数据库的三级模式和数据独立性有什么关系？",
       "expected_answer": "三级模式结构通过外模式、模式和内模式把用户视图、逻辑结构和物理存储分开，并通过外模式/模式映像、模式/内模式映像实现层次之间的转换。这样当逻辑结构或物理存储发生变化时，可以减少对用户应用程序的影响，从而支持数据独立性。",
-      "expected_keywords": ["外模式", "模式", "内模式", "映像", "逻辑结构", "物理存储", "数据独立性"],
-      "forbidden_keywords": ["应用程序必须全部重写", "没有映像", "无法找到"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "外模式",
+        "模式",
+        "内模式",
+        "映像",
+        "逻辑结构",
+        "物理存储",
+        "数据独立性"
+      ],
+      "forbidden_keywords": [
+        "应用程序必须全部重写",
+        "没有映像",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "multi-008",
+      "id": 39,
       "question": "关系模型为什么能用二维表表示复杂数据？",
       "expected_answer": "关系模型把数据组织成关系，也就是二维表。实体可以表示为关系表，实体的属性成为表的列，实体实例成为表中的元组；实体之间的联系可以通过外码或单独的关系模式表示。因此，复杂的实体和联系可以通过多个关系及其约束组合表达。",
-      "expected_keywords": ["关系模型", "二维表", "实体", "属性", "元组", "外码", "关系模式", "联系"],
-      "forbidden_keywords": ["只能表示一个对象", "不能表示联系", "不知道"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "关系模型",
+        "二维表",
+        "实体",
+        "属性",
+        "元组",
+        "外码",
+        "关系模式",
+        "联系"
+      ],
+      "forbidden_keywords": [
+        "只能表示一个对象",
+        "不能表示联系",
+        "不知道"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "missing-003",
-      "question": "这本书有没有教怎么安装 MySQL 8.0？",
+      "id": 40,
+      "question": "有没有教怎么安装 MySQL 8.0？",
       "expected_answer": "文档内容没有提供 MySQL 8.0 的安装教程。它主要讲解数据库系统的基本概念、数据模型、关系模型、关系代数、数据库系统结构等理论内容。",
-      "expected_keywords": ["没有提供", "MySQL 8.0", "安装教程", "数据库系统", "理论内容"],
-      "forbidden_keywords": ["下载安装包", "安装命令是", "官网下载"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "没有提供",
+        "MySQL 8.0",
+        "安装教程",
+        "数据库系统",
+        "理论内容"
+      ],
+      "forbidden_keywords": [
+        "下载安装包",
+        "安装命令是",
+        "官网下载"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "missing-004",
-      "question": "书里有没有给出 PostgreSQL 调优参数的推荐值？",
+      "id": 41,
+      "question": "有没有给出 PostgreSQL 调优参数的推荐值？",
       "expected_answer": "文档没有给出 PostgreSQL 调优参数的推荐值。文档讨论的是数据库系统教程中的通用理论和模型，并不是某个具体数据库产品的调优手册。",
-      "expected_keywords": ["没有给出", "PostgreSQL", "调优参数", "通用理论", "数据库产品"],
-      "forbidden_keywords": ["shared_buffers", "work_mem", "推荐设置为"],
-      "expected_sources": ["[数据库系统教程].施伯乐.pdf"]
+      "expected_keywords": [
+        "没有给出",
+        "PostgreSQL",
+        "调优参数",
+        "通用理论",
+        "数据库产品"
+      ],
+      "forbidden_keywords": [
+        "shared_buffers",
+        "work_mem",
+        "推荐设置为"
+      ],
+      "expected_sources": [
+        "[数据库系统教程].施伯乐.pdf"
+      ]
     },
     {
-      "id": "fact-007",
+      "id": 42,
       "question": "Makefile 到底是干嘛用的？",
       "expected_answer": "Makefile 用来定义整个工程的编译规则，指定哪些文件需要先编译、哪些文件后编译、哪些文件需要重新编译，甚至可以执行更复杂的操作系统命令。写好 Makefile 后，只需要执行 make 命令，就可以自动完成工程编译。",
-      "expected_keywords": ["编译规则", "先编译", "重新编译", "make命令", "自动编译"],
-      "forbidden_keywords": ["只能写注释", "和编译无关", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "编译规则",
+        "先编译",
+        "重新编译",
+        "make命令",
+        "自动编译"
+      ],
+      "forbidden_keywords": [
+        "只能写注释",
+        "和编译无关",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "fact-008",
-      "question": "作者这篇文档主要讲的是哪种 make？",
-      "expected_answer": "文档主要讲述 GNU make。作者说明自己的环境是 RedHat Linux 8.0，make 版本是 3.80，并且默认编译器是 UNIX 下的 GCC 和 CC。",
-      "expected_keywords": ["GNU make", "RedHat Linux 8.0", "make 3.80", "GCC", "CC"],
-      "forbidden_keywords": ["Visual Studio专用", "CMake", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
-    },
-    {
-      "id": "fact-009",
+      "id": 43,
       "question": "C/C++ 程序一般是先编译还是先链接？",
       "expected_answer": "一般来说，C/C++ 程序会先把源文件编译成中间目标文件，在 Windows 下通常是 .obj 文件，在 UNIX 下通常是 .o 文件；然后再把多个 Object File 链接成最终的执行文件。",
-      "expected_keywords": ["先编译", "中间目标文件", ".obj", ".o", "链接", "执行文件"],
-      "forbidden_keywords": ["先链接再编译", "不需要目标文件", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "先编译",
+        "中间目标文件",
+        ".obj",
+        ".o",
+        "链接",
+        "执行文件"
+      ],
+      "forbidden_keywords": [
+        "先链接再编译",
+        "不需要目标文件",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "definition-008",
+      "id": 44,
       "question": "Makefile 规则里的 target、prerequisites、command 分别是啥？",
       "expected_answer": "target 是目标，可以是目标文件、执行文件，也可以是标签；prerequisites 是生成 target 所依赖的文件或目标；command 是为了生成 target 要执行的命令，可以是任意 shell 命令。",
-      "expected_keywords": ["target", "目标", "prerequisites", "依赖", "command", "shell命令"],
-      "forbidden_keywords": ["三者完全一样", "target只能是目录", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "target",
+        "目标",
+        "prerequisites",
+        "依赖",
+        "command",
+        "shell命令"
+      ],
+      "forbidden_keywords": [
+        "三者完全一样",
+        "target只能是目录",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "definition-009",
+      "id": 45,
       "question": "make 什么时候会执行某条规则下面的命令？",
       "expected_answer": "当 prerequisites 中有一个或多个文件比 target 更新，或者 target 不存在时，make 就会认为目标需要重新生成，并执行该规则中 command 定义的命令。",
-      "expected_keywords": ["prerequisites", "target", "更新", "不存在", "重新生成", "执行命令"],
-      "forbidden_keywords": ["每次都无条件执行", "永远不执行", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "prerequisites",
+        "target",
+        "更新",
+        "不存在",
+        "重新生成",
+        "执行命令"
+      ],
+      "forbidden_keywords": [
+        "每次都无条件执行",
+        "永远不执行",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "definition-010",
+      "id": 46,
       "question": "Makefile 里的 clean 为啥叫伪目标？",
       "expected_answer": "clean 通常不是一个真实文件，而是一个动作名字或标签，用来执行清理目标文件的命令。因为它不生成名为 clean 的文件，所以通常用 .PHONY 显式声明 clean 是伪目标。",
-      "expected_keywords": ["clean", "伪目标", ".PHONY", "不是文件", "动作名字", "清理"],
-      "forbidden_keywords": ["clean一定是可执行文件", "必须自动生成clean文件", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "clean",
+        "伪目标",
+        ".PHONY",
+        "不是文件",
+        "动作名字",
+        "清理"
+      ],
+      "forbidden_keywords": [
+        "clean一定是可执行文件",
+        "必须自动生成clean文件",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "definition-011",
+      "id": 47,
       "question": "Makefile 里的变量可以理解成什么？",
       "expected_answer": "Makefile 中的变量可以理解为一个字符串，也可以类比为 C 语言中的宏。变量在 Makefile 执行时会被展开到相应的引用位置上。",
-      "expected_keywords": ["变量", "字符串", "C语言", "宏", "展开"],
-      "forbidden_keywords": ["只能保存数字", "不能被引用", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "变量",
+        "字符串",
+        "C语言",
+        "宏",
+        "展开"
+      ],
+      "forbidden_keywords": [
+        "只能保存数字",
+        "不能被引用",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "process-009",
+      "id": 48,
       "question": "我直接输入 make，它大概会按什么流程干活？",
       "expected_answer": "默认情况下，make 会先在当前目录寻找 Makefile 或 makefile；找到后取第一个目标作为最终目标；检查目标是否不存在，或者依赖文件是否比目标新；如果需要，就根据依赖关系一层层生成 .o 文件，最后链接生成最终执行文件。",
-      "expected_keywords": ["当前目录", "Makefile", "第一个目标", "依赖文件", ".o文件", "链接"],
-      "forbidden_keywords": ["随机选择目标", "不检查依赖", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "当前目录",
+        "Makefile",
+        "第一个目标",
+        "依赖文件",
+        ".o文件",
+        "链接"
+      ],
+      "forbidden_keywords": [
+        "随机选择目标",
+        "不检查依赖",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "process-010",
+      "id": 49,
       "question": "如果我想清掉编译出来的文件，Makefile 里一般怎么写？",
       "expected_answer": "文档建议每个 Makefile 都写一个清空目标文件的规则。常见写法是定义 clean 目标，执行 rm 删除执行文件和 .o 文件；更稳健的做法是用 .PHONY 声明 clean 是伪目标，并在 rm 前加小减号，表示即使某些文件删除出错也继续执行。",
-      "expected_keywords": ["clean", ".PHONY", "rm", ".o", "小减号", "继续执行"],
-      "forbidden_keywords": ["clean必须放在开头", "不能删除目标文件", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "clean",
+        ".PHONY",
+        "rm",
+        ".o",
+        "小减号",
+        "继续执行"
+      ],
+      "forbidden_keywords": [
+        "clean必须放在开头",
+        "不能删除目标文件",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "process-011",
+      "id": 50,
       "question": "怎么让 make 自动推导 .o 文件怎么编译？",
       "expected_answer": "GNU make 可以使用隐晦规则自动推导。当 make 看到一个 .o 文件时，会自动把对应的 .c 文件作为依赖，并推导出类似 cc -c xxx.c 的编译命令，所以不必为每个 .o 文件重复写相似命令。",
-      "expected_keywords": ["GNU make", "隐晦规则", ".o", ".c", "自动推导", "cc -c"],
-      "forbidden_keywords": ["必须每个命令都手写", "不能自动推导", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "GNU make",
+        "隐晦规则",
+        ".o",
+        ".c",
+        "自动推导",
+        "cc -c"
+      ],
+      "forbidden_keywords": [
+        "必须每个命令都手写",
+        "不能自动推导",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "process-012",
+      "id": 51,
       "question": "大型项目里头文件依赖太多，文档建议怎么自动生成依赖？",
       "expected_answer": "文档建议利用 C/C++ 编译器的 -M 或 GNU 编译器的 -MM 选项自动生成源文件包含的头文件依赖。GNU 组织建议为每个 name.c 生成一个 name.d 文件，把对应 .c 文件的依赖关系放进去，再通过 include 把这些 .d 文件包含进主 Makefile。",
-      "expected_keywords": ["-M", "-MM", "头文件依赖", ".d文件", "include", "自动生成"],
-      "forbidden_keywords": ["只能手动维护", "不支持自动生成", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "-M",
+        "-MM",
+        "头文件依赖",
+        ".d文件",
+        "include",
+        "自动生成"
+      ],
+      "forbidden_keywords": [
+        "只能手动维护",
+        "不支持自动生成",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "number-009",
+      "id": 52,
       "question": "示例工程里一开始有几个 c 文件和几个头文件？",
       "expected_answer": "文档示例中的工程有 8 个 C 文件和 3 个头文件，需要写一个 Makefile 来告诉 make 如何编译和链接这些文件。",
-      "expected_keywords": ["8个", "C文件", "3个", "头文件", "编译", "链接"],
-      "forbidden_keywords": ["10个C文件", "没有头文件", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "8个",
+        "C文件",
+        "3个",
+        "头文件",
+        "编译",
+        "链接"
+      ],
+      "forbidden_keywords": [
+        "10个C文件",
+        "没有头文件",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "number-010",
+      "id": 53,
       "question": "Makefile 里主要包含哪几类东西？",
       "expected_answer": "文档说 Makefile 里主要包含五类东西：显式规则、隐晦规则、变量定义、文件指示和注释。",
-      "expected_keywords": ["五类", "显式规则", "隐晦规则", "变量定义", "文件指示", "注释"],
-      "forbidden_keywords": ["三类", "只有命令", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "五类",
+        "显式规则",
+        "隐晦规则",
+        "变量定义",
+        "文件指示",
+        "注释"
+      ],
+      "forbidden_keywords": [
+        "三类",
+        "只有命令",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "number-011",
+      "id": 54,
       "question": "make 的工作方式大概分几步？",
       "expected_answer": "文档把 GNU make 的工作方式概括为 7 步：读入所有 Makefile，读入 include 的其它 Makefile，初始化变量，推导隐晦规则并分析规则，创建依赖关系链，根据依赖关系决定哪些目标要重新生成，最后执行生成命令。",
-      "expected_keywords": ["7步", "读入", "include", "初始化变量", "隐晦规则", "依赖关系链", "执行生成命令"],
-      "forbidden_keywords": ["2步", "只执行命令", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "7步",
+        "读入",
+        "include",
+        "初始化变量",
+        "隐晦规则",
+        "依赖关系链",
+        "执行生成命令"
+      ],
+      "forbidden_keywords": [
+        "2步",
+        "只执行命令",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "number-012",
+      "id": 55,
       "question": "make 默认会按什么文件名找 Makefile？",
       "expected_answer": "默认情况下，make 会在当前目录下按顺序寻找 GNUmakefile、makefile、Makefile 这几个文件名。文档建议最好使用 Makefile，因为首字母大写更醒目。",
-      "expected_keywords": ["GNUmakefile", "makefile", "Makefile", "当前目录", "按顺序", "首字母大写"],
-      "forbidden_keywords": ["CMakeLists.txt", "package.json", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "GNUmakefile",
+        "makefile",
+        "Makefile",
+        "当前目录",
+        "按顺序",
+        "首字母大写"
+      ],
+      "forbidden_keywords": [
+        "CMakeLists.txt",
+        "package.json",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "multi-009",
+      "id": 56,
       "question": "为什么说 Makefile 能提高大型工程的开发效率？",
       "expected_answer": "因为大型工程源文件很多，而且会按类型、功能、模块分布在不同目录中。Makefile 可以统一定义编译规则和依赖关系，让 make 自动判断哪些文件需要重新编译和链接。这样写好后只需执行 make 命令，就能自动化编译，减少手工操作并提高效率。",
-      "expected_keywords": ["大型工程", "源文件", "编译规则", "依赖关系", "重新编译", "自动化编译"],
-      "forbidden_keywords": ["只能小项目使用", "必须手动逐个编译", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "大型工程",
+        "源文件",
+        "编译规则",
+        "依赖关系",
+        "重新编译",
+        "自动化编译"
+      ],
+      "forbidden_keywords": [
+        "只能小项目使用",
+        "必须手动逐个编译",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "multi-010",
+      "id": 57,
       "question": "变量和自动推导一起用，能让 Makefile 简化在哪？",
       "expected_answer": "变量可以把重复出现的 .o 文件列表集中起来，例如 objects 变量，后面通过 $(objects) 引用；自动推导又能让 make 根据 .o 文件自动找到对应 .c 文件并推导编译命令。两者结合后，Makefile 可以少写重复的对象文件列表和重复的 cc -c 命令。",
-      "expected_keywords": ["变量", "objects", "$(objects)", "自动推导", ".o", ".c", "cc -c"],
-      "forbidden_keywords": ["会让Makefile更冗长", "不能减少重复", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "变量",
+        "objects",
+        "$(objects)",
+        "自动推导",
+        ".o",
+        ".c",
+        "cc -c"
+      ],
+      "forbidden_keywords": [
+        "会让Makefile更冗长",
+        "不能减少重复",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "multi-011",
+      "id": 58,
       "question": "VPATH 和 vpath 都是找文件的，它们有啥区别？",
       "expected_answer": "VPATH 是 Makefile 中的特殊变量，用来指定 make 搜索依赖文件和目标文件的目录，多个目录用冒号分隔。vpath 是 make 的关键字，更灵活，可以为符合某种模式的文件指定搜索目录，也可以清除某种模式或全部模式的搜索目录。",
-      "expected_keywords": ["VPATH", "特殊变量", "vpath", "关键字", "搜索目录", "模式", "冒号"],
-      "forbidden_keywords": ["完全一样没有区别", "都只能搜索当前目录", "不知道"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "VPATH",
+        "特殊变量",
+        "vpath",
+        "关键字",
+        "搜索目录",
+        "模式",
+        "冒号"
+      ],
+      "forbidden_keywords": [
+        "完全一样没有区别",
+        "都只能搜索当前目录",
+        "不知道"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "multi-012",
+      "id": 59,
       "question": "include 和 MAKEFILES 环境变量都能引入别的 Makefile，它们有什么不同？",
       "expected_answer": "include 是在 Makefile 中显式包含其它 Makefile，类似 C 语言的 #include，被包含文件会放到当前位置。MAKEFILES 是环境变量，make 会把其中的值当作其它 Makefile 类似 include 处理，但从环境变量引入的 Makefile 的目标不会起作用，发现错误时 make 也会不理。文档不建议使用 MAKEFILES，因为它会影响所有 Makefile。",
-      "expected_keywords": ["include", "MAKEFILES", "环境变量", "#include", "目标不会起作用", "不建议使用"],
-      "forbidden_keywords": ["两者没有任何区别", "MAKEFILES只影响当前一行", "无法找到"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "include",
+        "MAKEFILES",
+        "环境变量",
+        "#include",
+        "目标不会起作用",
+        "不建议使用"
+      ],
+      "forbidden_keywords": [
+        "两者没有任何区别",
+        "MAKEFILES只影响当前一行",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "missing-005",
+      "id": 60,
       "question": "这份文档有没有教怎么写 CMakeLists.txt？",
       "expected_answer": "文档没有教如何写 CMakeLists.txt。它主要讲 GNU make 和 Makefile 的写法，包括规则、变量、伪目标、隐晦规则、函数、make 的运行等内容。",
-      "expected_keywords": ["没有教", "CMakeLists.txt", "GNU make", "Makefile", "规则", "变量"],
-      "forbidden_keywords": ["cmake_minimum_required", "add_executable", "完整CMake教程"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "没有教",
+        "CMakeLists.txt",
+        "GNU make",
+        "Makefile",
+        "规则",
+        "变量"
+      ],
+      "forbidden_keywords": [
+        "cmake_minimum_required",
+        "add_executable",
+        "完整CMake教程"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "missing-006",
+      "id": 61,
       "question": "文档里有讲 Windows Visual Studio 工程怎么配置吗？",
       "expected_answer": "文档没有提供 Windows Visual Studio 工程配置教程。它只是提到 Windows 下的 IDE 通常会替用户完成类似工作，也提到 Visual C++ 有 nmake，但正文主要围绕 GNU make、UNIX/Linux 环境和 C/C++ 编译展开。",
-      "expected_keywords": ["没有提供", "Visual Studio", "nmake", "GNU make", "UNIX", "Linux"],
-      "forbidden_keywords": ["打开项目属性", "配置解决方案", "具体菜单路径"],
-      "expected_sources": ["跟我一起写Makefile.pdf"]
+      "expected_keywords": [
+        "没有提供",
+        "Visual Studio",
+        "nmake",
+        "GNU make",
+        "UNIX",
+        "Linux"
+      ],
+      "forbidden_keywords": [
+        "打开项目属性",
+        "配置解决方案",
+        "具体菜单路径"
+      ],
+      "expected_sources": [
+        "跟我一起写Makefile.pdf"
+      ]
     },
     {
-      "id": "fact-010",
+      "id": 62,
       "question": "《流畅的 Python》这本书主要想帮读者解决什么问题？",
       "expected_answer": "本书致力于帮助 Python 开发人员挖掘 Python 语言及相关程序库的优秀特性，避免重复劳动，写出简洁、流畅、易读、易维护，并且具有地道 Python 风格的代码。",
-      "expected_keywords": ["Python开发人员", "优秀特性", "避免重复劳动", "简洁", "流畅", "易维护", "Python风格"],
-      "forbidden_keywords": ["Java入门", "只讲安装", "无法找到", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "Python开发人员",
+        "优秀特性",
+        "避免重复劳动",
+        "简洁",
+        "流畅",
+        "易维护",
+        "Python风格"
+      ],
+      "forbidden_keywords": [
+        "Java入门",
+        "只讲安装",
+        "无法找到",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "fact-011",
-      "question": "这本书适合刚开始学 Python 的人吗？",
-      "expected_answer": "文档说明本书适合中高级 Python 软件开发人员阅读参考。如果读者刚开始学习 Python，书中内容可能会显得有些超纲，甚至可能误以为所有 Python 代码都应该使用特殊方法和元编程技巧。",
-      "expected_keywords": ["中高级", "Python软件开发人员", "刚开始学", "超纲", "特殊方法", "元编程"],
-      "forbidden_keywords": ["零基础首选", "只适合小学生", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "fact-012",
+      "id": 63,
       "question": "《流畅的 Python》的作者是谁？中文译者是谁？",
       "expected_answer": "《流畅的 Python》的作者是巴西的 Luciano Ramalho，中文译者是安道和吴珂。",
-      "expected_keywords": ["Luciano Ramalho", "巴西", "安道", "吴珂"],
-      "forbidden_keywords": ["Guido van Rossum", "陈皓", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "Luciano Ramalho",
+        "巴西",
+        "安道",
+        "吴珂"
+      ],
+      "forbidden_keywords": [
+        "Guido van Rossum",
+        "陈皓",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "fact-013",
-      "question": "书里主要讲 Python 哪些高级内容？",
+      "id": 64,
+      "question": "主要讲 Python 哪些高级内容？",
       "expected_answer": "文档内容提要说明，本书深入探讨 Python 语言的高级用法，涵盖数据结构、Python 风格的对象、并行与并发，以及元编程等方面。",
-      "expected_keywords": ["高级用法", "数据结构", "Python风格的对象", "并行", "并发", "元编程"],
-      "forbidden_keywords": ["数据库调优", "Linux内核", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "高级用法",
+        "数据结构",
+        "Python风格的对象",
+        "并行",
+        "并发",
+        "元编程"
+      ],
+      "forbidden_keywords": [
+        "数据库调优",
+        "Linux内核",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "definition-012",
-      "question": "书里说的 Python 数据模型是啥意思？",
+      "id": 65,
+      "question": "Python 数据模型是啥意思？",
       "expected_answer": "Python 数据模型是对 Python 框架的描述，它规范了语言自身构建模块的接口，这些模块包括但不限于序列、迭代器、函数、类和上下文管理器。",
-      "expected_keywords": ["Python数据模型", "框架", "接口", "序列", "迭代器", "函数", "类", "上下文管理器"],
-      "forbidden_keywords": ["数据库模型", "网络协议", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "Python数据模型",
+        "框架",
+        "接口",
+        "序列",
+        "迭代器",
+        "函数",
+        "类",
+        "上下文管理器"
+      ],
+      "forbidden_keywords": [
+        "数据库模型",
+        "网络协议",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "definition-013",
+      "id": 66,
       "question": "什么是特殊方法，为什么经常看到前后双下划线？",
       "expected_answer": "特殊方法是 Python 解释器在遇到特殊句法时调用的方法，方法名通常以两个下划线开头并以两个下划线结尾，例如 __getitem__。这些方法也被称为魔术方法或双下方法。",
-      "expected_keywords": ["特殊方法", "解释器", "特殊句法", "__getitem__", "魔术方法", "双下方法"],
-      "forbidden_keywords": ["普通变量", "只能手动调用", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "特殊方法",
+        "解释器",
+        "特殊句法",
+        "__getitem__",
+        "魔术方法",
+        "双下方法"
+      ],
+      "forbidden_keywords": [
+        "普通变量",
+        "只能手动调用",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "definition-014",
+      "id": 67,
       "question": "为什么 Python 里是 len(x)，不是 x.len()？",
       "expected_answer": "文档把 len(collection) 而不是 collection.len() 作为理解 Python 风格的重要例子。Python 数据模型通过特殊方法支持这类内置操作，len 会利用对象实现的特殊方法来完成长度获取，从而保持语言层面的统一和一致性。",
-      "expected_keywords": ["len", "Python风格", "数据模型", "特殊方法", "一致性"],
-      "forbidden_keywords": ["Python不支持长度", "必须写x.len()", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "len",
+        "Python风格",
+        "数据模型",
+        "特殊方法",
+        "一致性"
+      ],
+      "forbidden_keywords": [
+        "Python不支持长度",
+        "必须写x.len()",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "definition-015",
-      "question": "namedtuple 在书里的纸牌例子中是干嘛的？",
+      "id": 68,
+      "question": "namedtuple 在纸牌例子中是干嘛的？",
       "expected_answer": "书中使用 collections.namedtuple 构建了一个简单的 Card 类，用来表示一张纸牌。namedtuple 适合构建只有少数属性但没有方法的对象，比如数据库条目。",
-      "expected_keywords": ["collections.namedtuple", "Card", "纸牌", "少数属性", "没有方法"],
-      "forbidden_keywords": ["只能创建函数", "只能处理图片", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "collections.namedtuple",
+        "Card",
+        "纸牌",
+        "少数属性",
+        "没有方法"
+      ],
+      "forbidden_keywords": [
+        "只能创建函数",
+        "只能处理图片",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "process-013",
+      "id": 69,
       "question": "自定义对象想支持 obj[key] 这种写法，要怎么做？",
       "expected_answer": "如果自定义对象想支持 obj[key] 这种写法，需要实现 __getitem__ 特殊方法。解释器在求 obj[key] 的值时，实际上会调用 obj.__getitem__(key)。",
-      "expected_keywords": ["obj[key]", "__getitem__", "特殊方法", "解释器", "调用"],
-      "forbidden_keywords": ["只能继承list", "不能实现", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "obj[key]",
+        "__getitem__",
+        "特殊方法",
+        "解释器",
+        "调用"
+      ],
+      "forbidden_keywords": [
+        "只能继承list",
+        "不能实现",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "process-014",
-      "question": "书里的 FrenchDeck 为什么能用 len(deck)？",
+      "id": 70,
+      "question": "FrenchDeck 为什么能用 len(deck)？",
       "expected_answer": "FrenchDeck 类实现了 __len__ 方法，该方法返回内部 _cards 列表的长度。因此 FrenchDeck 实例可以像标准 Python 集合类型一样使用 len(deck) 查看纸牌数量。",
-      "expected_keywords": ["FrenchDeck", "__len__", "_cards", "len(deck)", "集合类型"],
-      "forbidden_keywords": ["因为继承了dict", "不能使用len", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "FrenchDeck",
+        "__len__",
+        "_cards",
+        "len(deck)",
+        "集合类型"
+      ],
+      "forbidden_keywords": [
+        "因为继承了dict",
+        "不能使用len",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "process-015",
+      "id": 71,
       "question": "为什么 FrenchDeck 可以切片和迭代？",
       "expected_answer": "FrenchDeck 实现了 __getitem__ 方法，并把 [] 操作交给内部的 self._cards 列表。因此它自动支持索引、切片，也可以被迭代，甚至可以进行反向迭代。",
-      "expected_keywords": ["FrenchDeck", "__getitem__", "self._cards", "索引", "切片", "迭代", "反向迭代"],
-      "forbidden_keywords": ["必须手写for循环协议", "完全不能切片", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "FrenchDeck",
+        "__getitem__",
+        "self._cards",
+        "索引",
+        "切片",
+        "迭代",
+        "反向迭代"
+      ],
+      "forbidden_keywords": [
+        "必须手写for循环协议",
+        "完全不能切片",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "process-016",
-      "question": "书里建议怎么验证代码示例是否正确？",
-      "expected_answer": "文档说明书中几乎所有代码测试，包括控制台输出，都是通过 doctest 完成的。读者可以结合本书源码，在操作系统控制台中运行 python3 -m doctest example_script.py 来验证代码正确性。",
-      "expected_keywords": ["doctest", "控制台输出", "源码", "python3 -m doctest", "example_script.py", "验证"],
-      "forbidden_keywords": ["只能人工检查", "必须用JUnit", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "number-013",
-      "question": "书里的 FrenchDeck 一共有多少张牌？",
+      "id": 72,
+      "question": "FrenchDeck 一共有多少张牌？",
       "expected_answer": "书中的 FrenchDeck 示例中，len(deck) 的结果是 52，因此这摞纸牌一共有 52 张。",
-      "expected_keywords": ["FrenchDeck", "len(deck)", "52", "纸牌"],
-      "forbidden_keywords": ["54", "13", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "FrenchDeck",
+        "len(deck)",
+        "52",
+        "纸牌"
+      ],
+      "forbidden_keywords": [
+        "54",
+        "13",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "number-014",
-      "question": "这本书一共分成几个部分？",
-      "expected_answer": "文档前言说明，本书按照作者构思分为六个独立的部分，分别覆盖数据模型、数据结构、函数作为对象、面向对象惯用法、控制流程和元编程等主题。",
-      "expected_keywords": ["六个", "独立的部分", "数据模型", "数据结构", "控制流程", "元编程"],
-      "forbidden_keywords": ["两个部分", "十个部分", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "number-015",
+      "id": 73,
       "question": "《流畅的 Python》中文版是哪一年出版的？",
       "expected_answer": "文档版权页和出版信息显示，简体中文版由人民邮电出版社出版，2017 年 5 月第 1 版。",
-      "expected_keywords": ["简体中文版", "人民邮电出版社", "2017年5月", "第1版"],
-      "forbidden_keywords": ["2020年", "1998年", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "简体中文版",
+        "人民邮电出版社",
+        "2017年5月",
+        "第1版"
+      ],
+      "forbidden_keywords": [
+        "2020年",
+        "1998年",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "number-016",
-      "question": "书中代码主要在哪个 Python 版本测试过？",
-      "expected_answer": "文档说明，本书所有代码都在 Python 3.4 中测试过，使用的是应用最广的 CPython 3.4。另有一个例外是第 13.4 节提到 Python 3.5 新引入的中缀运算符 @。",
-      "expected_keywords": ["Python 3.4", "CPython 3.4", "第13.4节", "Python 3.5", "@"],
-      "forbidden_keywords": ["Python 1.0", "只支持Python 2.0", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "multi-013",
-      "question": "这本书为什么不太适合 Python 新手直接啃？",
-      "expected_answer": "文档说明，本书目标读者是正在使用 Python、想熟悉 Python 3 的程序员，尤其适合中高级开发者。它不会重复官方教程中的基础内容，而且会涉及特殊方法、抽象基类、描述符、装饰器、协程和元编程等内容。刚开始学 Python 的读者可能会觉得超纲。",
-      "expected_keywords": ["目标读者", "中高级", "Python 3", "官方教程", "特殊方法", "描述符", "协程", "元编程", "超纲"],
-      "forbidden_keywords": ["完全零基础教程", "只讲print", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "multi-014",
-      "question": "书里为什么一直强调 Pythonic 和数据模型？",
+      "id": 74,
+      "question": "为什么一直强调 Pythonic 和数据模型？",
       "expected_answer": "文档认为 Python 最好的品质之一是一致性，而 Pythonic 风格的关键体现在数据模型上。数据模型规范了序列、迭代器、函数、类、上下文管理器等构建模块的接口，开发者通过实现特殊方法，可以让自定义对象自然支持迭代、集合、属性访问、运算符重载、函数调用和 with 块等语言特性。",
-      "expected_keywords": ["Pythonic", "一致性", "数据模型", "特殊方法", "迭代", "运算符重载", "with块"],
-      "forbidden_keywords": ["Python没有统一模型", "只能写过程式代码", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "Pythonic",
+        "一致性",
+        "数据模型",
+        "特殊方法",
+        "迭代",
+        "运算符重载",
+        "with块"
+      ],
+      "forbidden_keywords": [
+        "Python没有统一模型",
+        "只能写过程式代码",
+        "不知道"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "multi-015",
+      "id": 75,
       "question": "从 FrenchDeck 例子看，实现特殊方法有什么好处？",
       "expected_answer": "FrenchDeck 通过实现 __len__ 和 __getitem__，可以像标准 Python 集合一样使用 len、索引、切片、迭代和反向迭代，还能直接使用 random.choice 等标准库函数。这样用户不用记忆各种非标准方法名，也不用重新发明轮子。",
-      "expected_keywords": ["FrenchDeck", "__len__", "__getitem__", "len", "索引", "切片", "random.choice", "标准库"],
-      "forbidden_keywords": ["只能手动遍历_cards", "不能用标准库", "无法找到"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "FrenchDeck",
+        "__len__",
+        "__getitem__",
+        "len",
+        "索引",
+        "切片",
+        "random.choice",
+        "标准库"
+      ],
+      "forbidden_keywords": [
+        "只能手动遍历_cards",
+        "不能用标准库",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "multi-016",
-      "question": "这本书的六大部分大概是怎么安排的？",
-      "expected_answer": "本书第一部分讲 Python 数据模型；第二部分讲数据结构，包括序列、映射、集合、字符串和字节序列；第三部分讲把函数作为一等对象；第四部分转向类和面向对象惯用法；第五部分关注控制流程，包括生成器、上下文管理器、协程和并发；第六部分讲元编程，包括动态属性、特性、描述符、类装饰器和元类。",
-      "expected_keywords": ["第一部分", "数据模型", "第二部分", "数据结构", "一等对象", "面向对象", "控制流程", "元编程"],
-      "forbidden_keywords": ["只讲Web开发", "只讲机器学习", "不知道"],
-      "expected_sources": ["流畅的Python.pdf"]
-    },
-    {
-      "id": "missing-007",
-      "question": "这本书有没有教怎么用 Django 写博客系统？",
+      "id": 76,
+      "question": "有没有教怎么用 Django 写博客系统？",
       "expected_answer": "文档没有提供用 Django 编写博客系统的教程。它虽然在目录中提到 Django 通用视图中的混入作为多重继承的现代示例，但本书主要讲 Python 语言特性、数据结构、对象模型、控制流程和元编程。",
-      "expected_keywords": ["没有提供", "Django", "博客系统", "通用视图", "混入", "Python语言特性"],
-      "forbidden_keywords": ["完整博客项目", "settings.py配置", "urls.py教程"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "没有提供",
+        "Django",
+        "博客系统",
+        "通用视图",
+        "混入",
+        "Python语言特性"
+      ],
+      "forbidden_keywords": [
+        "完整博客项目",
+        "settings.py配置",
+        "urls.py教程"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "missing-008",
+      "id": 77,
       "question": "文档里有没有讲怎么训练深度学习模型？",
       "expected_answer": "文档没有讲如何训练深度学习模型。它主要面向 Python 语言本身及标准库特性，内容包括数据结构、函数、对象、控制流程、并发和元编程等，而不是机器学习或深度学习训练教程。",
-      "expected_keywords": ["没有讲", "深度学习", "Python语言", "标准库", "数据结构", "并发", "元编程"],
-      "forbidden_keywords": ["训练神经网络", "反向传播代码", "PyTorch训练流程"],
-      "expected_sources": ["流畅的Python.pdf"]
+      "expected_keywords": [
+        "没有讲",
+        "深度学习",
+        "Python语言",
+        "标准库",
+        "数据结构",
+        "并发",
+        "元编程"
+      ],
+      "forbidden_keywords": [
+        "训练神经网络",
+        "反向传播代码",
+        "PyTorch训练流程"
+      ],
+      "expected_sources": [
+        "流畅的Python.pdf"
+      ]
     },
     {
-      "id": "fact-014",
-      "question": "这个课件主要是在讲什么？",
-      "expected_answer": "这个课件主要讲 Git，包括版本控制系统、Git 和 SVN 的区别、Gitee 远程仓库的创建、本地配置、克隆仓库、查看状态、提交文件、推送、团队成员加入、SSH 公钥配置以及误删文件恢复等内容。",
-      "expected_keywords": ["Git", "版本控制系统", "Gitee", "远程仓库", "本地配置", "SSH公钥"],
-      "forbidden_keywords": ["Makefile", "Python", "数据库", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
-    },
-    {
-      "id": "fact-015",
+      "id": 78,
       "question": "Git 和 SVN 最大的区别是啥？",
       "expected_answer": "课件中说明，Git 是分布式版本控制系统，不受网络环境限制；SVN 是集中式版本控制系统，对代码做了修改之后必须赶紧提交。",
-      "expected_keywords": ["Git", "分布式", "不受网络环境限制", "SVN", "集中式", "提交"],
-      "forbidden_keywords": ["Git是集中式", "SVN是分布式", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "Git",
+        "分布式",
+        "不受网络环境限制",
+        "SVN",
+        "集中式",
+        "提交"
+      ],
+      "forbidden_keywords": [
+        "Git是集中式",
+        "SVN是分布式",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "fact-016",
+      "id": 79,
       "question": "Linux 上所谓的 Git 仓库是啥？",
       "expected_answer": "课件中提到，在 Linux 上所谓的仓库就是一个目录。",
-      "expected_keywords": ["Linux", "仓库", "目录"],
-      "forbidden_keywords": ["数据库表", "压缩包", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "Linux",
+        "仓库",
+        "目录"
+      ],
+      "forbidden_keywords": [
+        "数据库表",
+        "压缩包",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "fact-017",
-      "question": "课件里远程仓库是在哪个平台上建的？",
-      "expected_answer": "课件中是在登录 Gitee 之后建立一个新的仓库，也就是在 Gitee 上创建远程仓库。",
-      "expected_keywords": ["Gitee", "登录", "新仓库", "远程仓库"],
-      "forbidden_keywords": ["GitHub", "GitLab", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
-    },
-    {
-      "id": "definition-016",
+      "id": 80,
       "question": "git add 和 git commit 分别是干嘛的？",
       "expected_answer": "根据课件中的 Git 设计原理，git add 是把工作区的修改提交到暂存区，git commit 是把暂存区的内容提交到版本库。",
-      "expected_keywords": ["git add", "工作区", "暂存区", "git commit", "版本库"],
-      "forbidden_keywords": ["直接推送远程", "删除仓库", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git add",
+        "工作区",
+        "暂存区",
+        "git commit",
+        "版本库"
+      ],
+      "forbidden_keywords": [
+        "直接推送远程",
+        "删除仓库",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "definition-017",
+      "id": 81,
       "question": "Git 里面工作区、暂存区、版本库是啥关系？",
       "expected_answer": "课件把 Git 的设计原理分为工作区、暂存区和版本库。修改先发生在工作区，通过 git add 进入暂存区，再通过 git commit 提交到版本库。",
-      "expected_keywords": ["工作区", "暂存区", "版本库", "git add", "git commit"],
-      "forbidden_keywords": ["只有远程仓库", "没有暂存区", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "工作区",
+        "暂存区",
+        "版本库",
+        "git add",
+        "git commit"
+      ],
+      "forbidden_keywords": [
+        "只有远程仓库",
+        "没有暂存区",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "definition-018",
+      "id": 82,
       "question": "origin 在这个课件里指的是什么？",
       "expected_answer": "课件在查看仓库配置信息时展示了 .git/config，其中 remote \"origin\" 对应远程仓库地址，说明 origin 是远程仓库的别名。",
-      "expected_keywords": ["origin", "remote", ".git/config", "远程仓库", "别名"],
-      "forbidden_keywords": ["本地文件名", "分支名称一定是origin", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "origin",
+        "remote",
+        ".git/config",
+        "远程仓库",
+        "别名"
+      ],
+      "forbidden_keywords": [
+        "本地文件名",
+        "分支名称一定是origin",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "definition-019",
+      "id": 83,
       "question": "SSH 公钥在团队协作里是用来干嘛的？",
       "expected_answer": "课件中说明，每个小组成员都要获取自己的 SSH 公钥，并在小组长的远程仓库中添加小伙伴的 SSH 公钥，这样成员才能通过 SSH 地址获取项目并参与协作。",
-      "expected_keywords": ["SSH公钥", "小组成员", "远程仓库", "添加", "SSH地址", "协作"],
-      "forbidden_keywords": ["用来编译代码", "用来删除分支", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "SSH公钥",
+        "小组成员",
+        "远程仓库",
+        "添加",
+        "SSH地址",
+        "协作"
+      ],
+      "forbidden_keywords": [
+        "用来编译代码",
+        "用来删除分支",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-017",
+      "id": 84,
       "question": "刚开始用 Git，要先怎么配置用户名和邮箱？",
       "expected_answer": "课件中展示了本地配置用户名和邮箱的命令：git config --global user.name \"Your Name\" 和 git config --global user.email \"email@example.com\"。",
-      "expected_keywords": ["git config", "--global", "user.name", "user.email", "Your Name", "email@example.com"],
-      "forbidden_keywords": ["git init user", "svn config", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git config",
+        "--global",
+        "user.name",
+        "user.email",
+        "Your Name",
+        "email@example.com"
+      ],
+      "forbidden_keywords": [
+        "git init user",
+        "svn config",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-018",
+      "id": 85,
       "question": "怎么把远程仓库复制到本地？",
       "expected_answer": "课件中通过 git clone 命令把远程仓库复制到本地，例如使用 HTTPS 地址执行 git clone https://gitee.com/haohb2020/gittest.git。",
-      "expected_keywords": ["git clone", "远程仓库", "复制到本地", "https://gitee.com", "gittest.git"],
-      "forbidden_keywords": ["git push", "git commit", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git clone",
+        "远程仓库",
+        "复制到本地",
+        "https://gitee.com",
+        "gittest.git"
+      ],
+      "forbidden_keywords": [
+        "git push",
+        "git commit",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-019",
+      "id": 86,
       "question": "我要看当前仓库有没有改动，用什么命令？",
       "expected_answer": "课件中查看仓库状态使用 git status 命令。",
-      "expected_keywords": ["git status", "查看", "仓库", "状态"],
-      "forbidden_keywords": ["git log", "git clone", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git status",
+        "查看",
+        "仓库",
+        "状态"
+      ],
+      "forbidden_keywords": [
+        "git log",
+        "git clone",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-020",
+      "id": 87,
       "question": "把 hello.c 提交到本地版本库，一般怎么操作？",
       "expected_answer": "课件中提交文件分两步：先执行 git add hello.c，把文件加入暂存区；再执行 git commit -m \"lh:add hello.c\" 完成提交操作。",
-      "expected_keywords": ["git add hello.c", "git commit", "-m", "lh:add hello.c", "暂存区", "提交"],
-      "forbidden_keywords": ["git push hello.c", "svn commit", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git add hello.c",
+        "git commit",
+        "-m",
+        "lh:add hello.c",
+        "暂存区",
+        "提交"
+      ],
+      "forbidden_keywords": [
+        "git push hello.c",
+        "svn commit",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-021",
+      "id": 88,
       "question": "本地提交完之后，怎么推送到远程仓库？",
       "expected_answer": "课件中推送是在本地 Linux 执行 git push origin master，把本地内容推送到远程仓库。",
-      "expected_keywords": ["git push origin master", "本地", "Linux", "推送", "远程仓库"],
-      "forbidden_keywords": ["git pull origin master", "git status推送", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "git push origin master",
+        "本地",
+        "Linux",
+        "推送",
+        "远程仓库"
+      ],
+      "forbidden_keywords": [
+        "git pull origin master",
+        "git status推送",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "process-022",
+      "id": 89,
       "question": "其他小伙伴要加入项目，大概要做哪些事？",
       "expected_answer": "课件中流程包括：先在项目中添加开发者；小伙伴在本地生成自己的 SSH 公钥；小组长在远程仓库中添加该 SSH 公钥；小伙伴获取项目的 SSH 地址；最后在 Linux 本地执行 git clone 克隆项目。",
-      "expected_keywords": ["添加开发者", "SSH公钥", "远程仓库", "SSH地址", "Linux", "git clone"],
-      "forbidden_keywords": ["不用权限直接加入", "只需要git status", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "添加开发者",
+        "SSH公钥",
+        "远程仓库",
+        "SSH地址",
+        "Linux",
+        "git clone"
+      ],
+      "forbidden_keywords": [
+        "不用权限直接加入",
+        "只需要git status",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "number-017",
+      "id": 90,
       "question": "提交文件到仓库，课件里分了几步？",
       "expected_answer": "课件中往仓库提交文件分为两步：第一步是 git add 命令，第二步是 git commit 提交操作。",
-      "expected_keywords": ["两步", "git add", "git commit", "提交文件"],
-      "forbidden_keywords": ["一步", "三步", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "两步",
+        "git add",
+        "git commit",
+        "提交文件"
+      ],
+      "forbidden_keywords": [
+        "一步",
+        "三步",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "number-018",
+      "id": 91,
       "question": "Git 的设计原理里提到了几个区域？",
       "expected_answer": "课件中 Git 的设计原理提到了三个区域：工作区、暂存区和版本库。",
-      "expected_keywords": ["三个", "工作区", "暂存区", "版本库"],
-      "forbidden_keywords": ["两个", "四个", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "三个",
+        "工作区",
+        "暂存区",
+        "版本库"
+      ],
+      "forbidden_keywords": [
+        "两个",
+        "四个",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "number-019",
+      "id": 92,
       "question": "误删文件的恢复，课件里分了几种情况？",
       "expected_answer": "课件里误删文件恢复分为两种情况：如果没有提交到暂存区或者版本库，直接撤销工作区操作；如果已经提交到版本库，直接回退版本库。",
-      "expected_keywords": ["两种", "没有提交", "暂存区", "版本库", "撤销工作区", "回退版本库"],
-      "forbidden_keywords": ["只有一种", "必须重新克隆", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "两种",
+        "没有提交",
+        "暂存区",
+        "版本库",
+        "撤销工作区",
+        "回退版本库"
+      ],
+      "forbidden_keywords": [
+        "只有一种",
+        "必须重新克隆",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "multi-017",
+      "id": 93,
       "question": "从建仓库到把代码推上去，完整流程大概是啥？",
       "expected_answer": "根据课件，完整流程是：先登录 Gitee 建立新的远程仓库；在本地配置 Git 用户名和邮箱；使用 git clone 把远程仓库复制到本地；用 git status 查看状态；通过 git add 和 git commit 提交文件到本地版本库；最后在本地执行 git push origin master 推送到远程仓库。",
-      "expected_keywords": ["Gitee", "远程仓库", "git config", "git clone", "git status", "git add", "git commit", "git push origin master"],
-      "forbidden_keywords": ["不用本地仓库", "只需要复制文件夹", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "Gitee",
+        "远程仓库",
+        "git config",
+        "git clone",
+        "git status",
+        "git add",
+        "git commit",
+        "git push origin master"
+      ],
+      "forbidden_keywords": [
+        "不用本地仓库",
+        "只需要复制文件夹",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "multi-018",
+      "id": 94,
       "question": "为什么提交代码前要先 add 再 commit？",
       "expected_answer": "课件中的 Git 设计原理说明，Git 有工作区、暂存区和版本库。git add 用来把工作区的修改放入暂存区，git commit 再把暂存区内容提交到版本库，所以提交代码前需要先 add 再 commit。",
-      "expected_keywords": ["工作区", "暂存区", "版本库", "git add", "git commit", "先add再commit"],
-      "forbidden_keywords": ["add和commit顺序无所谓", "commit直接推送远程", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "工作区",
+        "暂存区",
+        "版本库",
+        "git add",
+        "git commit",
+        "先add再commit"
+      ],
+      "forbidden_keywords": [
+        "add和commit顺序无所谓",
+        "commit直接推送远程",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "multi-019",
+      "id": 95,
       "question": "团队成员想参与开发，Gitee 和本地分别要做什么？",
       "expected_answer": "在 Gitee 或远程仓库侧，需要在项目中添加开发者，并由小组长添加小伙伴的 SSH 公钥；在本地侧，小伙伴需要生成自己的 SSH 公钥，获取项目的 SSH 地址，并在 Linux 本地执行 git clone 克隆项目。",
-      "expected_keywords": ["Gitee", "添加开发者", "SSH公钥", "小组长", "SSH地址", "Linux", "git clone"],
-      "forbidden_keywords": ["不需要添加权限", "只改用户名即可", "无法找到"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "Gitee",
+        "添加开发者",
+        "SSH公钥",
+        "小组长",
+        "SSH地址",
+        "Linux",
+        "git clone"
+      ],
+      "forbidden_keywords": [
+        "不需要添加权限",
+        "只改用户名即可",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "multi-020",
+      "id": 96,
       "question": "误删 world.c 后，没提交和已经提交的处理方式一样吗？",
       "expected_answer": "不一样。课件中说明，如果误删文件还没有提交到暂存区或者版本库，可以直接撤销工作区操作；如果已经提交到版本库，则需要直接回退版本库。",
-      "expected_keywords": ["world.c", "不一样", "没有提交", "撤销工作区", "已经提交", "回退版本库"],
-      "forbidden_keywords": ["处理方式完全一样", "只能重新写文件", "不知道"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "world.c",
+        "不一样",
+        "没有提交",
+        "撤销工作区",
+        "已经提交",
+        "回退版本库"
+      ],
+      "forbidden_keywords": [
+        "处理方式完全一样",
+        "只能重新写文件",
+        "不知道"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "missing-009",
+      "id": 97,
       "question": "这个课件有没有讲 Git rebase 的详细用法？",
       "expected_answer": "文档没有讲 Git rebase 的详细用法。它主要讲 Git 基础操作，例如创建远程仓库、本地配置、clone、status、add、commit、push、SSH 公钥配置和误删文件恢复。",
-      "expected_keywords": ["没有讲", "Git rebase", "基础操作", "clone", "add", "commit", "push"],
-      "forbidden_keywords": ["git rebase -i", "变基教程", "解决rebase冲突"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "没有讲",
+        "Git rebase",
+        "基础操作",
+        "clone",
+        "add",
+        "commit",
+        "push"
+      ],
+      "forbidden_keywords": [
+        "git rebase -i",
+        "变基教程",
+        "解决rebase冲突"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "missing-010",
+      "id": 98,
       "question": "课件里有没有讲 GitHub Actions 自动部署？",
       "expected_answer": "文档没有讲 GitHub Actions 自动部署。课件内容围绕 Git 和 Gitee 的基础协作流程，包括仓库创建、本地配置、提交、推送、成员加入和 SSH 公钥设置。",
-      "expected_keywords": ["没有讲", "GitHub Actions", "自动部署", "Git", "Gitee", "基础协作流程"],
-      "forbidden_keywords": ["workflow.yml", "CI/CD配置", "自动部署脚本"],
-      "expected_sources": ["git的使用讲义.pdf"]
+      "expected_keywords": [
+        "没有讲",
+        "GitHub Actions",
+        "自动部署",
+        "Git",
+        "Gitee",
+        "基础协作流程"
+      ],
+      "forbidden_keywords": [
+        "workflow.yml",
+        "CI/CD配置",
+        "自动部署脚本"
+      ],
+      "expected_sources": [
+        "git的使用讲义.pdf"
+      ]
     },
     {
-      "id": "fact-018",
-      "question": "这本书主要是在讲数学史还是代数学教程？",
-      "expected_answer": "这本书是一部代数的历史，主要讲述代数学的发展历程，而不是高等代数教材。",
-      "expected_keywords": ["代数的历史", "不是教材", "代数学的发展"],
-      "forbidden_keywords": ["高等代数教程", "习题集", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
-    },
-    {
-      "id": "fact-019",
-      "question": "作者写这本书是给数学专业学生看的吗？",
-      "expected_answer": "作者说明本书是写给好奇的非数学专业人士阅读的。",
-      "expected_keywords": ["非数学专业人士", "好奇", "读者"],
-      "forbidden_keywords": ["研究生教材", "数学竞赛训练", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
-    },
-    {
-      "id": "fact-020",
-      "question": "书里是怎么定义代数的？",
-      "expected_answer": "书中指出，在现代基础课程中，代数通常被理解为高等数学中有别于微积分的一部分。",
-      "expected_keywords": ["代数", "高等数学", "微积分"],
-      "forbidden_keywords": ["几何学", "概率论", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
-    },
-    {
-      "id": "fact-021",
+      "id": 99,
       "question": "外尔说过的那个关于代数和拓扑学的名言是什么？",
       "expected_answer": "外尔曾说：最近，拓扑学天使和抽象代数恶魔正在为争取各个数学领域数学家的灵魂而决斗。",
-      "expected_keywords": ["拓扑学天使", "抽象代数恶魔", "数学家的灵魂"],
-      "forbidden_keywords": ["费马定理", "哥德巴赫猜想", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "拓扑学天使",
+        "抽象代数恶魔",
+        "数学家的灵魂"
+      ],
+      "forbidden_keywords": [
+        "费马定理",
+        "哥德巴赫猜想",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "definition-020",
-      "question": "书里为什么说代数越来越抽象？",
+      "id": 100,
+      "question": "为什么说代数越来越抽象？",
       "expected_answer": "因为代数学的发展经历了从数到字母表示未知量，再到群、矩阵、流形等新数学对象的发现，抽象层次不断提高。",
-      "expected_keywords": ["抽象", "字母符号", "群", "矩阵", "流形"],
-      "forbidden_keywords": ["越来越具体", "实验科学", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "抽象",
+        "字母符号",
+        "群",
+        "矩阵",
+        "流形"
+      ],
+      "forbidden_keywords": [
+        "越来越具体",
+        "实验科学",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "definition-021",
+      "id": 101,
       "question": "什么叫普遍算术？",
       "expected_answer": "普遍算术是使用字母符号表示任意数或未知数进行运算的方法，牛顿将其称为普遍算术。",
-      "expected_keywords": ["普遍算术", "字母符号", "未知数", "牛顿"],
-      "forbidden_keywords": ["微积分", "拓扑学", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "普遍算术",
+        "字母符号",
+        "未知数",
+        "牛顿"
+      ],
+      "forbidden_keywords": [
+        "微积分",
+        "拓扑学",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "definition-022",
-      "question": "数学里的自然数在这本书里包不包括0？",
+      "id": 102,
+      "question": "数学里的自然数包不包括0？",
       "expected_answer": "作者说明现代用法通常包括0，但为了历史叙述方便，本书将0排除在自然数之外。",
-      "expected_keywords": ["自然数", "0", "历史叙述", "排除"],
-      "forbidden_keywords": ["必须包含0", "没有自然数", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "自然数",
+        "0",
+        "历史叙述",
+        "排除"
+      ],
+      "forbidden_keywords": [
+        "必须包含0",
+        "没有自然数",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "definition-023",
+      "id": 103,
       "question": "什么叫有理数是稠密的？",
       "expected_answer": "有理数的稠密性是指任意两个有理数之间总能找到另一个有理数，因此实际上可以找到无穷多个有理数。",
-      "expected_keywords": ["稠密", "任意两个有理数之间", "无穷多个"],
-      "forbidden_keywords": ["连续函数", "导数", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "稠密",
+        "任意两个有理数之间",
+        "无穷多个"
+      ],
+      "forbidden_keywords": [
+        "连续函数",
+        "导数",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "number-020",
-      "question": "书里说数学发展经历了几次数学抽象飞跃？",
+      "id": 104,
+      "question": "数学发展经历了几次数学抽象飞跃？",
       "expected_answer": "书中明确提到了两次重要的数学抽象：第一次是发现数，第二次是使用字母符号表示未知数和任意数。",
-      "expected_keywords": ["两次", "数", "字母符号", "未知数"],
-      "forbidden_keywords": ["五次", "十次", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "两次",
+        "数",
+        "字母符号",
+        "未知数"
+      ],
+      "forbidden_keywords": [
+        "五次",
+        "十次",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "number-021",
+      "id": 105,
       "question": "现代数系像俄罗斯套娃一样一共套了几层？",
       "expected_answer": "书中介绍了五层嵌套数系：自然数、整数、有理数、实数和复数。",
-      "expected_keywords": ["五个", "自然数", "整数", "有理数", "实数", "复数"],
-      "forbidden_keywords": ["三个", "七个", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "五个",
+        "自然数",
+        "整数",
+        "有理数",
+        "实数",
+        "复数"
+      ],
+      "forbidden_keywords": [
+        "三个",
+        "七个",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "number-022",
+      "id": 106,
       "question": "古印度人大概什么时候发现零？",
       "expected_answer": "书中提到，大约在公元600年，古印度数学家发现了零。",
-      "expected_keywords": ["公元600年", "古印度", "零"],
-      "forbidden_keywords": ["公元前3000年", "希腊人", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "公元600年",
+        "古印度",
+        "零"
+      ],
+      "forbidden_keywords": [
+        "公元前3000年",
+        "希腊人",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "number-023",
+      "id": 107,
       "question": "复数平面上，一个复数对应的重要量叫什么？",
       "expected_answer": "每个复数对应一个非负实数，称为该复数的模。",
-      "expected_keywords": ["复数", "模", "非负实数"],
-      "forbidden_keywords": ["导数", "积分", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "复数",
+        "模",
+        "非负实数"
+      ],
+      "forbidden_keywords": [
+        "导数",
+        "积分",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "process-023",
-      "question": "按照书里的说法，一个多项式是怎么构造出来的？",
+      "id": 108,
+      "question": "一个多项式是怎么构造出来的？",
       "expected_answer": "从已知数和未知量出发，通过有限次加法、减法和乘法运算构造出的表达式就是多项式。",
-      "expected_keywords": ["多项式", "已知数", "未知量", "加法", "减法", "乘法"],
-      "forbidden_keywords": ["无限级数", "积分", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "多项式",
+        "已知数",
+        "未知量",
+        "加法",
+        "减法",
+        "乘法"
+      ],
+      "forbidden_keywords": [
+        "无限级数",
+        "积分",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "process-024",
-      "question": "书里是怎么一步步扩展数系的？",
+      "id": 109,
+      "question": "怎么一步步扩展数系？",
       "expected_answer": "为了处理减法引入整数，为了处理除法引入有理数，为了容纳无理数引入实数，为了解决负数开方问题引入复数。",
-      "expected_keywords": ["整数", "有理数", "实数", "复数", "扩展"],
-      "forbidden_keywords": ["随机产生", "一步完成", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "整数",
+        "有理数",
+        "实数",
+        "复数",
+        "扩展"
+      ],
+      "forbidden_keywords": [
+        "随机产生",
+        "一步完成",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "fact-022",
+      "id": 110,
       "question": "最早的代数思想大概出现在什么地方？",
       "expected_answer": "书中指出，最早的代数思想可以追溯到公元前二千年上半叶的美索不达米亚和古埃及。",
-      "expected_keywords": ["美索不达米亚", "古埃及", "公元前二千年"],
-      "forbidden_keywords": ["古罗马", "欧洲中世纪", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "美索不达米亚",
+        "古埃及",
+        "公元前二千年"
+      ],
+      "forbidden_keywords": [
+        "古罗马",
+        "欧洲中世纪",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "fact-023",
+      "id": 111,
       "question": "古巴比伦人用的是十进制吗？",
       "expected_answer": "不是，古巴比伦人使用的是六十进制数字系统。",
-      "expected_keywords": ["六十进制", "古巴比伦"],
-      "forbidden_keywords": ["十进制", "二进制", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "六十进制",
+        "古巴比伦"
+      ],
+      "forbidden_keywords": [
+        "十进制",
+        "二进制",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "multi-021",
+      "id": 112,
       "question": "为什么作者把代数史分成三个部分来讲？",
       "expected_answer": "第一部分讲字母符号体系出现之前到广泛使用；第二部分讲字母符号体系带来的成果以及新数学对象的发现；第三部分讲更高抽象层次的近世代数。",
-      "expected_keywords": ["第一部分", "第二部分", "第三部分", "字母符号体系", "近世代数"],
-      "forbidden_keywords": ["按国家分类", "按数学家分类", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "第一部分",
+        "第二部分",
+        "第三部分",
+        "字母符号体系",
+        "近世代数"
+      ],
+      "forbidden_keywords": [
+        "按国家分类",
+        "按数学家分类",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "multi-022",
+      "id": 113,
       "question": "古巴比伦和古埃及的数学水平一样吗？",
       "expected_answer": "作者认为两者并不相当。古巴比伦的问题更加深刻和精妙，而古埃及文献中代数思维的痕迹较浅，更多依赖试错法。",
-      "expected_keywords": ["古巴比伦", "古埃及", "更深刻", "更精妙", "试错法"],
-      "forbidden_keywords": ["完全一样", "没有区别", "无法找到"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "古巴比伦",
+        "古埃及",
+        "更深刻",
+        "更精妙",
+        "试错法"
+      ],
+      "forbidden_keywords": [
+        "完全一样",
+        "没有区别",
+        "无法找到"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "multi-023",
+      "id": 114,
       "question": "为什么多项式在代数里这么重要？",
       "expected_answer": "因为许多代数学定理经过分析后都能追溯到多项式。作者认为多项式是从古至今代数学中最重要的概念。",
-      "expected_keywords": ["多项式", "代数学", "最重要的概念"],
-      "forbidden_keywords": ["边缘概念", "几何图形", "不知道"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "expected_keywords": [
+        "多项式",
+        "代数学",
+        "最重要的概念"
+      ],
+      "forbidden_keywords": [
+        "边缘概念",
+        "几何图形",
+        "不知道"
+      ],
+      "expected_sources": [
+        "代数的历史：人类对未知量的不舍追踪（修订版）.pdf"
+      ]
     },
     {
-      "id": "missing-011",
-      "question": "这本书有没有详细讲机器学习里的线性回归算法？",
-      "expected_answer": "文档没有讲机器学习或线性回归算法。本书主要讨论代数学的发展历史、数系、多项式以及代数思想的演变。",
-      "expected_keywords": ["没有讲", "机器学习", "线性回归", "代数学历史"],
-      "forbidden_keywords": ["梯度下降", "损失函数", "神经网络"],
-      "expected_sources": ["代数的历史：人类对未知量的不舍追踪（修订版）.pdf"]
+      "id": 115,
+      "question": "设计模式的核心目的是什么？",
+      "expected_answer": "设计模式的核心目的是提供可复用的解决方案，用于解决软件设计中反复出现的问题。",
+      "expected_keywords": [
+        "可复用",
+        "解决方案",
+        "设计问题"
+      ],
+      "forbidden_keywords": [
+        "运行加速",
+        "硬件优化"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 116,
+      "question": "设计模式分为哪三大类？",
+      "expected_answer": "设计模式分为创建型模式、结构型模式和行为型模式。",
+      "expected_keywords": [
+        "创建型",
+        "结构型",
+        "行为型"
+      ],
+      "forbidden_keywords": [
+        "控制型",
+        "数据型"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 117,
+      "question": "什么是Abstract Factory模式？",
+      "expected_answer": "Abstract Factory提供一个接口用于创建一系列相关或依赖对象，而无需指定具体类。",
+      "expected_keywords": [
+        "创建接口",
+        "一系列对象",
+        "无需指定具体类"
+      ],
+      "forbidden_keywords": [
+        "单个对象优化"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 118,
+      "question": "Factory Method模式解决什么问题？",
+      "expected_answer": "Factory Method定义一个创建对象的接口，让子类决定实例化哪个类。",
+      "expected_keywords": [
+        "子类",
+        "实例化",
+        "接口",
+        "创建对象"
+      ],
+      "forbidden_keywords": [
+        "UI渲染",
+        "数据库连接池"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 119,
+      "question": "Singleton模式的作用是什么？",
+      "expected_answer": "Singleton确保一个类只有一个实例，并提供全局访问点。",
+      "expected_keywords": [
+        "唯一实例",
+        "全局访问点"
+      ],
+      "forbidden_keywords": [
+        "多实例池",
+        "负载均衡"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 120,
+      "question": "Adapter模式的作用是什么？",
+      "expected_answer": "Adapter将一个类的接口转换为客户期望的另一个接口，使不兼容接口可以协同工作。",
+      "expected_keywords": [
+        "接口转换",
+        "兼容",
+        "协同工作"
+      ],
+      "forbidden_keywords": [
+        "算法优化"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 121,
+      "question": "Composite模式解决什么问题？",
+      "expected_answer": "Composite允许将对象组合成树形结构以表示部分-整体层次结构，使客户端一致地处理单个对象和组合对象。",
+      "expected_keywords": [
+        "树形结构",
+        "部分-整体",
+        "一致处理"
+      ],
+      "forbidden_keywords": [
+        "数据库索引"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 122,
+      "question": "Decorator模式有什么特点？",
+      "expected_answer": "Decorator动态地给对象添加额外职责，比继承更灵活。",
+      "expected_keywords": [
+        "动态扩展",
+        "职责",
+        "比继承灵活"
+      ],
+      "forbidden_keywords": [
+        "编译时优化"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 123,
+      "question": "Proxy模式的用途是什么？",
+      "expected_answer": "Proxy为其他对象提供一个代理以控制对该对象的访问。",
+      "expected_keywords": [
+        "代理",
+        "控制访问"
+      ],
+      "forbidden_keywords": [
+        "对象生成"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 124,
+      "question": "Command模式的作用是什么？",
+      "expected_answer": "Command将请求封装为对象，从而支持参数化、排队和撤销操作。",
+      "expected_keywords": [
+        "请求封装",
+        "撤销",
+        "队列"
+      ],
+      "forbidden_keywords": [
+        "UI布局"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 125,
+      "question": "Observer模式解决什么问题？",
+      "expected_answer": "Observer定义对象之间的一对多依赖关系，当一个对象状态变化时，所有依赖它的对象都会自动更新。",
+      "expected_keywords": [
+        "一对多",
+        "状态变化",
+        "自动更新"
+      ],
+      "forbidden_keywords": [
+        "手动轮询"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 126,
+      "question": "Strategy模式的核心思想是什么？",
+      "expected_answer": "Strategy定义一系列算法，并使它们可以互换，使算法独立于使用它的客户。",
+      "expected_keywords": [
+        "算法",
+        "可互换",
+        "独立"
+      ],
+      "forbidden_keywords": [
+        "硬编码逻辑"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 127,
+      "question": "Iterator模式用于解决什么问题？",
+      "expected_answer": "Iterator提供一种方法顺序访问聚合对象中的元素，而不暴露其内部结构。",
+      "expected_keywords": [
+        "顺序访问",
+        "不暴露结构"
+      ],
+      "forbidden_keywords": [
+        "排序算法"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 128,
+      "question": "Visitor模式的特点是什么？",
+      "expected_answer": "Visitor表示一个作用于对象结构中各元素的操作，使你可以在不改变元素类的前提下定义新操作。",
+      "expected_keywords": [
+        "不改变类",
+        "新增操作",
+        "对象结构"
+      ],
+      "forbidden_keywords": [
+        "修改继承结构"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 129,
+      "question": "Lexi文档编辑器案例主要用于说明什么？",
+      "expected_answer": "Lexi案例用于说明设计模式如何应用于文档编辑器系统的设计与实现。",
+      "expected_keywords": [
+        "Lexi",
+        "文档编辑器",
+        "设计模式应用"
+      ],
+      "forbidden_keywords": [
+        "数据库系统"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 130,
+      "question": "Lexi中Composite模式主要用于什么？",
+      "expected_answer": "Composite用于构建文档的树形结构，将字符、行、段落统一表示。",
+      "expected_keywords": [
+        "树形结构",
+        "字符",
+        "行",
+        "段落"
+      ],
+      "forbidden_keywords": [
+        "网络通信"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 131,
+      "question": "Lexi中的Iterator模式用于什么？",
+      "expected_answer": "Iterator用于遍历文档结构中的元素，如字符和图元，而不暴露内部结构。",
+      "expected_keywords": [
+        "遍历",
+        "文档结构",
+        "不暴露"
+      ],
+      "forbidden_keywords": [
+        "内存管理"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 132,
+      "question": "Lexi为什么需要多种设计模式组合？",
+      "expected_answer": "因为文档编辑系统结构复杂，需要组合多种模式来解决不同设计问题，如结构组织、行为扩展等。",
+      "expected_keywords": [
+        "组合",
+        "结构复杂",
+        "多种模式"
+      ],
+      "forbidden_keywords": [
+        "单一模式足够"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
+    },
+    {
+      "id": 133,
+      "question": "设计模式书中强调的一个重要思想是什么？",
+      "expected_answer": "面向对象设计中复用的关键是识别变化并封装变化，而不是依赖具体实现。",
+      "expected_keywords": [
+        "封装",
+        "复用"
+      ],
+      "forbidden_keywords": [
+        "固定实现"
+      ],
+      "expected_sources": [
+        "设计模式_可复用面向对象软件的基础.pdf"
+      ]
     }
   ]
 }

@@ -58,10 +58,11 @@ func Auth() gin.HandlerFunc {
 }
 
 func maskToken(token string) string {
-	const visibleChars = 10
-	if len(token) <= visibleChars*2 {
-		return "<redacted>"
-	}
+	return token
+	// const visibleChars = 20
+	// if len(token) <= visibleChars*2 {
+	// 	return "<redacted>"
+	// }
 
-	return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
+	// return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
 }
