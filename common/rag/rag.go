@@ -41,6 +41,8 @@ type RAGIndexer struct {
 type RAGQuery struct {
 	embedding  embedding.Embedder
 	retrievers []retriever.Retriever
+	reranker   documentReranker
+	finalTopK  int
 }
 
 func BuildFileIndexKey(username string, storedName string) string {
@@ -74,6 +76,45 @@ var (
 
 type paddleDocumentParser interface {
 	ParseDocument(context.Context, *paddleocr.DocParsingRequest) (*paddleocr.DocParsingResult, error)
+}
+
+type retrieveOptions struct {
+	rerankEnabled       bool
+	rerankModel         string
+	rerankBaseURL       string
+	rerankCandidateTopK int
+	rerankTopK          int
+	rerankTimeout       time.Duration
+}
+
+func newRetrieveOptions(conf config.RagModelConfig) retrieveOptions {
+	opts := retrieveOptions{
+		rerankEnabled:       conf.RerankEnabled,
+		rerankModel:         strings.TrimSpace(conf.RerankModel),
+		rerankBaseURL:       strings.TrimSpace(conf.RerankBaseUrl),
+		rerankCandidateTopK: conf.RerankCandidateTopK,
+		rerankTopK:          conf.RerankTopK,
+		rerankTimeout:       time.Duration(conf.RerankTimeoutSeconds) * time.Second,
+	}
+	if opts.rerankModel == "" {
+		opts.rerankModel = defaultRerankModel
+	}
+	if opts.rerankBaseURL == "" {
+		opts.rerankBaseURL = defaultRerankBaseURL
+	}
+	if opts.rerankCandidateTopK <= 0 {
+		opts.rerankCandidateTopK = defaultRerankCandidateTopK
+	}
+	if opts.rerankTopK <= 0 {
+		opts.rerankTopK = defaultRerankTopK
+	}
+	if opts.rerankCandidateTopK < opts.rerankTopK {
+		opts.rerankCandidateTopK = opts.rerankTopK
+	}
+	if opts.rerankTimeout <= 0 {
+		opts.rerankTimeout = defaultRerankTimeoutSeconds * time.Second
+	}
+	return opts
 }
 
 func previewForLog(text string) string {
@@ -882,6 +923,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 
 	conf := config.GetConfig()
 	apiKey := conf.RagModelConfig.RagApiKey
+	retrieveOpts := newRetrieveOptions(conf.RagModelConfig)
 
 	// 创建 embedding 模型
 	embedConfig := &embeddingArk.EmbeddingConfig{
@@ -922,7 +964,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 			Index:        indexName,
 			Dialect:      2,
 			ReturnFields: []string{"content", "metadata", "distance"},
-			TopK:         5,
+			TopK:         retrieveOpts.rerankCandidateTopK,
 			VectorField:  "vector",
 			// 由于 Redis 存储的文档格式和 Eino 框架内部定义的 schema.Document 格式不同
 			// 因此在查询时需要通过 DocumentConverter 进行相应的转换。
@@ -962,10 +1004,22 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		return nil, fmt.Errorf("no valid file index found for user %s", username)
 	}
 
-	log.Printf("[RAG][Query] init success username=%s retrievers=%d elapsed=%s", username, len(retrievers), time.Since(start))
+	var reranker documentReranker
+	if retrieveOpts.rerankEnabled {
+		reranker, err = newDashScopeReranker(retrieveOpts.rerankBaseURL, apiKey, retrieveOpts.rerankModel, retrieveOpts.rerankTimeout)
+		if err != nil {
+			log.Printf("[RAG][Query] init reranker failed username=%s fallback=vector_sort err=%v", username, err)
+		} else {
+			log.Printf("[RAG][Query] reranker ready username=%s model=%s candidate_top_k=%d final_top_k=%d", username, retrieveOpts.rerankModel, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK)
+		}
+	}
+
+	log.Printf("[RAG][Query] init success username=%s retrievers=%d rerank_enabled=%v elapsed=%s", username, len(retrievers), reranker != nil, time.Since(start))
 	return &RAGQuery{
 		embedding:  embedder,
 		retrievers: retrievers,
+		reranker:   reranker,
+		finalTopK:  retrieveOpts.rerankTopK,
 	}, nil
 }
 
@@ -991,12 +1045,28 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		return nil, fmt.Errorf("failed to retrieve documents")
 	}
 
-	// 多路检索结果合并后，按文档与用户 query 的相似度距离做排序。排序完成后，接着取 top-5 送入 LLM 的 prompt
+	// 多路检索结果合并后，先按向量距离排序作为保底；启用 rerank 时再基于候选集重排。
 	sort.SliceStable(allDocs, func(i, j int) bool {
 		return documentDistance(allDocs[i]) < documentDistance(allDocs[j])
 	})
-	if len(allDocs) > 5 {
-		allDocs = allDocs[:5]
+
+	finalTopK := r.finalTopK
+	if finalTopK <= 0 {
+		finalTopK = defaultRerankTopK
+	}
+	if r.reranker != nil {
+		rerankStart := time.Now()
+		candidateCount := len(allDocs)
+		rerankedDocs, err := r.reranker.Rerank(ctx, query, allDocs, finalTopK)
+		if err != nil {
+			log.Printf("[RAG][Retrieve] rerank failed fallback=vector_sort candidates=%d err=%v elapsed=%s", candidateCount, err, time.Since(rerankStart))
+		} else {
+			allDocs = rerankedDocs
+			log.Printf("[RAG][Retrieve] rerank success candidates=%d docs=%d elapsed=%s", candidateCount, len(rerankedDocs), time.Since(rerankStart))
+		}
+	}
+	if len(allDocs) > finalTopK {
+		allDocs = allDocs[:finalTopK]
 	}
 
 	for i, doc := range allDocs {
@@ -1005,8 +1075,9 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		originalName := ""
 		contentLen := 0
 		distance := documentDistance(doc)
+		score, hasScore := rerankScore(doc)
 		if doc == nil {
-			log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f content_len=%d", i+1, docID, filename, originalName, distance, contentLen)
+			log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f rerank_score= content_len=%d", i+1, docID, filename, originalName, distance, contentLen)
 			continue
 		}
 		docID = doc.ID
@@ -1019,7 +1090,11 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 				originalName = v
 			}
 		}
-		log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f content_len=%d", i+1, docID, filename, originalName, distance, contentLen)
+		rerankScoreText := ""
+		if hasScore {
+			rerankScoreText = fmt.Sprintf("%.6f", score)
+		}
+		log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f rerank_score=%s content_len=%d", i+1, docID, filename, originalName, distance, rerankScoreText, contentLen)
 	}
 	log.Printf("[RAG][Retrieve] success docs=%d elapsed=%s", len(allDocs), time.Since(start))
 	return allDocs, nil

@@ -56,16 +56,22 @@ type QwenConfig struct {
 }
 
 type RagModelConfig struct {
-	RagApiKey         string `toml:"api_key"`
-	RagBaseUrl        string `toml:"baseUrl"`
-	RagChatModelName  string `toml:"chatModelName"`
-	RagEmbeddingModel string `toml:"embeddingModel"`
-	RagDimension      int    `toml:"dimension"`
-	RagDocDir         string `toml:"docDir"`
-	EnableThinking    bool   `toml:"enable_thinking"`
-	OCRAccessToken    string `toml:"ocrAccessToken"`
-	OCRTimeoutSeconds int    `toml:"ocrTimeoutSeconds"`
-	OCRModel          string `toml:"ocrModel"`
+	RagApiKey            string `toml:"api_key"`
+	RagBaseUrl           string `toml:"baseUrl"`
+	RagChatModelName     string `toml:"chatModelName"`
+	RagEmbeddingModel    string `toml:"embeddingModel"`
+	RagDimension         int    `toml:"dimension"`
+	RagDocDir            string `toml:"docDir"`
+	EnableThinking       bool   `toml:"enable_thinking"`
+	RerankEnabled        bool   `toml:"rerankEnabled"`
+	RerankModel          string `toml:"rerankModel"`
+	RerankBaseUrl        string `toml:"rerankBaseUrl"`
+	RerankCandidateTopK  int    `toml:"rerankCandidateTopK"`
+	RerankTopK           int    `toml:"rerankTopK"`
+	RerankTimeoutSeconds int    `toml:"rerankTimeoutSeconds"`
+	OCRAccessToken       string `toml:"ocrAccessToken"`
+	OCRTimeoutSeconds    int    `toml:"ocrTimeoutSeconds"`
+	OCRModel             string `toml:"ocrModel"`
 }
 
 type OllamaConfig struct {

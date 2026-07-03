@@ -12,6 +12,7 @@ import (
 
 	"GoAI/config"
 	paddleocr "github.com/PaddlePaddle/PaddleOCR/api_sdk/go"
+	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 	pdftotext "github.com/heussd/pdftotext-go"
 )
@@ -20,6 +21,27 @@ type stubPaddleDocParser struct {
 	result *paddleocr.DocParsingResult
 	err    error
 	req    *paddleocr.DocParsingRequest
+}
+
+type stubRetriever struct {
+	docs []*schema.Document
+	err  error
+}
+
+func (s stubRetriever) Retrieve(ctx context.Context, query string, opts ...retriever.Option) ([]*schema.Document, error) {
+	return s.docs, s.err
+}
+
+type stubReranker struct {
+	docs []*schema.Document
+	err  error
+}
+
+func (s stubReranker) Rerank(ctx context.Context, query string, docs []*schema.Document, topK int) ([]*schema.Document, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.docs, nil
 }
 
 func (s *stubPaddleDocParser) ParseDocument(ctx context.Context, req *paddleocr.DocParsingRequest) (*paddleocr.DocParsingResult, error) {
@@ -160,6 +182,132 @@ func TestBuildRAGPromptReturnsQueryForEmptyContext(t *testing.T) {
 	}
 	if got := BuildRAGPrompt(query, []*schema.Document{nil}); got != query {
 		t.Fatalf("nil-only docs: got %q, want %q", got, query)
+	}
+}
+
+func TestApplyRerankResultsSortsByScoreAndPreservesUnrankedDocs(t *testing.T) {
+	docs := []*schema.Document{
+		{ID: "a", Content: "alpha", MetaData: map[string]any{"distance": 0.1}},
+		{ID: "b", Content: "beta", MetaData: map[string]any{"distance": 0.2}},
+		{ID: "c", Content: "gamma", MetaData: map[string]any{"distance": 0.3}},
+	}
+
+	got := applyRerankResults(docs, []dashScopeRerankResult{
+		{Index: 1, RelevanceScore: 0.91},
+		{Index: 0, RelevanceScore: 0.44},
+	})
+
+	if len(got) != 3 {
+		t.Fatalf("reranked docs length: got %d", len(got))
+	}
+	if got[0].ID != "b" || got[1].ID != "a" || got[2].ID != "c" {
+		t.Fatalf("unexpected rerank order: %s, %s, %s", got[0].ID, got[1].ID, got[2].ID)
+	}
+	if score, ok := rerankScore(got[0]); !ok || score != 0.91 {
+		t.Fatalf("first doc rerank score: got score=%f ok=%v", score, ok)
+	}
+	if _, ok := rerankScore(got[2]); ok {
+		t.Fatal("unranked doc should not have rerank score")
+	}
+}
+
+func TestApplyRerankResultsIgnoresInvalidAndDuplicateIndexes(t *testing.T) {
+	docs := []*schema.Document{
+		{ID: "a", Content: "alpha"},
+		{ID: "b", Content: "beta"},
+	}
+
+	got := applyRerankResults(docs, []dashScopeRerankResult{
+		{Index: 5, RelevanceScore: 0.99},
+		{Index: 1, RelevanceScore: 0.80},
+		{Index: 1, RelevanceScore: 0.70},
+		{Index: -1, RelevanceScore: 0.60},
+	})
+
+	if len(got) != 2 {
+		t.Fatalf("reranked docs length: got %d", len(got))
+	}
+	if got[0].ID != "b" || got[1].ID != "a" {
+		t.Fatalf("unexpected rerank order: %s, %s", got[0].ID, got[1].ID)
+	}
+}
+
+func TestNewRetrieveOptionsDefaultsAndNormalizesTopK(t *testing.T) {
+	opts := newRetrieveOptions(config.RagModelConfig{
+		RerankEnabled:       true,
+		RerankCandidateTopK: 2,
+		RerankTopK:          5,
+	})
+
+	if !opts.rerankEnabled {
+		t.Fatal("rerank should be enabled")
+	}
+	if opts.rerankModel != defaultRerankModel {
+		t.Fatalf("rerank model: got %q", opts.rerankModel)
+	}
+	if opts.rerankBaseURL != defaultRerankBaseURL {
+		t.Fatalf("rerank base url: got %q", opts.rerankBaseURL)
+	}
+	if opts.rerankCandidateTopK != 5 || opts.rerankTopK != 5 {
+		t.Fatalf("topK should normalize candidate>=final, got candidate=%d final=%d", opts.rerankCandidateTopK, opts.rerankTopK)
+	}
+	if opts.rerankTimeout != defaultRerankTimeoutSeconds*time.Second {
+		t.Fatalf("timeout: got %v", opts.rerankTimeout)
+	}
+}
+
+func TestRetrieveDocumentsFallsBackToDistanceSortWhenRerankFails(t *testing.T) {
+	query := &RAGQuery{
+		retrievers: []retriever.Retriever{
+			stubRetriever{docs: []*schema.Document{
+				{ID: "far", Content: "far", MetaData: map[string]any{"distance": "0.8"}},
+				{ID: "near", Content: "near", MetaData: map[string]any{"distance": "0.1"}},
+				{ID: "middle", Content: "middle", MetaData: map[string]any{"distance": "0.4"}},
+			}},
+		},
+		reranker:  stubReranker{err: fmt.Errorf("rerank unavailable")},
+		finalTopK: 2,
+	}
+
+	got, err := query.RetrieveDocuments(context.Background(), "question")
+	if err != nil {
+		t.Fatalf("retrieve documents: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("docs length: got %d", len(got))
+	}
+	if got[0].ID != "near" || got[1].ID != "middle" {
+		t.Fatalf("unexpected fallback order: %s, %s", got[0].ID, got[1].ID)
+	}
+}
+
+func TestRetrieveDocumentsUsesRerankOrder(t *testing.T) {
+	docs := []*schema.Document{
+		{ID: "near", Content: "near", MetaData: map[string]any{"distance": 0.1}},
+		{ID: "middle", Content: "middle", MetaData: map[string]any{"distance": 0.4}},
+		{ID: "far", Content: "far", MetaData: map[string]any{"distance": 0.8}},
+	}
+	query := &RAGQuery{
+		retrievers: []retriever.Retriever{
+			stubRetriever{docs: docs},
+		},
+		reranker: stubReranker{docs: []*schema.Document{
+			docs[2],
+			docs[0],
+			docs[1],
+		}},
+		finalTopK: 2,
+	}
+
+	got, err := query.RetrieveDocuments(context.Background(), "question")
+	if err != nil {
+		t.Fatalf("retrieve documents: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("docs length: got %d", len(got))
+	}
+	if got[0].ID != "far" || got[1].ID != "near" {
+		t.Fatalf("unexpected rerank order: %s, %s", got[0].ID, got[1].ID)
 	}
 }
 
