@@ -296,7 +296,7 @@ func extractPDFTextWithOCR(filePath string) (string, error) {
 			return "", fmt.Errorf(
 				"PaddleOCR document parsing result is incomplete: at least one page is missing markdown.text; model=%s file=%s; "+
 					"possible causes: blank page, image-only page, complex layout, low-quality scan, or PaddleOCR service returned a partial page result; "+
-					"the Go SDK rejected the result before prunedResult fallback could run: %w",
+					"pages missing markdown.text are skipped: %w",
 				model,
 				filePath,
 				err,
@@ -438,6 +438,7 @@ func parsePaddleDocumentJSONLRelaxed(jobID string, jsonlData []map[string]interf
 			markdownText := strings.TrimSpace(stringValueFromMap(markdown, "text"))
 			if markdownText == "" {
 				missingMarkdownPages = append(missingMarkdownPages, pageNumber)
+				continue
 			}
 			result.Pages = append(result.Pages, paddleocr.DocParsingPage{
 				MarkdownText:   markdownText,
@@ -453,6 +454,9 @@ func parsePaddleDocumentJSONLRelaxed(jobID string, jsonlData []map[string]interf
 	}
 
 	if len(result.Pages) == 0 {
+		if len(missingMarkdownPages) > 0 {
+			return nil, missingMarkdownPages, fmt.Errorf("document parsing result contains no pages with markdown.text")
+		}
 		return nil, missingMarkdownPages, fmt.Errorf("document parsing result contains no pages")
 	}
 	if strings.TrimSpace(extractDocParsingText(result)) == "" {

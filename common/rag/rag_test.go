@@ -648,8 +648,30 @@ func TestParsePaddleDocumentJSONLRelaxedReportsMissingMarkdownPages(t *testing.T
 	if got := formatPageNumbers(missingPages); got != "[2]" {
 		t.Fatalf("missing pages = %s, want [2]", got)
 	}
-	if got := extractDocParsingText(result); !strings.Contains(got, "第一页") || !strings.Contains(got, "第二页兜底文本") {
+	if got := extractDocParsingText(result); got != "第一页" {
 		t.Fatalf("unexpected text: %q", got)
+	}
+}
+
+func TestParsePaddleDocumentJSONLRelaxedReturnsErrorWhenAllMarkdownPagesMissing(t *testing.T) {
+	_, missingPages, err := parsePaddleDocumentJSONLRelaxed("job-doc", []map[string]interface{}{
+		{
+			"result": map[string]interface{}{
+				"layoutParsingResults": []interface{}{
+					map[string]interface{}{"prunedResult": map[string]interface{}{"blocks": []interface{}{map[string]interface{}{"text": "第一页兜底文本"}}}},
+					map[string]interface{}{"prunedResult": map[string]interface{}{"blocks": []interface{}{map[string]interface{}{"text": "第二页兜底文本"}}}},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected no extractable text error")
+	}
+	if got := formatPageNumbers(missingPages); got != "[1,2]" {
+		t.Fatalf("missing pages = %s, want [1,2]", got)
+	}
+	if !strings.Contains(err.Error(), "no pages with markdown.text") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -686,9 +708,9 @@ func TestExtractPDFTextWithOCRExplainsMissingMarkdownText(t *testing.T) {
 
 	got, err := extractPDFTextWithOCR("scan.pdf")
 	if err != nil {
-		t.Fatalf("missing markdown.text page should fall back to prunedResult: %v", err)
+		t.Fatalf("missing markdown.text page should be skipped: %v", err)
 	}
-	if !strings.Contains(got, "第一页") || !strings.Contains(got, "第二页兜底文本") {
+	if got != "第一页" {
 		t.Fatalf("got %q", got)
 	}
 }
