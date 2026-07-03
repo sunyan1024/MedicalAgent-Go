@@ -3,6 +3,8 @@ package rag
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +20,13 @@ import (
 )
 
 type stubPaddleDocParser struct {
-	result *paddleocr.DocParsingResult
-	err    error
-	req    *paddleocr.DocParsingRequest
+	result    *paddleocr.DocParsingResult
+	err       error
+	req       *paddleocr.DocParsingRequest
+	job       *paddleocr.Job
+	submitErr error
+	status    *paddleocr.JobStatus
+	statusErr error
 }
 
 type stubRetriever struct {
@@ -47,6 +53,27 @@ func (s stubReranker) Rerank(ctx context.Context, query string, docs []*schema.D
 func (s *stubPaddleDocParser) ParseDocument(ctx context.Context, req *paddleocr.DocParsingRequest) (*paddleocr.DocParsingResult, error) {
 	s.req = req
 	return s.result, s.err
+}
+
+func (s *stubPaddleDocParser) SubmitDocumentParsing(ctx context.Context, req *paddleocr.DocParsingRequest) (*paddleocr.Job, error) {
+	s.req = req
+	if s.submitErr != nil {
+		return nil, s.submitErr
+	}
+	if s.job != nil {
+		return s.job, nil
+	}
+	return &paddleocr.Job{JobID: "job-test"}, nil
+}
+
+func (s *stubPaddleDocParser) GetStatus(ctx context.Context, jobID string) (*paddleocr.JobStatus, error) {
+	if s.statusErr != nil {
+		return nil, s.statusErr
+	}
+	if s.status != nil {
+		return s.status, nil
+	}
+	return nil, fmt.Errorf("GetStatus is not stubbed")
 }
 
 func withOCRConfig(t *testing.T, token, model string, timeoutSeconds int) {
@@ -537,12 +564,17 @@ func TestExtractPDFTextWithOCRRejectsNonDocumentParsingModel(t *testing.T) {
 
 func TestExtractPDFTextWithOCRUsesParseDocumentMarkdownText(t *testing.T) {
 	withOCRConfig(t, "test-token", paddleocr.PaddleOCRVL16, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"result":{"layoutParsingResults":[{"markdown":{"text":"# 第一页\n正文"}},{"markdown":{"text":"## 第二页\n表格内容"}}]}}`)
+	}))
+	defer server.Close()
+
 	parser := &stubPaddleDocParser{
-		result: &paddleocr.DocParsingResult{
-			Pages: []paddleocr.DocParsingPage{
-				{MarkdownText: "# 第一页\n正文"},
-				{MarkdownText: "## 第二页\n表格内容"},
-			},
+		job: &paddleocr.Job{JobID: "job-doc"},
+		status: &paddleocr.JobStatus{
+			JobID:     "job-doc",
+			State:     "done",
+			ResultURL: map[string]string{"jsonUrl": server.URL},
 		},
 	}
 	withPaddleDocParser(t, parser)
@@ -555,7 +587,7 @@ func TestExtractPDFTextWithOCRUsesParseDocumentMarkdownText(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	if parser.req == nil {
-		t.Fatal("ParseDocument was not called")
+		t.Fatal("SubmitDocumentParsing was not called")
 	}
 	if parser.req.Model != paddleocr.PaddleOCRVL16 {
 		t.Fatalf("unexpected model: %s", parser.req.Model)
@@ -599,17 +631,65 @@ func TestExtractDocParsingTextFallsBackToPrunedResult(t *testing.T) {
 	}
 }
 
+func TestParsePaddleDocumentJSONLRelaxedReportsMissingMarkdownPages(t *testing.T) {
+	result, missingPages, err := parsePaddleDocumentJSONLRelaxed("job-doc", []map[string]interface{}{
+		{
+			"result": map[string]interface{}{
+				"layoutParsingResults": []interface{}{
+					map[string]interface{}{"markdown": map[string]interface{}{"text": "第一页"}},
+					map[string]interface{}{"prunedResult": map[string]interface{}{"blocks": []interface{}{map[string]interface{}{"text": "第二页兜底文本"}}}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("parsePaddleDocumentJSONLRelaxed returned error: %v", err)
+	}
+	if got := formatPageNumbers(missingPages); got != "[2]" {
+		t.Fatalf("missing pages = %s, want [2]", got)
+	}
+	if got := extractDocParsingText(result); !strings.Contains(got, "第一页") || !strings.Contains(got, "第二页兜底文本") {
+		t.Fatalf("unexpected text: %q", got)
+	}
+}
+
 func TestExtractPDFTextWithOCRReturnsAPIError(t *testing.T) {
 	withOCRConfig(t, "test-token", paddleocr.PaddleOCRVL16, 2)
-	parser := &stubPaddleDocParser{err: fmt.Errorf("api unavailable")}
+	parser := &stubPaddleDocParser{submitErr: fmt.Errorf("api unavailable")}
 	withPaddleDocParser(t, parser)
 
 	_, err := extractPDFTextWithOCR("scan.pdf")
 	if err == nil {
 		t.Fatal("expected api error")
 	}
-	if !strings.Contains(err.Error(), "PaddleOCR document parsing failed") {
+	if !strings.Contains(err.Error(), "PaddleOCR document parsing submit failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractPDFTextWithOCRExplainsMissingMarkdownText(t *testing.T) {
+	withOCRConfig(t, "test-token", paddleocr.PaddleOCRVL16, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, `{"result":{"layoutParsingResults":[{"markdown":{"text":"第一页"}},{"prunedResult":{"blocks":[{"text":"第二页兜底文本"}]}}]}}`)
+	}))
+	defer server.Close()
+
+	parser := &stubPaddleDocParser{
+		job: &paddleocr.Job{JobID: "job-doc"},
+		status: &paddleocr.JobStatus{
+			JobID:     "job-doc",
+			State:     "done",
+			ResultURL: map[string]string{"jsonUrl": server.URL},
+		},
+	}
+	withPaddleDocParser(t, parser)
+
+	got, err := extractPDFTextWithOCR("scan.pdf")
+	if err != nil {
+		t.Fatalf("missing markdown.text page should fall back to prunedResult: %v", err)
+	}
+	if !strings.Contains(got, "第一页") || !strings.Contains(got, "第二页兜底文本") {
+		t.Fatalf("got %q", got)
 	}
 }
 

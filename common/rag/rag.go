@@ -4,9 +4,12 @@ import (
 	redisPkg "GoAI/common/redis"
 	"GoAI/config"
 	fileDao "GoAI/dao/file"
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,6 +66,9 @@ const (
 	pdfGarbledThreshold = 0.20
 	defaultOCRTimeout   = 600
 	defaultOCRModel     = paddleocr.PaddleOCRVL16
+
+	paddleOCRMissingMarkdownText = "document parsing result page is missing markdown.text"
+	paddleOCRPollInterval        = 3 * time.Second
 )
 
 var (
@@ -73,6 +79,8 @@ var (
 
 type paddleDocumentParser interface {
 	ParseDocument(context.Context, *paddleocr.DocParsingRequest) (*paddleocr.DocParsingResult, error)
+	SubmitDocumentParsing(context.Context, *paddleocr.DocParsingRequest) (*paddleocr.Job, error)
+	GetStatus(context.Context, string) (*paddleocr.JobStatus, error)
 }
 
 type retrieveOptions struct {
@@ -274,19 +282,187 @@ func extractPDFTextWithOCR(filePath string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	result, err := client.ParseDocument(ctx, &paddleocr.DocParsingRequest{
+	req := &paddleocr.DocParsingRequest{
 		Model:    model,
 		FilePath: filePath,
 		Options:  docParsingOptionsForModel(model),
-	})
+	}
+	result, err := parsePaddleDocumentWithPageDiagnostics(ctx, client, req, filePath)
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("PaddleOCR document parsing timed out after %ds", timeoutSeconds)
 	}
 	if err != nil {
+		if isPaddleOCRMissingMarkdownTextError(err) {
+			return "", fmt.Errorf(
+				"PaddleOCR document parsing result is incomplete: at least one page is missing markdown.text; model=%s file=%s; "+
+					"possible causes: blank page, image-only page, complex layout, low-quality scan, or PaddleOCR service returned a partial page result; "+
+					"the Go SDK rejected the result before prunedResult fallback could run: %w",
+				model,
+				filePath,
+				err,
+			)
+		}
 		return "", fmt.Errorf("PaddleOCR document parsing failed: %w", err)
 	}
 
 	return extractDocParsingText(result), nil
+}
+
+func parsePaddleDocumentWithPageDiagnostics(ctx context.Context, client paddleDocumentParser, req *paddleocr.DocParsingRequest, filePath string) (*paddleocr.DocParsingResult, error) {
+	job, err := client.SubmitDocumentParsing(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("PaddleOCR document parsing submit failed: %w", err)
+	}
+
+	jsonURL, err := waitPaddleDocumentParsingJSONURL(ctx, client, job.JobID)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonlData, err := fetchPaddleJSONL(ctx, jsonURL)
+	if err != nil {
+		return nil, err
+	}
+
+	result, missingPages, err := parsePaddleDocumentJSONLRelaxed(job.JobID, jsonlData)
+	if len(missingPages) > 0 {
+		log.Printf("[RAG][PDF] PaddleOCR pages missing markdown.text file=%s pages=%s", filePath, formatPageNumbers(missingPages))
+	}
+	if err != nil {
+		if len(missingPages) > 0 {
+			return nil, fmt.Errorf("%s; pages=%s: %w", paddleOCRMissingMarkdownText, formatPageNumbers(missingPages), err)
+		}
+		return nil, err
+	}
+	return result, nil
+}
+
+func waitPaddleDocumentParsingJSONURL(ctx context.Context, client paddleDocumentParser, jobID string) (string, error) {
+	if jobID == "" {
+		return "", fmt.Errorf("PaddleOCR document parsing submit response is missing jobId")
+	}
+
+	ticker := time.NewTicker(paddleOCRPollInterval)
+	defer ticker.Stop()
+
+	for {
+		status, err := client.GetStatus(ctx, jobID)
+		if err != nil {
+			return "", fmt.Errorf("PaddleOCR document parsing status check failed job=%s: %w", jobID, err)
+		}
+
+		switch status.State {
+		case "done":
+			if status.ResultURL == nil || status.ResultURL["jsonUrl"] == "" {
+				return "", fmt.Errorf("PaddleOCR document parsing done but resultUrl.jsonUrl is missing job=%s", jobID)
+			}
+			return status.ResultURL["jsonUrl"], nil
+		case "failed":
+			return "", fmt.Errorf("PaddleOCR document parsing job failed job=%s msg=%s", jobID, status.ErrorMsg)
+		}
+
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func fetchPaddleJSONL(ctx context.Context, jsonURL string) ([]map[string]interface{}, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jsonURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create PaddleOCR result request failed: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download PaddleOCR result jsonl failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("download PaddleOCR result jsonl failed: status=%s", resp.Status)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	var rows []map[string]interface{}
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var row map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			return nil, fmt.Errorf("parse PaddleOCR result jsonl failed: %w", err)
+		}
+		rows = append(rows, row)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read PaddleOCR result jsonl failed: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("PaddleOCR result jsonl is empty")
+	}
+	return rows, nil
+}
+
+func parsePaddleDocumentJSONLRelaxed(jobID string, jsonlData []map[string]interface{}) (*paddleocr.DocParsingResult, []int, error) {
+	result := &paddleocr.DocParsingResult{JobID: jobID, DataInfo: map[string]interface{}{}}
+	var missingMarkdownPages []int
+	pageNumber := 0
+
+	for _, lineObj := range jsonlData {
+		resultData, ok := lineObj["result"].(map[string]interface{})
+		if !ok {
+			return nil, missingMarkdownPages, fmt.Errorf("document parsing result item is missing result")
+		}
+		if dataInfo, ok := resultData["dataInfo"].(map[string]interface{}); ok {
+			for key, value := range dataInfo {
+				result.DataInfo[key] = value
+			}
+		}
+		lpResults, ok := resultData["layoutParsingResults"].([]interface{})
+		if !ok {
+			return nil, missingMarkdownPages, fmt.Errorf("document parsing result item is missing layoutParsingResults")
+		}
+		for _, item := range lpResults {
+			pageNumber++
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, missingMarkdownPages, fmt.Errorf("document parsing result page %d is malformed", pageNumber)
+			}
+
+			markdown, _ := itemMap["markdown"].(map[string]interface{})
+			markdownText := strings.TrimSpace(stringValueFromMap(markdown, "text"))
+			if markdownText == "" {
+				missingMarkdownPages = append(missingMarkdownPages, pageNumber)
+			}
+			result.Pages = append(result.Pages, paddleocr.DocParsingPage{
+				MarkdownText:   markdownText,
+				MarkdownImages: stringMapValueFromMap(markdown, "images"),
+				OutputImages:   stringMapValueFromMap(itemMap, "outputImages"),
+				PrunedResult:   itemMap["prunedResult"],
+				InputImageURL:  stringValueFromMap(itemMap, "inputImage"),
+				Exports:        mapValueFromMap(itemMap, "exports"),
+				Markdown:       markdown,
+				Raw:            itemMap,
+			})
+		}
+	}
+
+	if len(result.Pages) == 0 {
+		return nil, missingMarkdownPages, fmt.Errorf("document parsing result contains no pages")
+	}
+	if strings.TrimSpace(extractDocParsingText(result)) == "" {
+		return nil, missingMarkdownPages, fmt.Errorf("document parsing result contains no extractable text")
+	}
+	return result, missingMarkdownPages, nil
+}
+
+func isPaddleOCRMissingMarkdownTextError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), paddleOCRMissingMarkdownText)
 }
 
 func newPaddleOCRDocParser(token string, timeout time.Duration) (paddleDocumentParser, error) {
@@ -342,6 +518,42 @@ func stringValueFromMap(m map[string]interface{}, key string) string {
 	}
 	value, _ := m[key].(string)
 	return value
+}
+
+func stringMapValueFromMap(m map[string]interface{}, key string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	typed, ok := m[key].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(typed))
+	for k, v := range typed {
+		if text, ok := v.(string); ok {
+			result[k] = text
+		}
+	}
+	return result
+}
+
+func mapValueFromMap(m map[string]interface{}, key string) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	value, _ := m[key].(map[string]interface{})
+	return value
+}
+
+func formatPageNumbers(pages []int) string {
+	if len(pages) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		parts = append(parts, strconv.Itoa(page))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
 }
 
 func recursiveText(value interface{}) string {
