@@ -57,15 +57,12 @@ func BuildStoredFileIndexKey(storedFileID string) string {
 }
 
 const (
-	defaultChunkSize      = 2000
-	defaultChunkOverlap   = 200
-	logPreviewRunes       = 120
-	pdfGarbledThreshold   = 0.20
-	sparsePDFMinFileBytes = 1 << 20
-	sparsePDFTextBytes    = 4096
-	sparsePDFTextRatio    = 0.003
-	defaultOCRTimeout     = 600
-	defaultOCRModel       = paddleocr.PaddleOCRVL16
+	defaultChunkSize    = 2000
+	defaultChunkOverlap = 200
+	logPreviewRunes     = 120
+	pdfGarbledThreshold = 0.20
+	defaultOCRTimeout   = 600
+	defaultOCRModel     = paddleocr.PaddleOCRVL16
 )
 
 var (
@@ -209,36 +206,20 @@ func extractPDFText(filePath string) (string, error) {
 }
 
 func extractPDFTextWithFallback(filePath string) (string, error) {
-	text, err := nativePDFTextExtractor(filePath)
-	if err == nil {
-		if shouldFallbackToOCRForSparseNativeText(filePath, text) {
-			log.Printf("[RAG][PDF] native text is sparse, fallback to PaddleOCR file=%s native_bytes=%d", filePath, len(text))
-			return extractAndValidateOCRPDFText(filePath, fmt.Errorf("sparse native text"))
-		}
-		return text, nil
+	ocrText, ocrErr := extractAndValidateOCRPDFText(filePath)
+	if ocrErr == nil {
+		log.Printf("[RAG][PDF] PaddleOCR primary success file=%s bytes=%d preview=%q", filePath, len(ocrText), previewForLog(ocrText))
+		return ocrText, nil
 	}
 
-	log.Printf("[RAG][PDF] native text extraction failed, fallback to PaddleOCR file=%s err=%v", filePath, err)
-	return extractAndValidateOCRPDFText(filePath, err)
-}
-
-func shouldFallbackToOCRForSparseNativeText(filePath string, text string) bool {
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return false
+	log.Printf("[RAG][PDF] PaddleOCR primary failed, fallback to native file=%s err=%v", filePath, ocrErr)
+	nativeText, nativeErr := nativePDFTextExtractor(filePath)
+	if nativeErr != nil {
+		return "", fmt.Errorf("PDF text extraction failed: ocr=%v native=%w", ocrErr, nativeErr)
 	}
 
-	fileBytes := info.Size()
-	nativeBytes := len(strings.TrimSpace(text))
-	ratio := pdfTextRatio(nativeBytes, fileBytes)
-	if fileBytes < sparsePDFMinFileBytes {
-		log.Printf("[RAG][PDF] native text sparse check skipped file=%s native_bytes=%d file_bytes=%d ratio=%.6f min_file_bytes=%d", filePath, nativeBytes, fileBytes, ratio, sparsePDFMinFileBytes)
-		return false
-	}
-
-	shouldFallback := nativeBytes < sparsePDFTextBytes || ratio < sparsePDFTextRatio
-	log.Printf("[RAG][PDF] native text sparse check file=%s native_bytes=%d file_bytes=%d ratio=%.6f text_threshold=%d ratio_threshold=%.6f fallback=%t", filePath, nativeBytes, fileBytes, ratio, sparsePDFTextBytes, sparsePDFTextRatio, shouldFallback)
-	return shouldFallback
+	log.Printf("[RAG][PDF] native fallback success file=%s bytes=%d preview=%q", filePath, len(nativeText), previewForLog(nativeText))
+	return nativeText, nil
 }
 
 func pdfTextRatio(textBytes int, fileBytes int64) float64 {
@@ -248,10 +229,10 @@ func pdfTextRatio(textBytes int, fileBytes int64) float64 {
 	return float64(textBytes) / float64(fileBytes)
 }
 
-func extractAndValidateOCRPDFText(filePath string, nativeErr error) (string, error) {
+func extractAndValidateOCRPDFText(filePath string) (string, error) {
 	ocrText, ocrErr := ocrPDFTextExtractor(filePath)
 	if ocrErr != nil {
-		return "", fmt.Errorf("PDF text extraction failed and PaddleOCR fallback failed: native=%v ocr=%w", nativeErr, ocrErr)
+		return "", fmt.Errorf("PaddleOCR text extraction failed: %w", ocrErr)
 	}
 
 	ocrText = strings.TrimSpace(ocrText)
@@ -262,7 +243,6 @@ func extractAndValidateOCRPDFText(filePath string, nativeErr error) (string, err
 		return "", fmt.Errorf("failed to validate PaddleOCR pdf text: %w", validateErr)
 	}
 
-	log.Printf("[RAG][PDF] PaddleOCR fallback success file=%s bytes=%d preview=%q", filePath, len(ocrText), previewForLog(ocrText))
 	return ocrText, nil
 }
 

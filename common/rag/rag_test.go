@@ -114,24 +114,6 @@ func withPaddleDocParser(t *testing.T, parser *stubPaddleDocParser) {
 	})
 }
 
-func createSizedTempPDF(t *testing.T, size int64) string {
-	t.Helper()
-
-	file, err := os.CreateTemp(t.TempDir(), "*.pdf")
-	if err != nil {
-		t.Fatalf("create temp pdf: %v", err)
-	}
-	path := file.Name()
-	if err := file.Truncate(size); err != nil {
-		file.Close()
-		t.Fatalf("truncate temp pdf: %v", err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("close temp pdf: %v", err)
-	}
-	return path
-}
-
 func TestBuildRAGPromptUsesOriginalName(t *testing.T) {
 	prompt := BuildRAGPrompt("2023毕业人数是多少", []*schema.Document{
 		{
@@ -387,7 +369,7 @@ func TestValidateExtractedPDFTextThresholdBoundary(t *testing.T) {
 	}
 }
 
-func TestExtractPDFTextWithFallbackUsesNativeTextFirst(t *testing.T) {
+func TestExtractPDFTextWithFallbackUsesOCRFirst(t *testing.T) {
 	originalNative := nativePDFTextExtractor
 	originalOCR := ocrPDFTextExtractor
 	defer func() {
@@ -395,165 +377,57 @@ func TestExtractPDFTextWithFallbackUsesNativeTextFirst(t *testing.T) {
 		ocrPDFTextExtractor = originalOCR
 	}()
 
-	ocrCalled := false
 	nativePDFTextExtractor = func(filePath string) (string, error) {
-		if filePath != "native.pdf" {
+		t.Fatalf("native extractor should not be called when OCR succeeds, file=%s", filePath)
+		return "", nil
+	}
+	ocrPDFTextExtractor = func(filePath string) (string, error) {
+		if filePath != "ocr-first.pdf" {
+			t.Fatalf("unexpected file path: %s", filePath)
+		}
+		return " OCR 图片中文字 ", nil
+	}
+
+	got, err := extractPDFTextWithFallback("ocr-first.pdf")
+	if err != nil {
+		t.Fatalf("fallback should return OCR text: %v", err)
+	}
+	if got != "OCR 图片中文字" {
+		t.Fatalf("got %q, want OCR text", got)
+	}
+}
+
+func TestExtractPDFTextWithFallbackUsesNativeWhenOCRFails(t *testing.T) {
+	originalNative := nativePDFTextExtractor
+	originalOCR := ocrPDFTextExtractor
+	defer func() {
+		nativePDFTextExtractor = originalNative
+		ocrPDFTextExtractor = originalOCR
+	}()
+
+	nativePDFTextExtractor = func(filePath string) (string, error) {
+		if filePath != "native-fallback.pdf" {
 			t.Fatalf("unexpected file path: %s", filePath)
 		}
 		return "native text", nil
 	}
 	ocrPDFTextExtractor = func(filePath string) (string, error) {
-		ocrCalled = true
-		return "ocr text", nil
+		if filePath != "native-fallback.pdf" {
+			t.Fatalf("unexpected file path: %s", filePath)
+		}
+		return "", fmt.Errorf("ocr unavailable")
 	}
 
-	got, err := extractPDFTextWithFallback("native.pdf")
+	got, err := extractPDFTextWithFallback("native-fallback.pdf")
 	if err != nil {
 		t.Fatalf("fallback should use native text without error: %v", err)
 	}
 	if got != "native text" {
 		t.Fatalf("got %q, want native text", got)
 	}
-	if ocrCalled {
-		t.Fatal("OCR extractor should not be called when native extraction succeeds")
-	}
 }
 
-func TestExtractPDFTextWithFallbackKeepsNativeTextWhenLargePDFTextIsSufficient(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	filePath := createSizedTempPDF(t, 2*1024*1024)
-	nativeText := strings.Repeat("这是一段原生可抽取文字。", 900)
-	ocrCalled := false
-	nativePDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return nativeText, nil
-	}
-	ocrPDFTextExtractor = func(filePath string) (string, error) {
-		ocrCalled = true
-		return "ocr text", nil
-	}
-
-	got, err := extractPDFTextWithFallback(filePath)
-	if err != nil {
-		t.Fatalf("fallback should keep sufficient native text: %v", err)
-	}
-	if got != nativeText {
-		t.Fatalf("got %q, want native text", got)
-	}
-	if ocrCalled {
-		t.Fatal("OCR extractor should not be called for sufficient native text")
-	}
-}
-
-func TestExtractPDFTextWithFallbackUsesOCRWhenNativeTextIsSparseForLargePDF(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	filePath := createSizedTempPDF(t, 8*1024*1024)
-	ocrCalled := false
-	nativePDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return strings.Repeat("少量文字", 100), nil
-	}
-	ocrPDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		ocrCalled = true
-		return " OCR 图片中文字 ", nil
-	}
-
-	got, err := extractPDFTextWithFallback(filePath)
-	if err != nil {
-		t.Fatalf("fallback should return OCR text for sparse native text: %v", err)
-	}
-	if got != "OCR 图片中文字" {
-		t.Fatalf("got %q, want OCR text", got)
-	}
-	if !ocrCalled {
-		t.Fatal("OCR extractor should be called for sparse native text")
-	}
-}
-
-func TestExtractPDFTextWithFallbackUsesOCRWhenNativeTextRatioIsTooLow(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	filePath := createSizedTempPDF(t, 8*1024*1024)
-	nativePDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return strings.Repeat("a", sparsePDFTextBytes+100), nil
-	}
-	ocrPDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return "OCR ratio fallback text", nil
-	}
-
-	got, err := extractPDFTextWithFallback(filePath)
-	if err != nil {
-		t.Fatalf("fallback should return OCR text for low native text ratio: %v", err)
-	}
-	if got != "OCR ratio fallback text" {
-		t.Fatalf("got %q, want OCR ratio fallback text", got)
-	}
-}
-
-func TestExtractPDFTextWithFallbackKeepsSparseNativeTextForSmallPDF(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	filePath := createSizedTempPDF(t, 512*1024)
-	ocrCalled := false
-	nativePDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return "small pdf native text", nil
-	}
-	ocrPDFTextExtractor = func(filePath string) (string, error) {
-		ocrCalled = true
-		return "ocr text", nil
-	}
-
-	got, err := extractPDFTextWithFallback(filePath)
-	if err != nil {
-		t.Fatalf("small pdf should keep native text: %v", err)
-	}
-	if got != "small pdf native text" {
-		t.Fatalf("got %q, want native text", got)
-	}
-	if ocrCalled {
-		t.Fatal("OCR extractor should not be called for small PDFs")
-	}
-}
-
-func TestExtractPDFTextWithFallbackUsesOCRWhenNativeFails(t *testing.T) {
+func TestExtractPDFTextWithFallbackUsesNativeWhenOCRTextIsEmpty(t *testing.T) {
 	originalNative := nativePDFTextExtractor
 	originalOCR := ocrPDFTextExtractor
 	defer func() {
@@ -562,25 +436,58 @@ func TestExtractPDFTextWithFallbackUsesOCRWhenNativeFails(t *testing.T) {
 	}()
 
 	nativePDFTextExtractor = func(filePath string) (string, error) {
-		return "", fmt.Errorf("failed to extract pdf text: empty content")
-	}
-	ocrPDFTextExtractor = func(filePath string) (string, error) {
-		if filePath != "scanned.pdf" {
+		if filePath != "empty-ocr.pdf" {
 			t.Fatalf("unexpected file path: %s", filePath)
 		}
-		return " OCR 识别文本 ", nil
+		return "native text after empty ocr", nil
+	}
+	ocrPDFTextExtractor = func(filePath string) (string, error) {
+		if filePath != "empty-ocr.pdf" {
+			t.Fatalf("unexpected file path: %s", filePath)
+		}
+		return " \n\t ", nil
 	}
 
-	got, err := extractPDFTextWithFallback("scanned.pdf")
+	got, err := extractPDFTextWithFallback("empty-ocr.pdf")
 	if err != nil {
-		t.Fatalf("fallback should return OCR text: %v", err)
+		t.Fatalf("fallback should use native text after empty OCR: %v", err)
 	}
-	if got != "OCR 识别文本" {
-		t.Fatalf("got %q, want OCR text", got)
+	if got != "native text after empty ocr" {
+		t.Fatalf("got %q, want native text", got)
 	}
 }
 
-func TestExtractPDFTextWithFallbackReturnsOCRError(t *testing.T) {
+func TestExtractPDFTextWithFallbackUsesNativeWhenOCRTextIsGarbled(t *testing.T) {
+	originalNative := nativePDFTextExtractor
+	originalOCR := ocrPDFTextExtractor
+	defer func() {
+		nativePDFTextExtractor = originalNative
+		ocrPDFTextExtractor = originalOCR
+	}()
+
+	nativePDFTextExtractor = func(filePath string) (string, error) {
+		if filePath != "garbled-ocr.pdf" {
+			t.Fatalf("unexpected file path: %s", filePath)
+		}
+		return "native text after garbled ocr", nil
+	}
+	ocrPDFTextExtractor = func(filePath string) (string, error) {
+		if filePath != "garbled-ocr.pdf" {
+			t.Fatalf("unexpected file path: %s", filePath)
+		}
+		return "abc" + strings.Repeat("\u008c", 2), nil
+	}
+
+	got, err := extractPDFTextWithFallback("garbled-ocr.pdf")
+	if err != nil {
+		t.Fatalf("fallback should use native text after garbled OCR: %v", err)
+	}
+	if got != "native text after garbled ocr" {
+		t.Fatalf("got %q, want native text", got)
+	}
+}
+
+func TestExtractPDFTextWithFallbackReturnsCombinedErrorWhenBothFail(t *testing.T) {
 	originalNative := nativePDFTextExtractor
 	originalOCR := ocrPDFTextExtractor
 	defer func() {
@@ -597,64 +504,9 @@ func TestExtractPDFTextWithFallbackReturnsOCRError(t *testing.T) {
 
 	_, err := extractPDFTextWithFallback("bad.pdf")
 	if err == nil {
-		t.Fatal("expected fallback error")
+		t.Fatal("expected combined error")
 	}
-	if !strings.Contains(err.Error(), "PaddleOCR fallback failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestExtractPDFTextWithFallbackRejectsEmptyOCRText(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	nativePDFTextExtractor = func(filePath string) (string, error) {
-		return "", fmt.Errorf("native failed")
-	}
-	ocrPDFTextExtractor = func(filePath string) (string, error) {
-		return " \n\t ", nil
-	}
-
-	_, err := extractPDFTextWithFallback("empty-ocr.pdf")
-	if err == nil {
-		t.Fatal("expected empty OCR text error")
-	}
-	if !strings.Contains(err.Error(), "empty content") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestExtractPDFTextWithFallbackReturnsOCRErrorForSparseNativeText(t *testing.T) {
-	originalNative := nativePDFTextExtractor
-	originalOCR := ocrPDFTextExtractor
-	defer func() {
-		nativePDFTextExtractor = originalNative
-		ocrPDFTextExtractor = originalOCR
-	}()
-
-	filePath := createSizedTempPDF(t, 8*1024*1024)
-	nativePDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return "少量原生文字", nil
-	}
-	ocrPDFTextExtractor = func(gotPath string) (string, error) {
-		if gotPath != filePath {
-			t.Fatalf("unexpected file path: %s", gotPath)
-		}
-		return "", fmt.Errorf("ocr unavailable")
-	}
-
-	_, err := extractPDFTextWithFallback(filePath)
-	if err == nil {
-		t.Fatal("expected OCR error for sparse native text")
-	}
-	if !strings.Contains(err.Error(), "sparse native text") || !strings.Contains(err.Error(), "ocr unavailable") {
+	if !strings.Contains(err.Error(), "ocr failed") || !strings.Contains(err.Error(), "native failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -761,7 +613,7 @@ func TestExtractPDFTextWithOCRReturnsAPIError(t *testing.T) {
 	}
 }
 
-func TestExtractPDFTextWithFallbackRejectsGarbledPaddleOCRText(t *testing.T) {
+func TestExtractPDFTextWithFallbackReturnsCombinedErrorWhenOCRTextIsGarbledAndNativeFails(t *testing.T) {
 	originalNative := nativePDFTextExtractor
 	originalOCR := ocrPDFTextExtractor
 	defer func() {
@@ -778,9 +630,9 @@ func TestExtractPDFTextWithFallbackRejectsGarbledPaddleOCRText(t *testing.T) {
 
 	_, err := extractPDFTextWithFallback("garbled-ocr.pdf")
 	if err == nil {
-		t.Fatal("expected garbled OCR text error")
+		t.Fatal("expected combined error")
 	}
-	if !strings.Contains(err.Error(), "garbled content ratio too high") {
+	if !strings.Contains(err.Error(), "garbled content ratio too high") || !strings.Contains(err.Error(), "native failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
