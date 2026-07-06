@@ -27,6 +27,7 @@ const (
 	AIModelFail       Code = 5003
 
 	TTSFail Code = 6001
+	ASRFail Code = 6002
 )
 
 // msg 定义了系统状态码与对应消息的映射关系
@@ -58,6 +59,7 @@ var msg = map[Code]string{
 	AIModelCannotOpen: "无法打开模型",
 	AIModelFail:       "模型运行失败",
 	TTSFail:           "语音服务失败",
+	ASRFail:           "语音识别失败",
 }
 
 // Code 返回该错误码的整型值

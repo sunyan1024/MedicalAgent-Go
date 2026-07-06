@@ -4,6 +4,7 @@ import (
 	"GoAI/config"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -60,6 +61,25 @@ type TTSTask struct {
 type TTSQueryResponse struct {
 	LogID     string    `json:"log_id"`
 	TasksInfo []TTSTask `json:"tasks_info"`
+}
+
+// ASRRequest 定义百度短语音识别请求结构。
+type ASRRequest struct {
+	Format  string `json:"format"`
+	Rate    int    `json:"rate"`
+	Channel int    `json:"channel"`
+	Token   string `json:"token"`
+	Cuid    string `json:"cuid"`
+	Len     int    `json:"len"`
+	Speech  string `json:"speech"`
+	DevPID  int    `json:"dev_pid"`
+}
+
+// ASRResponse 表示百度短语音识别响应结构。
+type ASRResponse struct {
+	ErrNo  int      `json:"err_no"`
+	ErrMsg string   `json:"err_msg"`
+	Result []string `json:"result"`
 }
 
 // TTSService 提供文本转语音(TTS)相关服务功能
@@ -280,4 +300,65 @@ func (s *TTSService) QueryTTSFull(ctx context.Context, taskID string) (*TTSQuery
 	}
 
 	return result, nil
+}
+
+// RecognizeSpeech 使用百度短语音识别 API 将 16kHz 单声道 WAV 转成文本。
+func (s *TTSService) RecognizeSpeech(ctx context.Context, audio []byte) (string, error) {
+	if len(audio) == 0 {
+		return "", fmt.Errorf("empty audio")
+	}
+
+	accessToken := s.GetAccessToken()
+	if accessToken == "" {
+		return "", fmt.Errorf("failed to get access token")
+	}
+
+	payload := ASRRequest{
+		Format:  "wav",
+		Rate:    16000,
+		Channel: 1,
+		Token:   accessToken,
+		Cuid:    "gopherai",
+		Len:     len(audio),
+		Speech:  base64.StdEncoding.EncodeToString(audio),
+		DevPID:  1537,
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://vop.baidu.com/server_api", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	log.Println("[ASR] raw:", string(respBody))
+
+	var result ASRResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", err
+	}
+	if result.ErrNo != 0 {
+		return "", fmt.Errorf("asr failed: %s", result.ErrMsg)
+	}
+	if len(result.Result) == 0 || result.Result[0] == "" {
+		return "", fmt.Errorf("empty asr result")
+	}
+
+	return result.Result[0], nil
 }

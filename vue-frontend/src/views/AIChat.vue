@@ -47,6 +47,15 @@
       <div class="chat-input">
         <textarea v-model="inputMessage" placeholder="请输入你的问题..." @keydown.enter.exact.prevent="sendMessage"
           :disabled="loading" ref="messageInput" rows="1"></textarea>
+        <button
+          type="button"
+          :class="['voice-btn', { recording: isRecording }]"
+          :disabled="loading || isTranscribing"
+          @click="toggleVoiceInput"
+          :title="voiceButtonTitle"
+        >
+          {{ voiceButtonText }}
+        </button>
         <button type="button" :disabled="!inputMessage.trim() || loading" @click="sendMessage" class="send-btn">
           {{ loading ? '发送中...' : '发送' }}
         </button>
@@ -58,7 +67,7 @@
 <script>
 
 
-import { ref, nextTick, computed, onMounted } from 'vue'
+import { ref, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
 
@@ -76,6 +85,21 @@ export default {
     const messageInput = ref(null)
     const selectedModel = ref('qwen')
     const isStreaming = ref(false)
+    const isRecording = ref(false)
+    const isTranscribing = ref(false)
+    const voiceButtonText = computed(() => {
+      if (isTranscribing.value) return '转写中'
+      return isRecording.value ? '停止' : '🎙'
+    })
+    const voiceButtonTitle = computed(() => {
+      if (isTranscribing.value) return '正在识别语音'
+      return isRecording.value ? '停止录音' : '语音输入'
+    })
+    let audioContext = null
+    let mediaStream = null
+    let mediaSource = null
+    let scriptProcessor = null
+    let audioChunks = []
 
 
     const renderMarkdown = (text) => {
@@ -148,6 +172,211 @@ export default {
       } catch (error) {
         console.error('TTS error:', error)
         ElMessage.error('请求语音接口失败')
+      }
+    }
+
+    const cleanupRecorder = () => {
+      if (scriptProcessor) {
+        try {
+          scriptProcessor.disconnect()
+        } catch (e) {
+          // ignore
+        }
+        scriptProcessor.onaudioprocess = null
+        scriptProcessor = null
+      }
+      if (mediaSource) {
+        try {
+          mediaSource.disconnect()
+        } catch (e) {
+          // ignore
+        }
+        mediaSource = null
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop())
+        mediaStream = null
+      }
+      if (audioContext) {
+        audioContext.close()
+        audioContext = null
+      }
+    }
+
+    const getUserAudioStream = () => {
+      const mediaDevices = navigator.mediaDevices
+      if (mediaDevices && mediaDevices.getUserMedia) {
+        return mediaDevices.getUserMedia({ audio: true })
+      }
+
+      const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia
+      if (!legacyGetUserMedia) {
+        return Promise.reject(new Error('getUserMedia is not available'))
+      }
+
+      return new Promise((resolve, reject) => {
+        legacyGetUserMedia.call(navigator, { audio: true }, resolve, reject)
+      })
+    }
+
+    const startVoiceInput = async () => {
+      if (loading.value || isTranscribing.value) return
+      if (!window.isSecureContext) {
+        ElMessage.warning('麦克风需要 HTTPS 或 localhost，请使用 http://localhost:8081 访问')
+        return
+      }
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) {
+        ElMessage.warning('当前浏览器不支持音频录制')
+        return
+      }
+
+      try {
+        mediaStream = await getUserAudioStream()
+        audioContext = new AudioContextClass()
+        mediaSource = audioContext.createMediaStreamSource(mediaStream)
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+        audioChunks = []
+
+        scriptProcessor.onaudioprocess = event => {
+          if (!isRecording.value) return
+          const input = event.inputBuffer.getChannelData(0)
+          audioChunks.push(new Float32Array(input))
+        }
+
+        mediaSource.connect(scriptProcessor)
+        scriptProcessor.connect(audioContext.destination)
+        isRecording.value = true
+      } catch (error) {
+        console.error('Start recording error:', error)
+        cleanupRecorder()
+        ElMessage.error('无法访问麦克风')
+      }
+    }
+
+    const stopVoiceInput = async () => {
+      if (!isRecording.value) return
+      isRecording.value = false
+
+      const sourceSampleRate = audioContext ? audioContext.sampleRate : 44100
+      const chunks = audioChunks
+      cleanupRecorder()
+
+      if (!chunks.length) {
+        ElMessage.warning('未检测到录音内容')
+        return
+      }
+
+      try {
+        isTranscribing.value = true
+        const wavBlob = encodeWav(chunks, sourceSampleRate, 16000)
+        const formData = new FormData()
+        formData.append('audio', wavBlob, 'voice-input.wav')
+
+        const response = await api.post('/AI/chat/asr', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+
+        if (response.data && response.data.status_code === 1000 && response.data.text) {
+          inputMessage.value = appendRecognizedText(inputMessage.value, response.data.text)
+          await nextTick()
+          if (messageInput.value) messageInput.value.focus()
+        } else {
+          ElMessage.error(response.data?.status_msg || '语音识别失败')
+        }
+      } catch (error) {
+        console.error('ASR error:', error)
+        ElMessage.error('请求语音识别接口失败')
+      } finally {
+        isTranscribing.value = false
+      }
+    }
+
+    const toggleVoiceInput = () => {
+      if (isRecording.value) {
+        stopVoiceInput()
+      } else {
+        startVoiceInput()
+      }
+    }
+
+    const appendRecognizedText = (currentText, recognizedText) => {
+      const text = String(recognizedText || '').trim()
+      if (!text) return currentText
+      if (!currentText || !currentText.trim()) return text
+      return `${currentText.trimEnd()} ${text}`
+    }
+
+    const mergeAudioChunks = chunks => {
+      const length = chunks.reduce((total, chunk) => total + chunk.length, 0)
+      const result = new Float32Array(length)
+      let offset = 0
+      chunks.forEach(chunk => {
+        result.set(chunk, offset)
+        offset += chunk.length
+      })
+      return result
+    }
+
+    const downsampleBuffer = (buffer, sourceRate, targetRate) => {
+      if (targetRate === sourceRate) return buffer
+      const ratio = sourceRate / targetRate
+      const newLength = Math.round(buffer.length / ratio)
+      const result = new Float32Array(newLength)
+      let offsetResult = 0
+      let offsetBuffer = 0
+
+      while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio)
+        let accum = 0
+        let count = 0
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+          accum += buffer[i]
+          count++
+        }
+        result[offsetResult] = count ? accum / count : 0
+        offsetResult++
+        offsetBuffer = nextOffsetBuffer
+      }
+
+      return result
+    }
+
+    const encodeWav = (chunks, sourceRate, targetRate) => {
+      const samples = downsampleBuffer(mergeAudioChunks(chunks), sourceRate, targetRate)
+      const bytesPerSample = 2
+      const dataLength = samples.length * bytesPerSample
+      const buffer = new ArrayBuffer(44 + dataLength)
+      const view = new DataView(buffer)
+
+      writeString(view, 0, 'RIFF')
+      view.setUint32(4, 36 + dataLength, true)
+      writeString(view, 8, 'WAVE')
+      writeString(view, 12, 'fmt ')
+      view.setUint32(16, 16, true)
+      view.setUint16(20, 1, true)
+      view.setUint16(22, 1, true)
+      view.setUint32(24, targetRate, true)
+      view.setUint32(28, targetRate * bytesPerSample, true)
+      view.setUint16(32, bytesPerSample, true)
+      view.setUint16(34, 8 * bytesPerSample, true)
+      writeString(view, 36, 'data')
+      view.setUint32(40, dataLength, true)
+
+      let offset = 44
+      samples.forEach(sample => {
+        const normalized = Math.max(-1, Math.min(1, sample))
+        view.setInt16(offset, normalized < 0 ? normalized * 0x8000 : normalized * 0x7FFF, true)
+        offset += bytesPerSample
+      })
+
+      return new Blob([view], { type: 'audio/wav' })
+    }
+
+    const writeString = (view, offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
       }
     }
 
@@ -249,6 +478,10 @@ export default {
 
 
     const sendMessage = async () => {
+      if (isRecording.value || isTranscribing.value) {
+        ElMessage.warning('请先完成语音输入')
+        return
+      }
       if (!inputMessage.value || !inputMessage.value.trim()) {
         ElMessage.warning('请输入消息内容')
         return
@@ -518,6 +751,11 @@ export default {
       loadSessions()
     })
 
+    onUnmounted(() => {
+      isRecording.value = false
+      cleanupRecorder()
+    })
+
     // expose to template
     return {
       // sessions: computed(() => Object.values(sessions.value)),
@@ -531,8 +769,13 @@ export default {
       messageInput,
       selectedModel,
       isStreaming,
+      isRecording,
+      isTranscribing,
+      voiceButtonText,
+      voiceButtonTitle,
       renderMarkdown,
       playTTS,
+      toggleVoiceInput,
       createNewSession,
       switchSession,
       syncHistory,
@@ -769,7 +1012,7 @@ export default {
   resize: none;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  padding: 12px 92px 12px 14px;
+  padding: 12px 154px 12px 14px;
   font-size: 15px;
   outline: none;
   background: var(--app-surface);
@@ -782,6 +1025,40 @@ export default {
 .chat-input textarea:focus {
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.voice-btn {
+  position: absolute;
+  right: 96px;
+  bottom: 26px;
+  min-width: 52px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: var(--app-surface-subtle);
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.voice-btn:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  color: var(--app-primary);
+}
+
+.voice-btn.recording {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.voice-btn:disabled {
+  background: #e2e8f0;
+  color: var(--app-text-muted);
+  cursor: not-allowed;
 }
 
 .send-btn {

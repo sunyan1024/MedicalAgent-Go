@@ -4,8 +4,11 @@ import (
 	"GoAI/common/code"
 	"GoAI/common/tts"
 	"GoAI/controller"
+	"bytes"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,7 +37,15 @@ type (
 		TaskResult string `json:"task_result,omitempty"`
 		controller.Response
 	}
+
+	// ASRResponse 定义语音识别响应。
+	ASRResponse struct {
+		Text string `json:"text,omitempty"`
+		controller.Response
+	}
 )
+
+const maxASRAudioSize = 10 * 1024 * 1024
 
 // TTSController  封装了 TTS 服务相关功能，包含一个 TTS 服务实例
 type TTSController struct {
@@ -123,5 +134,56 @@ func QueryTTSTask(c *gin.Context) {
 	}
 	res.TaskStatus = TTSQueryResponse.TasksInfo[0].TaskStatus
 
+	c.JSON(http.StatusOK, res)
+}
+
+// RecognizeSpeech 处理语音输入转文字请求。
+func RecognizeSpeech(c *gin.Context) {
+	res := new(ASRResponse)
+
+	file, err := c.FormFile("audio")
+	if err != nil {
+		log.Println("[RecognizeSpeech] FormFile fail ", err)
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	if file.Size <= 0 || file.Size > maxASRAudioSize {
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(file.Filename), ".wav") {
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		log.Println("[RecognizeSpeech] file open fail ", err)
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	defer src.Close()
+
+	audio, err := io.ReadAll(io.LimitReader(src, maxASRAudioSize+1))
+	if err != nil {
+		log.Println("[RecognizeSpeech] read audio fail ", err)
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	if len(audio) == 0 || len(audio) > maxASRAudioSize || !bytes.HasPrefix(audio, []byte("RIFF")) {
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+
+	ttsCtrl := NewTTSController()
+	text, err := ttsCtrl.ttsService.RecognizeSpeech(c, audio)
+	if err != nil {
+		log.Println("[RecognizeSpeech] asr fail ", err)
+		c.JSON(http.StatusOK, res.CodeOf(code.ASRFail))
+		return
+	}
+
+	res.Success()
+	res.Text = text
 	c.JSON(http.StatusOK, res)
 }

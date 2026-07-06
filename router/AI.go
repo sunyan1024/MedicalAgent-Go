@@ -28,5 +28,8 @@ func AIRouter(r *gin.RouterGroup) {
 		// TTS相关接口
 		r.POST("/chat/tts", tts.CreateTTSTask)
 		r.GET("/chat/tts/query", tts.QueryTTSTask)
+
+		// ASR相关接口
+		r.POST("/chat/asr", tts.RecognizeSpeech)
 	}
 }
