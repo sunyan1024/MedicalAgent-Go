@@ -69,7 +69,7 @@
 
 import { ref, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '../utils/api'
+import api, { getApiErrorMessage } from '../utils/api'
 
 export default {
   name: 'AIChat',
@@ -99,6 +99,7 @@ export default {
     let mediaStream = null
     let mediaSource = null
     let scriptProcessor = null
+    let silentGain = null
     let audioChunks = []
 
 
@@ -185,6 +186,14 @@ export default {
         scriptProcessor.onaudioprocess = null
         scriptProcessor = null
       }
+      if (silentGain) {
+        try {
+          silentGain.disconnect()
+        } catch (e) {
+          // ignore
+        }
+        silentGain = null
+      }
       if (mediaSource) {
         try {
           mediaSource.disconnect()
@@ -203,10 +212,32 @@ export default {
       }
     }
 
-    const getUserAudioStream = () => {
+    const getUserAudioStream = async () => {
+      const defaultAudioConstraints = {
+        deviceId: { ideal: 'default' },
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+      const fallbackAudioConstraints = {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
       const mediaDevices = navigator.mediaDevices
       if (mediaDevices && mediaDevices.getUserMedia) {
-        return mediaDevices.getUserMedia({ audio: true })
+        try {
+          return await mediaDevices.getUserMedia({ audio: defaultAudioConstraints })
+        } catch (error) {
+          if (error.name !== 'OverconstrainedError' && error.name !== 'ConstraintNotSatisfiedError') {
+            throw error
+          }
+          return mediaDevices.getUserMedia({ audio: fallbackAudioConstraints })
+        }
       }
 
       const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia
@@ -215,7 +246,7 @@ export default {
       }
 
       return new Promise((resolve, reject) => {
-        legacyGetUserMedia.call(navigator, { audio: true }, resolve, reject)
+        legacyGetUserMedia.call(navigator, { audio: fallbackAudioConstraints }, resolve, reject)
       })
     }
 
@@ -237,6 +268,8 @@ export default {
         audioContext = new AudioContextClass()
         mediaSource = audioContext.createMediaStreamSource(mediaStream)
         scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
+        silentGain = audioContext.createGain()
+        silentGain.gain.value = 0
         audioChunks = []
 
         scriptProcessor.onaudioprocess = event => {
@@ -246,7 +279,8 @@ export default {
         }
 
         mediaSource.connect(scriptProcessor)
-        scriptProcessor.connect(audioContext.destination)
+        scriptProcessor.connect(silentGain)
+        silentGain.connect(audioContext.destination)
         isRecording.value = true
       } catch (error) {
         console.error('Start recording error:', error)
@@ -287,7 +321,7 @@ export default {
         }
       } catch (error) {
         console.error('ASR error:', error)
-        ElMessage.error('请求语音识别接口失败')
+        ElMessage.error(`请求语音识别接口失败：${getApiErrorMessage(error, '网络错误')}`)
       } finally {
         isTranscribing.value = false
       }
