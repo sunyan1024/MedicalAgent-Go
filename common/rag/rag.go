@@ -42,10 +42,13 @@ type RAGIndexer struct {
 // embedding: 用于生成文本嵌入的嵌入器
 // retriever: 用于检索相关文档的检索器
 type RAGQuery struct {
-	embedding  embedding.Embedder
-	retrievers []retriever.Retriever
-	reranker   documentReranker
-	finalTopK  int
+	embedding      embedding.Embedder
+	retrievers     []retriever.Retriever
+	keywordTargets []keywordSearchTarget
+	rdb            *redis.Client
+	reranker       documentReranker
+	finalTopK      int
+	options        retrieveOptions
 }
 
 func BuildFileIndexKey(username string, storedName string) string {
@@ -62,6 +65,7 @@ func BuildStoredFileIndexKey(storedFileID string) string {
 const (
 	defaultChunkSize    = 2000
 	defaultChunkOverlap = 200
+	defaultVectorTopK   = 10
 	logPreviewRunes     = 120
 	pdfGarbledThreshold = 0.20
 	defaultOCRTimeout   = 600
@@ -90,16 +94,31 @@ type retrieveOptions struct {
 	rerankCandidateTopK int
 	rerankTopK          int
 	rerankTimeout       time.Duration
+	hybridEnabled       bool
+	vectorTopK          int
+	keywordTopK         int
+	rrfK                int
+}
+
+type keywordSearchTarget struct {
+	indexName    string
+	filename     string
+	originalName string
 }
 
 func newRetrieveOptions(conf config.RagModelConfig) retrieveOptions {
+	rawRerankCandidateTopK := conf.RerankCandidateTopK
 	opts := retrieveOptions{
 		rerankEnabled:       conf.RerankEnabled,
 		rerankModel:         strings.TrimSpace(conf.RerankModel),
 		rerankBaseURL:       strings.TrimSpace(conf.RerankBaseUrl),
-		rerankCandidateTopK: conf.RerankCandidateTopK,
+		rerankCandidateTopK: rawRerankCandidateTopK,
 		rerankTopK:          conf.RerankTopK,
 		rerankTimeout:       time.Duration(conf.RerankTimeoutSeconds) * time.Second,
+		hybridEnabled:       conf.HybridEnabled,
+		vectorTopK:          conf.VectorTopK,
+		keywordTopK:         conf.KeywordTopK,
+		rrfK:                conf.RRFK,
 	}
 	if opts.rerankModel == "" {
 		opts.rerankModel = defaultRerankModel
@@ -107,7 +126,17 @@ func newRetrieveOptions(conf config.RagModelConfig) retrieveOptions {
 	if opts.rerankBaseURL == "" {
 		opts.rerankBaseURL = defaultRerankBaseURL
 	}
-	if opts.rerankCandidateTopK <= 0 {
+	if opts.vectorTopK <= 0 {
+		if rawRerankCandidateTopK > 0 {
+			// Backward compatibility: before vectorTopK existed, rerankCandidateTopK
+			// was used as the per-file vector recall size.
+			opts.vectorTopK = rawRerankCandidateTopK
+		} else {
+			opts.vectorTopK = defaultVectorTopK
+		}
+	}
+	legacyCandidateTopK := conf.VectorTopK <= 0 && rawRerankCandidateTopK > 0
+	if opts.rerankCandidateTopK <= 0 || legacyCandidateTopK {
 		opts.rerankCandidateTopK = defaultRerankCandidateTopK
 	}
 	if opts.rerankTopK <= 0 {
@@ -118,6 +147,12 @@ func newRetrieveOptions(conf config.RagModelConfig) retrieveOptions {
 	}
 	if opts.rerankTimeout <= 0 {
 		opts.rerankTimeout = defaultRerankTimeoutSeconds * time.Second
+	}
+	if opts.keywordTopK <= 0 {
+		opts.keywordTopK = opts.vectorTopK
+	}
+	if opts.rrfK <= 0 {
+		opts.rrfK = 60
 	}
 	return opts
 }
@@ -1146,6 +1181,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 
 	rdb := redisPkg.Rdb
 	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
+	keywordTargets := make([]keywordSearchTarget, 0, len(knowledgeFiles))
 	for _, knowledgeFile := range knowledgeFiles {
 		filename := strings.TrimSpace(knowledgeFile.StoredName)
 		storedFileID := strings.TrimSpace(knowledgeFile.StoredFileID)
@@ -1160,7 +1196,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 			Index:        indexName,
 			Dialect:      2,
 			ReturnFields: []string{"content", "metadata", "distance"},
-			TopK:         retrieveOpts.rerankCandidateTopK,
+			TopK:         retrieveOpts.vectorTopK,
 			VectorField:  "vector",
 			// 由于 Redis 存储的文档格式和 Eino 框架内部定义的 schema.Document 格式不同
 			// 因此在查询时需要通过 DocumentConverter 进行相应的转换。
@@ -1192,6 +1228,11 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 			continue
 		}
 		retrievers = append(retrievers, rtr)
+		keywordTargets = append(keywordTargets, keywordSearchTarget{
+			indexName:    indexName,
+			filename:     filename,
+			originalName: originalName,
+		})
 		log.Printf("[RAG][Query] retriever ready username=%s file=%s original_name=%s index=%s", username, filename, originalName, indexName)
 	}
 
@@ -1206,25 +1247,28 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		if err != nil {
 			log.Printf("[RAG][Query] init reranker failed username=%s fallback=vector_sort err=%v", username, err)
 		} else {
-			log.Printf("[RAG][Query] reranker ready username=%s model=%s candidate_top_k=%d final_top_k=%d", username, retrieveOpts.rerankModel, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK)
+			log.Printf("[RAG][Query] reranker ready username=%s model=%s rerank_candidate_top_k=%d rerank_top_k=%d", username, retrieveOpts.rerankModel, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK)
 		}
 	}
 
-	log.Printf("[RAG][Query] init success username=%s retrievers=%d rerank_enabled=%v elapsed=%s", username, len(retrievers), reranker != nil, time.Since(start))
+	log.Printf("[RAG][Query] init success username=%s retrievers=%d vector_top_k=%d keyword_top_k=%d hybrid_enabled=%v rerank_enabled=%v rerank_candidate_top_k=%d rerank_top_k=%d elapsed=%s", username, len(retrievers), retrieveOpts.vectorTopK, retrieveOpts.keywordTopK, retrieveOpts.hybridEnabled, reranker != nil, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK, time.Since(start))
 	return &RAGQuery{
-		embedding:  embedder,
-		retrievers: retrievers,
-		reranker:   reranker,
-		finalTopK:  retrieveOpts.rerankTopK,
+		embedding:      embedder,
+		retrievers:     retrievers,
+		keywordTargets: keywordTargets,
+		rdb:            rdb,
+		reranker:       reranker,
+		finalTopK:      retrieveOpts.rerankTopK,
+		options:        retrieveOpts,
 	}, nil
 }
 
 // RetrieveDocuments 检索相关文档
 func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*schema.Document, error) {
 	start := time.Now()
-	log.Printf("[RAG][Retrieve] start retrievers=%d query_len=%d query_preview=%q", len(r.retrievers), len(query), previewForLog(query))
+	log.Printf("[RAG][Retrieve] start retrievers=%d vector_top_k=%d keyword_top_k=%d hybrid_enabled=%v rerank_enabled=%v rerank_candidate_top_k=%d rerank_top_k=%d query_len=%d query_preview=%q", len(r.retrievers), r.options.vectorTopK, r.options.keywordTopK, r.options.hybridEnabled, r.reranker != nil, r.options.rerankCandidateTopK, r.finalTopK, len(query), previewForLog(query))
 
-	var allDocs []*schema.Document
+	vectorDocs := make([]*schema.Document, 0)
 	for i, rtr := range r.retrievers {
 		retrieveStart := time.Now()
 		docs, err := rtr.Retrieve(ctx, query)
@@ -1233,7 +1277,27 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 			continue
 		}
 		log.Printf("[RAG][Retrieve] retriever success index=%d docs=%d elapsed=%s", i, len(docs), time.Since(retrieveStart))
-		allDocs = append(allDocs, docs...)
+		vectorDocs = append(vectorDocs, docs...)
+	}
+
+	sort.SliceStable(vectorDocs, func(i, j int) bool {
+		return documentDistance(vectorDocs[i]) < documentDistance(vectorDocs[j])
+	})
+	log.Printf("[RAG][Retrieve] vector summary docs=%d top_ids=%s", len(vectorDocs), previewDocIDs(vectorDocs, 5))
+
+	allDocs := vectorDocs
+	if r.options.hybridEnabled {
+		keywordStart := time.Now()
+		keywordDocs, err := r.retrieveKeywordDocuments(ctx, query)
+		if err != nil {
+			log.Printf("[RAG][Retrieve] keyword retrieve failed fallback=vector err=%v elapsed=%s", err, time.Since(keywordStart))
+		} else if len(keywordDocs) == 0 {
+			log.Printf("[RAG][Retrieve] keyword retrieve empty fallback=vector elapsed=%s", time.Since(keywordStart))
+		} else {
+			log.Printf("[RAG][Retrieve] keyword retrieve success docs=%d elapsed=%s", len(keywordDocs), time.Since(keywordStart))
+			allDocs = mergeRRFDocuments(vectorDocs, keywordDocs, r.options.rrfK)
+			log.Printf("[RAG][Retrieve] hybrid merge vector_docs=%d keyword_docs=%d merged_docs=%d rrf_k=%d top_ids=%s", len(vectorDocs), len(keywordDocs), len(allDocs), r.options.rrfK, previewDocIDs(allDocs, 5))
+		}
 	}
 
 	if len(allDocs) == 0 {
@@ -1241,14 +1305,27 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		return nil, fmt.Errorf("failed to retrieve documents")
 	}
 
-	// 多路检索结果合并后，先按向量距离排序作为保底；启用 rerank 时再基于候选集重排。
-	sort.SliceStable(allDocs, func(i, j int) bool {
-		return documentDistance(allDocs[i]) < documentDistance(allDocs[j])
-	})
+	if !r.options.hybridEnabled {
+		// 多路向量检索结果合并后，先按向量距离排序作为保底。
+		sort.SliceStable(allDocs, func(i, j int) bool {
+			return documentDistance(allDocs[i]) < documentDistance(allDocs[j])
+		})
+	}
 
 	finalTopK := r.finalTopK
 	if finalTopK <= 0 {
 		finalTopK = defaultRerankTopK
+	}
+	rerankCandidateTopK := r.options.rerankCandidateTopK
+	if rerankCandidateTopK <= 0 {
+		rerankCandidateTopK = defaultRerankCandidateTopK
+	}
+	if rerankCandidateTopK < finalTopK {
+		rerankCandidateTopK = finalTopK
+	}
+	if len(allDocs) > rerankCandidateTopK {
+		log.Printf("[RAG][Retrieve] rerank candidate cap before=%d after=%d", len(allDocs), rerankCandidateTopK)
+		allDocs = allDocs[:rerankCandidateTopK]
 	}
 	if r.reranker != nil {
 		rerankStart := time.Now()
@@ -1294,6 +1371,379 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 	}
 	log.Printf("[RAG][Retrieve] success docs=%d elapsed=%s", len(allDocs), time.Since(start))
 	return allDocs, nil
+}
+
+func (r *RAGQuery) retrieveKeywordDocuments(ctx context.Context, query string) ([]*schema.Document, error) {
+	if r.rdb == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
+	if len(r.keywordTargets) == 0 {
+		return nil, fmt.Errorf("keyword targets are empty")
+	}
+
+	searchQuery := buildRediSearchContentQuery(query)
+	if searchQuery == "" {
+		log.Printf("[RAG][Retrieve] keyword query empty query_preview=%q", previewForLog(query))
+		return nil, nil
+	}
+	terms := extractKeywordTerms(query)
+
+	topK := r.options.keywordTopK
+	if topK <= 0 {
+		topK = r.options.vectorTopK
+	}
+	log.Printf("[RAG][Retrieve] keyword query prepared targets=%d top_k=%d terms=%q redis_query=%q", len(r.keywordTargets), topK, terms, searchQuery)
+
+	docs := make([]*schema.Document, 0, topK*len(r.keywordTargets))
+	for _, target := range r.keywordTargets {
+		targetStart := time.Now()
+		result, err := r.rdb.Do(ctx,
+			"FT.SEARCH", target.indexName, searchQuery,
+			"RETURN", "2", "content", "metadata",
+			"LIMIT", "0", topK,
+		).Result()
+		if err != nil {
+			log.Printf("[RAG][Retrieve] keyword target failed index=%s err=%v", target.indexName, err)
+			continue
+		}
+		targetDocs := parseKeywordSearchResult(result, target)
+		log.Printf("[RAG][Retrieve] keyword target success index=%s filename=%s original_name=%s docs=%d total_hits=%d elapsed=%s top_ids=%s", target.indexName, target.filename, target.originalName, len(targetDocs), redisSearchTotalHits(result), time.Since(targetStart), previewDocIDs(targetDocs, 3))
+		docs = append(docs, targetDocs...)
+	}
+	return docs, nil
+}
+
+func redisSearchTotalHits(result any) int {
+	rows, ok := result.([]interface{})
+	if !ok || len(rows) == 0 {
+		return 0
+	}
+	switch v := rows[0].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case uint64:
+		return int(v)
+	case string:
+		total, _ := strconv.Atoi(v)
+		return total
+	default:
+		return 0
+	}
+}
+
+func previewDocIDs(docs []*schema.Document, limit int) string {
+	if limit <= 0 || len(docs) == 0 {
+		return "[]"
+	}
+	ids := make([]string, 0, limit)
+	for _, doc := range docs {
+		if doc == nil {
+			continue
+		}
+		id := strings.TrimSpace(doc.ID)
+		if id == "" {
+			id = fmt.Sprintf("content:%d", len(doc.Content))
+		}
+		ids = append(ids, id)
+		if len(ids) >= limit {
+			break
+		}
+	}
+	return fmt.Sprintf("%v", ids)
+}
+
+func parseKeywordSearchResult(result any, target keywordSearchTarget) []*schema.Document {
+	rows, ok := result.([]interface{})
+	if !ok || len(rows) <= 1 {
+		return nil
+	}
+
+	docs := make([]*schema.Document, 0, (len(rows)-1)/2)
+	for i := 1; i+1 < len(rows); i += 2 {
+		id, ok := stringFromRedisValue(rows[i])
+		if !ok || strings.TrimSpace(id) == "" {
+			continue
+		}
+		fields := redisFieldMap(rows[i+1])
+		doc := &schema.Document{
+			ID:      id,
+			Content: fields["content"],
+			MetaData: map[string]any{
+				"filename":          target.filename,
+				"keyword_retrieved": true,
+			},
+		}
+		if target.originalName != "" {
+			doc.MetaData["original_name"] = target.originalName
+		}
+		if metadata := strings.TrimSpace(fields["metadata"]); metadata != "" {
+			doc.MetaData["metadata"] = metadata
+		}
+		docs = append(docs, doc)
+	}
+	return docs
+}
+
+func redisFieldMap(raw any) map[string]string {
+	fields := map[string]string{}
+	values, ok := raw.([]interface{})
+	if !ok {
+		return fields
+	}
+	for i := 0; i+1 < len(values); i += 2 {
+		key, ok := stringFromRedisValue(values[i])
+		if !ok {
+			continue
+		}
+		val, ok := stringFromRedisValue(values[i+1])
+		if !ok {
+			continue
+		}
+		fields[key] = val
+	}
+	return fields
+}
+
+func stringFromRedisValue(value any) (string, bool) {
+	switch v := value.(type) {
+	case string:
+		return v, true
+	case []byte:
+		return string(v), true
+	default:
+		return "", false
+	}
+}
+
+type rrfDocument struct {
+	doc       *schema.Document
+	score     float64
+	distance  float64
+	firstRank int
+}
+
+func mergeRRFDocuments(vectorDocs, keywordDocs []*schema.Document, rrfK int) []*schema.Document {
+	if rrfK <= 0 {
+		rrfK = 60
+	}
+
+	merged := map[string]*rrfDocument{}
+	addRankedDocs := func(docs []*schema.Document) {
+		for rank, doc := range docs {
+			if doc == nil {
+				continue
+			}
+			key := documentUniqueKey(doc)
+			if key == "" {
+				continue
+			}
+			item, ok := merged[key]
+			if !ok {
+				item = &rrfDocument{
+					doc:       doc,
+					distance:  documentDistance(doc),
+					firstRank: rank + 1,
+				}
+				merged[key] = item
+			}
+			item.score += 1 / float64(rrfK+rank+1)
+		}
+	}
+	addRankedDocs(vectorDocs)
+	addRankedDocs(keywordDocs)
+
+	items := make([]*rrfDocument, 0, len(merged))
+	for _, item := range merged {
+		if item.doc.MetaData == nil {
+			item.doc.MetaData = map[string]any{}
+		}
+		item.doc.MetaData["hybrid_rrf_score"] = item.score
+		items = append(items, item)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].score != items[j].score {
+			return items[i].score > items[j].score
+		}
+		if items[i].distance != items[j].distance {
+			return items[i].distance < items[j].distance
+		}
+		return items[i].firstRank < items[j].firstRank
+	})
+
+	docs := make([]*schema.Document, 0, len(items))
+	for _, item := range items {
+		docs = append(docs, item.doc)
+	}
+	return docs
+}
+
+func documentUniqueKey(doc *schema.Document) string {
+	if doc == nil {
+		return ""
+	}
+	if strings.TrimSpace(doc.ID) != "" {
+		return strings.TrimSpace(doc.ID)
+	}
+	return strings.TrimSpace(doc.Content)
+}
+
+func buildRediSearchContentQuery(query string) string {
+	terms := extractKeywordTerms(query)
+	if len(terms) == 0 {
+		return ""
+	}
+
+	escaped := make([]string, 0, len(terms))
+	for _, term := range terms {
+		if rediSearchTerm := escapeRediSearchTerm(term); rediSearchTerm != "" {
+			escaped = append(escaped, rediSearchTerm)
+		}
+	}
+	if len(escaped) == 0 {
+		return ""
+	}
+	return "@content:(" + strings.Join(escaped, "|") + ")"
+}
+
+func extractKeywordTerms(query string) []string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil
+	}
+
+	stopWords := map[string]bool{
+		"这个": true, "那个": true, "它": true, "他": true, "她": true,
+		"他们": true, "她们": true, "它们": true, "怎么": true, "什么": true,
+		"多少": true, "一下": true, "请问": true, "呢": true, "吗": true,
+		"的是": true, "是什么": true, "有哪些": true,
+	}
+	seen := map[string]bool{}
+	terms := make([]string, 0, 24)
+	var current strings.Builder
+	var currentIsHan bool
+	addTerm := func(term string) {
+		term = strings.TrimSpace(term)
+		if term == "" || stopWords[term] || seen[term] {
+			return
+		}
+		if runeLen(term) < 2 && !containsDigit(term) {
+			return
+		}
+		seen[term] = true
+		terms = append(terms, term)
+	}
+	flush := func() {
+		term := strings.TrimSpace(current.String())
+		current.Reset()
+		if term == "" {
+			return
+		}
+		if currentIsHan {
+			for _, cleaned := range splitChineseKeywordRun(term) {
+				addTerm(cleaned)
+				if len(terms) >= 24 {
+					return
+				}
+			}
+			return
+		}
+		addTerm(term)
+	}
+
+	for _, r := range query {
+		if unicode.In(r, unicode.Han) {
+			if current.Len() > 0 && !currentIsHan {
+				flush()
+			}
+			currentIsHan = true
+			current.WriteRune(r)
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if current.Len() > 0 && currentIsHan {
+				flush()
+			}
+			currentIsHan = false
+			current.WriteRune(r)
+			continue
+		}
+		if strings.ContainsRune("+#/-_.", r) && current.Len() > 0 && !currentIsHan {
+			current.WriteRune(r)
+			continue
+		}
+		flush()
+		if len(terms) >= 24 {
+			return terms
+		}
+	}
+	flush()
+	if len(terms) > 24 {
+		return terms[:24]
+	}
+	return terms
+}
+
+func splitChineseKeywordRun(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+
+	for _, filler := range []string{"请问", "这个", "那个", "一下", "是什么", "有哪些", "什么", "怎么", "多少", "的吗", "呢", "吗", "的", "是", "了"} {
+		text = strings.ReplaceAll(text, filler, " ")
+	}
+
+	fields := strings.Fields(text)
+	terms := make([]string, 0, len(fields)*4)
+	for _, field := range fields {
+		runes := []rune(field)
+		if len(runes) < 2 {
+			continue
+		}
+		if len(runes) <= 6 {
+			terms = append(terms, string(runes))
+		}
+		for n := 4; n >= 2; n-- {
+			if len(runes) < n {
+				continue
+			}
+			for i := 0; i+n <= len(runes); i++ {
+				terms = append(terms, string(runes[i:i+n]))
+			}
+		}
+	}
+	return terms
+}
+
+func containsDigit(text string) bool {
+	for _, r := range text {
+		if unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+func escapeRediSearchTerm(term string) string {
+	var out strings.Builder
+	for _, r := range strings.TrimSpace(term) {
+		switch r {
+		case ',', '.', '<', '>', '{', '}', '[', ']', '"', '\'', ':', ';', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '+', '=', '~', '|', '/', '\\':
+			out.WriteRune('\\')
+			out.WriteRune(r)
+		default:
+			if unicode.IsSpace(r) {
+				out.WriteRune('\\')
+				out.WriteRune(' ')
+			} else {
+				out.WriteRune(r)
+			}
+		}
+	}
+	return out.String()
 }
 
 func documentDistance(doc *schema.Document) float64 {
@@ -1342,8 +1792,12 @@ func ragDocumentLabel(doc *schema.Document, fallbackIndex int) string {
 
 // BuildRAGPrompt 构建包含检索文档的提示词
 func BuildRAGPrompt(query string, docs []*schema.Document) string {
+	return BuildRAGPromptWithRetrievalQuery(query, query, docs)
+}
+
+func BuildRAGPromptWithRetrievalQuery(originalQuery, retrievalQuery string, docs []*schema.Document) string {
 	if len(docs) == 0 {
-		return query
+		return originalQuery
 	}
 
 	var contextText strings.Builder
@@ -1356,7 +1810,12 @@ func BuildRAGPrompt(query string, docs []*schema.Document) string {
 	}
 
 	if contextText.Len() == 0 {
-		return query
+		return originalQuery
+	}
+
+	retrievalQuery = strings.TrimSpace(retrievalQuery)
+	if retrievalQuery == "" {
+		retrievalQuery = originalQuery
 	}
 
 	prompt := fmt.Sprintf(`基于以下参考文档回答用户的问题。
@@ -1365,13 +1824,16 @@ func BuildRAGPrompt(query string, docs []*schema.Document) string {
 必须优先使用参考文档中的原文术语、数字、名称。
 如果问题包含多个要点，请逐项回答。
 不要省略数字、版本号、命令、路径。
+检索问题仅用于理解参考文档召回意图；最终回答必须围绕用户原始问题。
 
 参考文档：
 %s
 
-用户问题：%s
+检索问题：%s
 
-请提供准确、完整的回答：`, contextText.String(), query)
+用户原始问题：%s
+
+请提供准确、完整的回答：`, contextText.String(), retrievalQuery, originalQuery)
 
 	return prompt
 }

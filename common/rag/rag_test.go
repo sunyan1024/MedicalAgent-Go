@@ -194,6 +194,135 @@ func TestBuildRAGPromptReturnsQueryForEmptyContext(t *testing.T) {
 	}
 }
 
+func TestBuildRAGPromptWithRetrievalQueryKeepsOriginalQuestion(t *testing.T) {
+	prompt := BuildRAGPromptWithRetrievalQuery("那它的就业率呢", "2023届就业质量报告 就业率", []*schema.Document{
+		{
+			Content: "毕业去向落实率为 95%。",
+			MetaData: map[string]any{
+				"original_name": "2023届就业质量报告.pdf",
+			},
+		},
+	})
+
+	if !strings.Contains(prompt, "检索问题：2023届就业质量报告 就业率") {
+		t.Fatalf("prompt should include retrieval query: %s", prompt)
+	}
+	if !strings.Contains(prompt, "用户原始问题：那它的就业率呢") {
+		t.Fatalf("prompt should keep original question: %s", prompt)
+	}
+}
+
+func TestMergeRRFDocumentsDeduplicatesAndRanksSharedHitsFirst(t *testing.T) {
+	vectorDocs := []*schema.Document{
+		{ID: "a", Content: "alpha", MetaData: map[string]any{"distance": 0.1}},
+		{ID: "b", Content: "beta", MetaData: map[string]any{"distance": 0.2}},
+	}
+	keywordDocs := []*schema.Document{
+		{ID: "b", Content: "beta keyword", MetaData: map[string]any{}},
+		{ID: "c", Content: "gamma", MetaData: map[string]any{}},
+	}
+
+	got := mergeRRFDocuments(vectorDocs, keywordDocs, 60)
+
+	if len(got) != 3 {
+		t.Fatalf("merged docs length: got %d", len(got))
+	}
+	if got[0].ID != "b" {
+		t.Fatalf("shared hit should rank first, got %s", got[0].ID)
+	}
+	if score, ok := got[0].MetaData["hybrid_rrf_score"].(float64); !ok || score <= 0 {
+		t.Fatalf("missing hybrid score: %+v", got[0].MetaData)
+	}
+}
+
+func TestBuildRediSearchContentQueryEscapesSpecialCharacters(t *testing.T) {
+	got := buildRediSearchContentQuery("2023届 就业率 C++/Go")
+
+	if !strings.HasPrefix(got, "@content:(") {
+		t.Fatalf("query should target content field: %s", got)
+	}
+	if !strings.Contains(got, "2023") || !strings.Contains(got, "就业率") {
+		t.Fatalf("query should keep useful terms: %s", got)
+	}
+	if !strings.Contains(got, "C\\+\\+\\/Go") {
+		t.Fatalf("query should escape RediSearch syntax chars: %s", got)
+	}
+}
+
+func TestExtractKeywordTermsExpandsChineseQuestionIntoShortTerms(t *testing.T) {
+	got := extractKeywordTerms("请问工厂模式是什么")
+	joined := strings.Join(got, "|")
+
+	for _, want := range []string{"工厂模式", "工厂", "模式"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("terms should include %q, got %v", want, got)
+		}
+	}
+	if strings.Contains(joined, "请问") || strings.Contains(joined, "什么") {
+		t.Fatalf("terms should remove filler words, got %v", got)
+	}
+}
+
+func TestMergeRRFDocumentsWithEmptyKeywordKeepsVectorOrder(t *testing.T) {
+	vectorDocs := []*schema.Document{
+		{ID: "near", Content: "near", MetaData: map[string]any{"distance": 0.1}},
+		{ID: "far", Content: "far", MetaData: map[string]any{"distance": 0.8}},
+	}
+
+	got := mergeRRFDocuments(vectorDocs, nil, 60)
+
+	if len(got) != 2 || got[0].ID != "near" || got[1].ID != "far" {
+		t.Fatalf("empty keyword docs should preserve vector order, got %+v", got)
+	}
+}
+
+func TestParseKeywordSearchResultBuildsDocuments(t *testing.T) {
+	result := []interface{}{
+		int64(1),
+		"rag_docs:stored:abc:doc_1",
+		[]interface{}{
+			"content", "就业率为 95%",
+			"metadata", "/tmp/report.pdf",
+		},
+	}
+
+	got := parseKeywordSearchResult(result, keywordSearchTarget{
+		filename:     "stored.pdf",
+		originalName: "就业质量报告.pdf",
+	})
+
+	if len(got) != 1 {
+		t.Fatalf("docs length: got %d", len(got))
+	}
+	if got[0].ID != "rag_docs:stored:abc:doc_1" || got[0].Content != "就业率为 95%" {
+		t.Fatalf("unexpected doc: %+v", got[0])
+	}
+	if got[0].MetaData["original_name"] != "就业质量报告.pdf" {
+		t.Fatalf("missing original name: %+v", got[0].MetaData)
+	}
+	if got[0].MetaData["metadata"] != "/tmp/report.pdf" {
+		t.Fatalf("missing metadata: %+v", got[0].MetaData)
+	}
+}
+
+func TestRedisSearchTotalHitsParsesResultCount(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  any
+		want int
+	}{
+		{name: "int64", raw: []interface{}{int64(3)}, want: 3},
+		{name: "string", raw: []interface{}{"4"}, want: 4},
+		{name: "empty", raw: []interface{}{}, want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redisSearchTotalHits(tc.raw); got != tc.want {
+				t.Fatalf("total hits: got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestApplyRerankResultsSortsByScoreAndPreservesUnrankedDocs(t *testing.T) {
 	docs := []*schema.Document{
 		{ID: "a", Content: "alpha", MetaData: map[string]any{"distance": 0.1}},
@@ -244,7 +373,8 @@ func TestApplyRerankResultsIgnoresInvalidAndDuplicateIndexes(t *testing.T) {
 func TestNewRetrieveOptionsDefaultsAndNormalizesTopK(t *testing.T) {
 	opts := newRetrieveOptions(config.RagModelConfig{
 		RerankEnabled:       true,
-		RerankCandidateTopK: 2,
+		VectorTopK:          2,
+		RerankCandidateTopK: 4,
 		RerankTopK:          5,
 	})
 
@@ -257,11 +387,31 @@ func TestNewRetrieveOptionsDefaultsAndNormalizesTopK(t *testing.T) {
 	if opts.rerankBaseURL != defaultRerankBaseURL {
 		t.Fatalf("rerank base url: got %q", opts.rerankBaseURL)
 	}
+	if opts.vectorTopK != 2 {
+		t.Fatalf("vector topK: got %d", opts.vectorTopK)
+	}
+	if opts.keywordTopK != 2 {
+		t.Fatalf("keyword topK should default to vector topK, got %d", opts.keywordTopK)
+	}
 	if opts.rerankCandidateTopK != 5 || opts.rerankTopK != 5 {
-		t.Fatalf("topK should normalize candidate>=final, got candidate=%d final=%d", opts.rerankCandidateTopK, opts.rerankTopK)
+		t.Fatalf("rerank topK should normalize candidate>=final, got candidate=%d final=%d", opts.rerankCandidateTopK, opts.rerankTopK)
 	}
 	if opts.rerankTimeout != defaultRerankTimeoutSeconds*time.Second {
 		t.Fatalf("timeout: got %v", opts.rerankTimeout)
+	}
+}
+
+func TestNewRetrieveOptionsMigratesLegacyCandidateTopKToVectorTopK(t *testing.T) {
+	opts := newRetrieveOptions(config.RagModelConfig{
+		RerankCandidateTopK: 8,
+		RerankTopK:          5,
+	})
+
+	if opts.vectorTopK != 8 {
+		t.Fatalf("legacy rerankCandidateTopK should become vectorTopK, got %d", opts.vectorTopK)
+	}
+	if opts.rerankCandidateTopK != defaultRerankCandidateTopK {
+		t.Fatalf("rerank candidate topK should use new default, got %d", opts.rerankCandidateTopK)
 	}
 }
 

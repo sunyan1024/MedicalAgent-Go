@@ -19,7 +19,7 @@ import (
 const (
 	defaultRerankBaseURL        = "https://dashscope.aliyuncs.com"
 	defaultRerankModel          = "gte-rerank-v2"
-	defaultRerankCandidateTopK  = 10
+	defaultRerankCandidateTopK  = 50
 	defaultRerankTopK           = 5
 	defaultRerankTimeoutSeconds = 15
 	dashScopeRerankPath         = "/api/v1/services/rerank/text-rerank/text-rerank"

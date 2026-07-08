@@ -63,6 +63,13 @@ type RagModelConfig struct {
 	RagDimension         int    `toml:"dimension"`
 	RagDocDir            string `toml:"docDir"`
 	EnableThinking       bool   `toml:"enable_thinking"`
+	QueryRewriteEnabled  bool   `toml:"queryRewriteEnabled"`
+	QueryRewriteModel    string `toml:"queryRewriteModelName"`
+	QueryRewriteTimeout  int    `toml:"queryRewriteTimeoutSeconds"`
+	HybridEnabled        bool   `toml:"hybridRetrievalEnabled"`
+	VectorTopK           int    `toml:"vectorTopK"`
+	KeywordTopK          int    `toml:"keywordTopK"`
+	RRFK                 int    `toml:"rrfK"`
 	RerankEnabled        bool   `toml:"rerankEnabled"`
 	RerankModel          string `toml:"rerankModel"`
 	RerankBaseUrl        string `toml:"rerankBaseUrl"`

@@ -265,8 +265,11 @@ func (o *OllamaModel) GetModelType() string { return "ollama" }
 
 // =================== RAG 实现 ===================
 type AliRAGModel struct {
-	llm      model.ToolCallingChatModel
-	username string // 用于获取用户的文档
+	llm                 model.ToolCallingChatModel
+	rewriteLLM          model.ToolCallingChatModel
+	username            string // 用于获取用户的文档
+	queryRewriteEnabled bool
+	queryRewriteTimeout time.Duration
 }
 
 // NewAliRAGModel 创建并返回一个新的AliRAGModel实例
@@ -291,10 +294,131 @@ func NewAliRAGModel(ctx context.Context, username string) (*AliRAGModel, error) 
 	if err != nil {
 		return nil, fmt.Errorf("create ali rag model failed: %v", err)
 	}
+
+	var rewriteLLM model.ToolCallingChatModel
+	queryRewriteEnabled := conf.RagModelConfig.QueryRewriteEnabled
+	rewriteTimeout := time.Duration(conf.RagModelConfig.QueryRewriteTimeout) * time.Second
+	if rewriteTimeout <= 0 {
+		rewriteTimeout = 8 * time.Second
+	}
+	if queryRewriteEnabled {
+		rewriteModelName := strings.TrimSpace(conf.RagModelConfig.QueryRewriteModel)
+		if rewriteModelName == "" {
+			rewriteModelName = modelName
+		}
+		rewriteThinking := false
+		rewriteConfig := &qwen.ChatModelConfig{
+			BaseURL:        baseURL,
+			Model:          rewriteModelName,
+			APIKey:         apiKey,
+			EnableThinking: &rewriteThinking,
+		}
+		rewriteLLM, err = qwen.NewChatModel(ctx, rewriteConfig)
+		if err != nil {
+			log.Printf("[RAG][Rewrite] init failed username=%s model=%s fallback=original_query err=%v", username, rewriteModelName, err)
+			queryRewriteEnabled = false
+		}
+	}
 	return &AliRAGModel{
-		llm:      llm,
-		username: username,
+		llm:                 llm,
+		rewriteLLM:          rewriteLLM,
+		username:            username,
+		queryRewriteEnabled: queryRewriteEnabled,
+		queryRewriteTimeout: rewriteTimeout,
 	}, nil
+}
+
+func (o *AliRAGModel) rewriteRAGQuery(ctx context.Context, messages []*schema.Message, originalQuery string) string {
+	originalQuery = strings.TrimSpace(originalQuery)
+	if originalQuery == "" || !o.queryRewriteEnabled || o.rewriteLLM == nil {
+		return originalQuery
+	}
+
+	rewriteCtx, cancel := context.WithTimeout(ctx, o.queryRewriteTimeout)
+	defer cancel()
+
+	prompt := buildRAGRewritePrompt(messages)
+	rewriteStart := time.Now()
+	resp, err := o.rewriteLLM.Generate(rewriteCtx, []*schema.Message{
+		{Role: schema.User, Content: prompt},
+	})
+	if err != nil {
+		log.Printf("[RAG][Rewrite] failed username=%s fallback=original_query err=%v elapsed=%s", o.username, err, time.Since(rewriteStart))
+		return originalQuery
+	}
+	rewritten := ""
+	if resp != nil {
+		rewritten = sanitizeRewrittenQuery(resp.Content)
+	}
+	if rewritten == "" {
+		log.Printf("[RAG][Rewrite] empty username=%s fallback=original_query elapsed=%s", o.username, time.Since(rewriteStart))
+		return originalQuery
+	}
+	log.Printf("[RAG][Rewrite] success username=%s original_len=%d rewritten_len=%d elapsed=%s rewritten_preview=%q", o.username, len(originalQuery), len(rewritten), time.Since(rewriteStart), previewRAGQueryForLog(rewritten))
+	return rewritten
+}
+
+func buildRAGRewritePrompt(messages []*schema.Message) string {
+	recent := recentRAGMessages(messages, 6)
+	var history strings.Builder
+	for _, msg := range recent {
+		if msg == nil {
+			continue
+		}
+		role := "用户"
+		if msg.Role != schema.User {
+			role = "助手"
+		}
+		content := strings.TrimSpace(msg.Content)
+		if content == "" {
+			continue
+		}
+		history.WriteString(role)
+		history.WriteString("：")
+		history.WriteString(content)
+		history.WriteString("\n")
+	}
+
+	return fmt.Sprintf(`你是 RAG 检索 query 改写器。请根据最近对话，把最后一个用户问题改写成一个独立、清晰、适合检索知识库的问题。
+要求：
+1. 只输出改写后的检索问题，不要解释，不要回答问题。
+2. 消解“它、这个、那个、上面、刚才、前者、后者”等指代。
+3. 保留原问题中的实体、文件名、时间、数字、指标、限定条件。
+4. 口语化表达要改成文档中更可能出现的正式关键词。
+5. 如果最后一个用户问题已经清晰，原样输出。
+
+最近对话：
+%s
+改写后的检索问题：`, strings.TrimSpace(history.String()))
+}
+
+func recentRAGMessages(messages []*schema.Message, limit int) []*schema.Message {
+	if limit <= 0 || len(messages) <= limit {
+		return messages
+	}
+	return messages[len(messages)-limit:]
+}
+
+func sanitizeRewrittenQuery(text string) string {
+	text = strings.TrimSpace(text)
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	text = strings.TrimSpace(text)
+	for _, prefix := range []string{"改写后的检索问题：", "改写后的检索问题:", "检索问题：", "检索问题:", "query:", "Query:"} {
+		text = strings.TrimSpace(strings.TrimPrefix(text, prefix))
+	}
+	text = strings.Trim(text, "\"'“”‘’`")
+	text = strings.TrimSpace(text)
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.Trim(line, "\"'“”‘’`")
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 // GenerateResponse 使用RAG(检索增强生成)技术生成对话响应。首先尝试检索与用户问题相关的文档，
@@ -334,11 +458,12 @@ func (o *AliRAGModel) GenerateResponse(ctx context.Context, messages []*schema.M
 	}
 	lastMessage := messages[len(messages)-1]
 	query := lastMessage.Content
-	log.Printf("[RAG][Generate] query prepared username=%s query_len=%d query_preview=%q", o.username, len(query), previewRAGQueryForLog(query))
+	retrievalQuery := o.rewriteRAGQuery(ctx, messages, query)
+	log.Printf("[RAG][Generate] query prepared username=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.username, len(query), len(retrievalQuery), previewRAGQueryForLog(query), previewRAGQueryForLog(retrievalQuery))
 
 	// 3. 检索相关文档
 	retrieveStart := time.Now()
-	docs, err := ragQuery.RetrieveDocuments(ctx, query)
+	docs, err := ragQuery.RetrieveDocuments(ctx, retrievalQuery)
 	if err != nil {
 		log.Printf("[RAG][Generate] retrieve failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(retrieveStart))
 		// 检索失败，使用原始问题
@@ -354,7 +479,7 @@ func (o *AliRAGModel) GenerateResponse(ctx context.Context, messages []*schema.M
 	log.Printf("[RAG][Generate] retrieve success username=%s docs=%d elapsed=%s", o.username, len(docs), time.Since(retrieveStart))
 
 	// 4. 构建包含检索结果的提示词
-	ragPrompt := rag.BuildRAGPrompt(query, docs)
+	ragPrompt := rag.BuildRAGPromptWithRetrievalQuery(query, retrievalQuery, docs)
 	log.Printf("[RAG][Generate] prompt built username=%s prompt_len=%d docs=%d", o.username, len(ragPrompt), len(docs))
 
 	// 5. 替换最后一条消息为 RAG 提示词
@@ -468,11 +593,12 @@ func (o *AliRAGModel) StreamResponse(ctx context.Context, messages []*schema.Mes
 	}
 	lastMessage := messages[len(messages)-1]
 	query := lastMessage.Content
-	log.Printf("[RAG][Stream] query prepared username=%s query_len=%d query_preview=%q", o.username, len(query), previewRAGQueryForLog(query))
+	retrievalQuery := o.rewriteRAGQuery(ctx, messages, query)
+	log.Printf("[RAG][Stream] query prepared username=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.username, len(query), len(retrievalQuery), previewRAGQueryForLog(query), previewRAGQueryForLog(retrievalQuery))
 
 	// 3. 检索相关文档
 	retrieveStart := time.Now()
-	docs, err := ragQuery.RetrieveDocuments(ctx, query)
+	docs, err := ragQuery.RetrieveDocuments(ctx, retrievalQuery)
 	if err != nil {
 		log.Printf("[RAG][Stream] retrieve failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(retrieveStart))
 		// 检索失败，使用原始问题
@@ -484,7 +610,7 @@ func (o *AliRAGModel) StreamResponse(ctx context.Context, messages []*schema.Mes
 	log.Printf("[RAG][Stream] retrieve success username=%s docs=%d elapsed=%s", o.username, len(docs), time.Since(retrieveStart))
 
 	// 4. 构建包含检索结果的提示词
-	ragPrompt := rag.BuildRAGPrompt(query, docs)
+	ragPrompt := rag.BuildRAGPromptWithRetrievalQuery(query, retrievalQuery, docs)
 	log.Printf("[RAG][Stream] prompt built username=%s prompt_len=%d docs=%d", o.username, len(ragPrompt), len(docs))
 
 	// 5. 替换最后一条消息为 RAG 提示词
