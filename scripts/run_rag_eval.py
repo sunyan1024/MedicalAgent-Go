@@ -74,6 +74,17 @@ def parse_args() -> argparse.Namespace:
         default=0.8,
         help="Minimum retrieval_recall_at_5 when --fail-on-low-score is enabled.",
     )
+    parser.add_argument(
+        "--no-judge",
+        action="store_true",
+        help="Disable LLM-as-a-Judge evaluation.",
+    )
+    parser.add_argument(
+        "--min-judge-pass-rate",
+        type=float,
+        default=0.7,
+        help="Minimum judge_pass_rate when Judge and --fail-on-low-score are enabled.",
+    )
     return parser.parse_args()
 
 
@@ -167,6 +178,7 @@ def run_eval_batches(
     dataset: dict[str, Any],
     batch_size: int,
     timeout: int,
+    judge_enabled: bool,
 ) -> dict[str, Any]:
     cases = dataset["cases"]
     batches = split_batches(cases, batch_size)
@@ -177,7 +189,7 @@ def run_eval_batches(
         result = call_eval_api(
             base_url,
             token,
-            {"cases": batch},
+            {"cases": batch, "judge_enabled": judge_enabled},
             timeout=timeout,
         )
         validate_api_success(result)
@@ -207,6 +219,12 @@ def summarize_result_cases(
             "avg_retrieved_docs": 0,
             "avg_retrieval_latency_ms": 0,
             "avg_generation_latency_ms": 0,
+            "judge_evaluated": 0,
+            "judge_pass_rate": 0,
+            "avg_judge_correctness": 0,
+            "avg_judge_faithfulness": 0,
+            "avg_judge_relevance": 0,
+            "avg_judge_latency_ms": 0,
             "avg_latency_ms": 0,
         }
 
@@ -219,6 +237,12 @@ def summarize_result_cases(
     retrieval_latency = 0
     generation_latency = 0
     total_latency = 0
+    judge_evaluated = 0
+    judge_passes = 0
+    judge_correctness = 0.0
+    judge_faithfulness = 0.0
+    judge_relevance = 0.0
+    judge_latency = 0
 
     for i, result in enumerate(results):
         if i < len(source_cases) and source_cases[i].get("expected_sources"):
@@ -234,6 +258,14 @@ def summarize_result_cases(
         retrieval_latency += int(result.get("retrieval_latency_ms") or 0)
         generation_latency += int(result.get("generation_latency_ms") or 0)
         total_latency += int(result.get("latency_ms") or 0)
+        if result.get("judge_evaluated"):
+            judge_evaluated += 1
+            if result.get("judge_pass"):
+                judge_passes += 1
+            judge_correctness += float(result.get("judge_correctness") or 0)
+            judge_faithfulness += float(result.get("judge_faithfulness") or 0)
+            judge_relevance += float(result.get("judge_relevance") or 0)
+            judge_latency += int(result.get("judge_latency_ms") or 0)
 
     return {
         "total": total,
@@ -247,6 +279,12 @@ def summarize_result_cases(
         "avg_retrieved_docs": retrieved_docs / total,
         "avg_retrieval_latency_ms": retrieval_latency // total,
         "avg_generation_latency_ms": generation_latency // total,
+        "judge_evaluated": judge_evaluated,
+        "judge_pass_rate": judge_passes / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_correctness": judge_correctness / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_faithfulness": judge_faithfulness / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_relevance": judge_relevance / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_latency_ms": judge_latency // judge_evaluated if judge_evaluated else 0,
         "avg_latency_ms": total_latency // total,
     }
 
@@ -271,12 +309,22 @@ def print_summary(result: dict[str, Any]) -> None:
     print(f"  error_rate: {summary.get('error_rate', 0):.4f}")
     print(f"  avg_retrieval_latency_ms: {summary.get('avg_retrieval_latency_ms', 0)}")
     print(f"  avg_generation_latency_ms: {summary.get('avg_generation_latency_ms', 0)}")
+    print(f"  judge_evaluated: {summary.get('judge_evaluated', 0)}")
+    if summary.get("judge_evaluated", 0):
+        print(f"  judge_pass_rate: {summary.get('judge_pass_rate', 0):.4f}")
+        print(f"  avg_judge_correctness: {summary.get('avg_judge_correctness', 0):.4f}")
+        print(f"  avg_judge_faithfulness: {summary.get('avg_judge_faithfulness', 0):.4f}")
+        print(f"  avg_judge_relevance: {summary.get('avg_judge_relevance', 0):.4f}")
+        print(f"  avg_judge_latency_ms: {summary.get('avg_judge_latency_ms', 0)}")
+    else:
+        print("  judge: not evaluated")
     print(f"  avg_latency_ms: {summary.get('avg_latency_ms', 0)}")
 
     failed = [
         case
         for case in cases
         if case.get("error") or not case.get("answer_pass") or case.get("retrieval_rank") == 0
+        or case.get("judge_error") or (case.get("judge_evaluated") and not case.get("judge_pass"))
     ]
     if failed:
         print("\nCases needing review:")
@@ -289,6 +337,10 @@ def print_summary(result: dict[str, Any]) -> None:
                 reasons.append("answer_pass=false")
             if case.get("retrieval_rank") == 0 and case.get("retrieved_sources"):
                 reasons.append("retrieval_miss")
+            if case.get("judge_error"):
+                reasons.append(f"judge_error={case.get('judge_error')}")
+            elif case.get("judge_evaluated") and not case.get("judge_pass"):
+                reasons.append("judge_pass=false")
             print(f"  - {case_id}: {', '.join(reasons)}")
 
 
@@ -303,6 +355,8 @@ def validate_thresholds(
     result: dict[str, Any],
     min_answer_pass_rate: float,
     min_retrieval_recall: float,
+    min_judge_pass_rate: float,
+    judge_enabled: bool,
 ) -> None:
     summary = result.get("summary") or {}
     answer_pass_rate = float(summary.get("answer_pass_rate") or 0)
@@ -317,6 +371,12 @@ def validate_thresholds(
         failures.append(
             f"retrieval_recall_at_5 {retrieval_recall:.4f} < {min_retrieval_recall:.4f}"
         )
+    if judge_enabled and int(summary.get("judge_evaluated") or 0) > 0:
+        judge_pass_rate = float(summary.get("judge_pass_rate") or 0)
+        if judge_pass_rate < min_judge_pass_rate:
+            failures.append(
+                f"judge_pass_rate {judge_pass_rate:.4f} < {min_judge_pass_rate:.4f}"
+            )
     if failures:
         raise RuntimeError("; ".join(failures))
 
@@ -335,6 +395,7 @@ def main() -> int:
             dataset,
             batch_size=args.batch_size,
             timeout=args.timeout,
+            judge_enabled=not args.no_judge,
         )
         save_result(Path(args.output), result)
         print_summary(result)
@@ -345,6 +406,8 @@ def main() -> int:
                 result,
                 args.min_answer_pass_rate,
                 args.min_retrieval_recall,
+                args.min_judge_pass_rate,
+                not args.no_judge,
             )
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)

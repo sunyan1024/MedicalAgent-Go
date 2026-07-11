@@ -17,7 +17,8 @@ import (
 const MaxEvalCases = 50
 
 type EvalRequest struct {
-	Cases []EvalCaseRequest `json:"cases" binding:"required"`
+	Cases        []EvalCaseRequest `json:"cases" binding:"required"`
+	JudgeEnabled *bool             `json:"judge_enabled,omitempty"`
 }
 
 type EvalCaseRequest struct {
@@ -39,6 +40,12 @@ type Summary struct {
 	AvgRetrievedDocs       float64 `json:"avg_retrieved_docs"`
 	AvgRetrievalLatencyMS  int64   `json:"avg_retrieval_latency_ms"`
 	AvgGenerationLatencyMS int64   `json:"avg_generation_latency_ms"`
+	JudgeEvaluated         int     `json:"judge_evaluated"`
+	JudgePassRate          float64 `json:"judge_pass_rate"`
+	AvgJudgeCorrectness    float64 `json:"avg_judge_correctness"`
+	AvgJudgeFaithfulness   float64 `json:"avg_judge_faithfulness"`
+	AvgJudgeRelevance      float64 `json:"avg_judge_relevance"`
+	AvgJudgeLatencyMS      int64   `json:"avg_judge_latency_ms"`
 	AvgLatencyMS           int64   `json:"avg_latency_ms"`
 }
 
@@ -58,6 +65,14 @@ type CaseResult struct {
 	Answer              string   `json:"answer"`
 	RetrievalLatencyMS  int64    `json:"retrieval_latency_ms"`
 	GenerationLatencyMS int64    `json:"generation_latency_ms"`
+	JudgeEvaluated      bool     `json:"judge_evaluated"`
+	JudgePass           bool     `json:"judge_pass"`
+	JudgeCorrectness    float64  `json:"judge_correctness"`
+	JudgeFaithfulness   float64  `json:"judge_faithfulness"`
+	JudgeRelevance      float64  `json:"judge_relevance"`
+	JudgeReason         string   `json:"judge_reason,omitempty"`
+	JudgeLatencyMS      int64    `json:"judge_latency_ms"`
+	JudgeError          string   `json:"judge_error,omitempty"`
 	LatencyMS           int64    `json:"latency_ms"`
 	Error               string   `json:"error,omitempty"`
 }
@@ -81,6 +96,12 @@ func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalRespo
 
 	query, queryErr := rag.NewRAGQuery(ctx, username)
 	chatModel, chatErr := newRAGChatModel(ctx)
+	judgeEnabled := req.JudgeEnabled == nil || *req.JudgeEnabled
+	var judge judgeModel
+	var judgeErr error
+	if judgeEnabled {
+		judge, judgeErr = newJudgeModel(ctx)
+	}
 
 	results := make([]CaseResult, 0, len(req.Cases))
 	for _, c := range req.Cases {
@@ -139,6 +160,27 @@ func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalRespo
 		result.MissingKeywords = check.MissingKeywords
 		result.ForbiddenHits = check.ForbiddenHits
 		result.ValidationErrors = check.ValidationErrors
+
+		if judgeEnabled && strings.TrimSpace(c.ExpectedAnswer) != "" {
+			judgeStart := time.Now()
+			if judgeErr != nil {
+				result.JudgeError = fmt.Sprintf("judge model init failed: %v", judgeErr)
+			} else {
+				score, err := runJudge(ctx, judge, c, result.Answer, docs)
+				if err != nil {
+					result.JudgeError = err.Error()
+				} else {
+					result.JudgeEvaluated = true
+					result.JudgeCorrectness = score.Correctness
+					result.JudgeFaithfulness = score.Faithfulness
+					result.JudgeRelevance = score.Relevance
+					result.JudgeReason = score.Reason
+					threshold := judgeThreshold()
+					result.JudgePass = judgePassed(score, threshold)
+				}
+			}
+			result.JudgeLatencyMS = elapsedMS(judgeStart)
+		}
 		result.LatencyMS = elapsedMS(caseStart)
 		results = append(results, result)
 	}
@@ -293,6 +335,11 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 	var totalRetrievedDocs int
 	var totalRetrievalLatency int64
 	var totalGenerationLatency int64
+	var judgePasses int
+	var totalJudgeCorrectness float64
+	var totalJudgeFaithfulness float64
+	var totalJudgeRelevance float64
+	var totalJudgeLatency int64
 	var totalLatency int64
 	var mrrSum float64
 
@@ -313,6 +360,16 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 		totalRetrievedDocs += result.RetrievedDocCount
 		totalRetrievalLatency += result.RetrievalLatencyMS
 		totalGenerationLatency += result.GenerationLatencyMS
+		if result.JudgeEvaluated {
+			summary.JudgeEvaluated++
+			if result.JudgePass {
+				judgePasses++
+			}
+			totalJudgeCorrectness += result.JudgeCorrectness
+			totalJudgeFaithfulness += result.JudgeFaithfulness
+			totalJudgeRelevance += result.JudgeRelevance
+			totalJudgeLatency += result.JudgeLatencyMS
+		}
 		totalLatency += result.LatencyMS
 	}
 
@@ -325,6 +382,14 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 	summary.AvgRetrievedDocs = float64(totalRetrievedDocs) / float64(len(results))
 	summary.AvgRetrievalLatencyMS = totalRetrievalLatency / int64(len(results))
 	summary.AvgGenerationLatencyMS = totalGenerationLatency / int64(len(results))
+	if summary.JudgeEvaluated > 0 {
+		count := float64(summary.JudgeEvaluated)
+		summary.JudgePassRate = float64(judgePasses) / count
+		summary.AvgJudgeCorrectness = totalJudgeCorrectness / count
+		summary.AvgJudgeFaithfulness = totalJudgeFaithfulness / count
+		summary.AvgJudgeRelevance = totalJudgeRelevance / count
+		summary.AvgJudgeLatencyMS = totalJudgeLatency / int64(summary.JudgeEvaluated)
+	}
 	summary.AvgLatencyMS = totalLatency / int64(len(results))
 	return summary
 }
