@@ -1,7 +1,6 @@
 package aihelper
 
 import (
-	"GoAI/common/rag"
 	"GoAI/config"
 	"context"
 	"encoding/json"
@@ -14,6 +13,7 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/ollama"
 	"github.com/cloudwego/eino-ext/components/model/qwen"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -270,6 +270,9 @@ type AliRAGModel struct {
 	username            string // 用于获取用户的文档
 	queryRewriteEnabled bool
 	queryRewriteTimeout time.Duration
+	ragGenerateWorkflow compose.Runnable[[]*schema.Message, *schema.Message]
+	ragPrepareWorkflow  compose.Runnable[[]*schema.Message, *ragWorkflowState]
+	newRAGQuery         ragNewQueryFunc
 }
 
 // NewAliRAGModel 创建并返回一个新的AliRAGModel实例
@@ -319,13 +322,18 @@ func NewAliRAGModel(ctx context.Context, username string) (*AliRAGModel, error) 
 			queryRewriteEnabled = false
 		}
 	}
-	return &AliRAGModel{
+	ragModel := &AliRAGModel{
 		llm:                 llm,
 		rewriteLLM:          rewriteLLM,
 		username:            username,
 		queryRewriteEnabled: queryRewriteEnabled,
 		queryRewriteTimeout: rewriteTimeout,
-	}, nil
+		newRAGQuery:         defaultRAGNewQuery,
+	}
+	if err := ragModel.compileRAGWorkflows(ctx); err != nil {
+		return nil, err
+	}
+	return ragModel, nil
 }
 
 func (o *AliRAGModel) rewriteRAGQuery(ctx context.Context, messages []*schema.Message, originalQuery string) string {
@@ -435,73 +443,18 @@ func sanitizeRewrittenQuery(text string) string {
 //	error: 错误信息，生成失败时返回
 func (o *AliRAGModel) GenerateResponse(ctx context.Context, messages []*schema.Message) (*schema.Message, error) {
 	start := time.Now()
-	log.Printf("[RAG][Generate] start username=%s messages=%d", o.username, len(messages))
+	log.Printf("[RAG][Generate] start username=%s messages=%d workflow=true", o.username, len(messages))
 
-	// 1. 创建 RAG 查询器
-	ragQuery, err := rag.NewRAGQuery(ctx, o.username)
+	resp, err := o.ragGenerateWorkflow.Invoke(ctx, messages)
 	if err != nil {
-		log.Printf("[RAG][Generate] query init failed username=%s fallback=llm err=%v", o.username, err)
-		// 如果用户没有上传文件，直接使用原始问题
-		llmStart := time.Now()
-		resp, err := o.llm.Generate(ctx, messages)
-		if err != nil {
-			log.Printf("[RAG][Generate] fallback llm failed username=%s err=%v elapsed=%s", o.username, err, time.Since(llmStart))
-			return nil, fmt.Errorf("ali rag generate failed: %v", err)
-		}
-		log.Printf("[RAG][Generate] fallback llm success username=%s elapsed=%s total_elapsed=%s", o.username, time.Since(llmStart), time.Since(start))
-		return resp, nil
-	}
-
-	// 2. 获取用户最后一条消息作为查询
-	if len(messages) == 0 {
-		return nil, fmt.Errorf("no messages provided")
-	}
-	lastMessage := messages[len(messages)-1]
-	query := lastMessage.Content
-	retrievalQuery := o.rewriteRAGQuery(ctx, messages, query)
-	log.Printf("[RAG][Generate] query prepared username=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.username, len(query), len(retrievalQuery), previewRAGQueryForLog(query), previewRAGQueryForLog(retrievalQuery))
-
-	// 3. 检索相关文档
-	retrieveStart := time.Now()
-	docs, err := ragQuery.RetrieveDocuments(ctx, retrievalQuery)
-	if err != nil {
-		log.Printf("[RAG][Generate] retrieve failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(retrieveStart))
-		// 检索失败，使用原始问题
-		llmStart := time.Now()
-		resp, err := o.llm.Generate(ctx, messages)
-		if err != nil {
-			log.Printf("[RAG][Generate] fallback llm failed username=%s err=%v elapsed=%s", o.username, err, time.Since(llmStart))
-			return nil, fmt.Errorf("ali rag generate failed: %v", err)
-		}
-		log.Printf("[RAG][Generate] fallback llm success username=%s elapsed=%s total_elapsed=%s", o.username, time.Since(llmStart), time.Since(start))
-		return resp, nil
-	}
-	log.Printf("[RAG][Generate] retrieve success username=%s docs=%d elapsed=%s", o.username, len(docs), time.Since(retrieveStart))
-
-	// 4. 构建包含检索结果的提示词
-	ragPrompt := rag.BuildRAGPromptWithRetrievalQuery(query, retrievalQuery, docs)
-	log.Printf("[RAG][Generate] prompt built username=%s prompt_len=%d docs=%d", o.username, len(ragPrompt), len(docs))
-
-	// 5. 替换最后一条消息为 RAG 提示词
-	ragMessages := make([]*schema.Message, len(messages))
-	copy(ragMessages, messages)
-	ragMessages[len(ragMessages)-1] = &schema.Message{
-		Role:    schema.User,
-		Content: ragPrompt,
-	}
-
-	// 6. 调用 LLM 生成回答
-	llmStart := time.Now()
-	resp, err := o.llm.Generate(ctx, ragMessages)
-	if err != nil {
-		log.Printf("[RAG][Generate] llm failed username=%s err=%v elapsed=%s", o.username, err, time.Since(llmStart))
+		log.Printf("[RAG][Generate] workflow failed username=%s err=%v elapsed=%s", o.username, err, time.Since(start))
 		return nil, fmt.Errorf("ali rag generate failed: %v", err)
 	}
 	respLen := 0
 	if resp != nil {
 		respLen = len(resp.Content)
 	}
-	log.Printf("[RAG][Generate] success username=%s docs=%d response_len=%d llm_elapsed=%s total_elapsed=%s", o.username, len(docs), respLen, time.Since(llmStart), time.Since(start))
+	log.Printf("[RAG][Generate] success username=%s response_len=%d total_elapsed=%s", o.username, respLen, time.Since(start))
 	return resp, nil
 }
 
@@ -574,79 +527,19 @@ func (o *AliRAGModel) llmStream(ctx context.Context, messages []*schema.Message,
 //   - 回调函数cb会实时接收流式响应片段
 func (o *AliRAGModel) StreamResponse(ctx context.Context, messages []*schema.Message, cb StreamCallback) (string, error) {
 	start := time.Now()
-	log.Printf("[RAG][Stream] start username=%s messages=%d", o.username, len(messages))
+	log.Printf("[RAG][Stream] start username=%s messages=%d workflow=true", o.username, len(messages))
 
-	// 1. 创建 RAG 查询器
-	ragQuery, err := rag.NewRAGQuery(ctx, o.username)
+	state, err := o.ragPrepareWorkflow.Invoke(ctx, messages)
 	if err != nil {
-		log.Printf("[RAG][Stream] query init failed username=%s fallback=llm err=%v", o.username, err)
-		// 如果用户没有上传文件，直接使用原始问题
-		// return o.streamWithoutRAG(ctx, messages, cb)
-		content, streamErr := o.llmStream(ctx, messages, cb)
-		log.Printf("[RAG][Stream] fallback finished username=%s response_len=%d err=%v total_elapsed=%s", o.username, len(content), streamErr, time.Since(start))
-		return content, streamErr
+		log.Printf("[RAG][Stream] workflow prepare failed username=%s err=%v elapsed=%s", o.username, err, time.Since(start))
+		return "", err
 	}
-
-	// 2. 获取用户最后一条消息作为查询
-	if len(messages) == 0 {
-		return "", fmt.Errorf("no messages provided")
+	ragMessages := state.MessagesForLLM
+	if len(ragMessages) == 0 {
+		ragMessages = messages
 	}
-	lastMessage := messages[len(messages)-1]
-	query := lastMessage.Content
-	retrievalQuery := o.rewriteRAGQuery(ctx, messages, query)
-	log.Printf("[RAG][Stream] query prepared username=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.username, len(query), len(retrievalQuery), previewRAGQueryForLog(query), previewRAGQueryForLog(retrievalQuery))
-
-	// 3. 检索相关文档
-	retrieveStart := time.Now()
-	docs, err := ragQuery.RetrieveDocuments(ctx, retrievalQuery)
-	if err != nil {
-		log.Printf("[RAG][Stream] retrieve failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(retrieveStart))
-		// 检索失败，使用原始问题
-		// return o.streamWithoutRAG(ctx, messages, cb)
-		content, streamErr := o.llmStream(ctx, messages, cb)
-		log.Printf("[RAG][Stream] fallback finished username=%s response_len=%d err=%v total_elapsed=%s", o.username, len(content), streamErr, time.Since(start))
-		return content, streamErr
-	}
-	log.Printf("[RAG][Stream] retrieve success username=%s docs=%d elapsed=%s", o.username, len(docs), time.Since(retrieveStart))
-
-	// 4. 构建包含检索结果的提示词
-	ragPrompt := rag.BuildRAGPromptWithRetrievalQuery(query, retrievalQuery, docs)
-	log.Printf("[RAG][Stream] prompt built username=%s prompt_len=%d docs=%d", o.username, len(ragPrompt), len(docs))
-
-	// 5. 替换最后一条消息为 RAG 提示词
-	ragMessages := make([]*schema.Message, len(messages))
-	copy(ragMessages, messages)
-	ragMessages[len(ragMessages)-1] = &schema.Message{
-		Role:    schema.User,
-		Content: ragPrompt,
-	}
-
-	// 6. 流式调用 LLM
-	// stream, err := o.llm.Stream(ctx, ragMessages)
-	// if err != nil {
-	// 	return "", fmt.Errorf("ali rag stream failed: %v", err)
-	// }
-	// defer stream.Close()
-
-	// var fullResp strings.Builder
-
-	// for {
-	// 	msg, err := stream.Recv()
-	// 	if err == io.EOF {
-	// 		break
-	// 	}
-	// 	if err != nil {
-	// 		return "", fmt.Errorf("ali rag stream recv failed: %v", err)
-	// 	}
-	// 	if len(msg.Content) > 0 {
-	// 		fullResp.WriteString(msg.Content)
-	// 		cb(msg.Content)
-	// 	}
-	// }
-
-	// return fullResp.String(), nil
 	content, streamErr := o.llmStream(ctx, ragMessages, cb)
-	log.Printf("[RAG][Stream] finished username=%s docs=%d response_len=%d err=%v total_elapsed=%s", o.username, len(docs), len(content), streamErr, time.Since(start))
+	log.Printf("[RAG][Stream] finished username=%s docs=%d fallback=%v response_len=%d err=%v total_elapsed=%s", o.username, len(state.Docs), state.Fallback, len(content), streamErr, time.Since(start))
 	return content, streamErr
 }
 
