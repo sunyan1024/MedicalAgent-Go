@@ -221,9 +221,10 @@ def summarize_result_cases(
             "avg_generation_latency_ms": 0,
             "judge_evaluated": 0,
             "judge_pass_rate": 0,
-            "avg_judge_correctness": 0,
-            "avg_judge_faithfulness": 0,
-            "avg_judge_relevance": 0,
+            "avg_judge_score": 0,
+            "avg_judge_faithfulness_score": 0,
+            "avg_judge_answer_relevance_score": 0,
+            "avg_judge_context_precision_score": 0,
             "avg_judge_latency_ms": 0,
             "avg_latency_ms": 0,
         }
@@ -239,9 +240,10 @@ def summarize_result_cases(
     total_latency = 0
     judge_evaluated = 0
     judge_passes = 0
-    judge_correctness = 0.0
-    judge_faithfulness = 0.0
-    judge_relevance = 0.0
+    judge_score = 0
+    judge_faithfulness_score = 0
+    judge_answer_relevance_score = 0
+    judge_context_precision_score = 0
     judge_latency = 0
 
     for i, result in enumerate(results):
@@ -262,9 +264,10 @@ def summarize_result_cases(
             judge_evaluated += 1
             if result.get("judge_pass"):
                 judge_passes += 1
-            judge_correctness += float(result.get("judge_correctness") or 0)
-            judge_faithfulness += float(result.get("judge_faithfulness") or 0)
-            judge_relevance += float(result.get("judge_relevance") or 0)
+            judge_score += int(result.get("judge_score") or 0)
+            judge_faithfulness_score += int(result.get("judge_faithfulness_score") or 0)
+            judge_answer_relevance_score += int(result.get("judge_answer_relevance_score") or 0)
+            judge_context_precision_score += int(result.get("judge_context_precision_score") or 0)
             judge_latency += int(result.get("judge_latency_ms") or 0)
 
     return {
@@ -281,9 +284,10 @@ def summarize_result_cases(
         "avg_generation_latency_ms": generation_latency // total,
         "judge_evaluated": judge_evaluated,
         "judge_pass_rate": judge_passes / judge_evaluated if judge_evaluated else 0,
-        "avg_judge_correctness": judge_correctness / judge_evaluated if judge_evaluated else 0,
-        "avg_judge_faithfulness": judge_faithfulness / judge_evaluated if judge_evaluated else 0,
-        "avg_judge_relevance": judge_relevance / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_score": judge_score / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_faithfulness_score": judge_faithfulness_score / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_answer_relevance_score": judge_answer_relevance_score / judge_evaluated if judge_evaluated else 0,
+        "avg_judge_context_precision_score": judge_context_precision_score / judge_evaluated if judge_evaluated else 0,
         "avg_judge_latency_ms": judge_latency // judge_evaluated if judge_evaluated else 0,
         "avg_latency_ms": total_latency // total,
     }
@@ -312,9 +316,10 @@ def print_summary(result: dict[str, Any]) -> None:
     print(f"  judge_evaluated: {summary.get('judge_evaluated', 0)}")
     if summary.get("judge_evaluated", 0):
         print(f"  judge_pass_rate: {summary.get('judge_pass_rate', 0):.4f}")
-        print(f"  avg_judge_correctness: {summary.get('avg_judge_correctness', 0):.4f}")
-        print(f"  avg_judge_faithfulness: {summary.get('avg_judge_faithfulness', 0):.4f}")
-        print(f"  avg_judge_relevance: {summary.get('avg_judge_relevance', 0):.4f}")
+        print(f"  avg_judge_score: {summary.get('avg_judge_score', 0):.4f}")
+        print(f"  avg_judge_faithfulness_score: {summary.get('avg_judge_faithfulness_score', 0):.4f}")
+        print(f"  avg_judge_answer_relevance_score: {summary.get('avg_judge_answer_relevance_score', 0):.4f}")
+        print(f"  avg_judge_context_precision_score: {summary.get('avg_judge_context_precision_score', 0):.4f}")
         print(f"  avg_judge_latency_ms: {summary.get('avg_judge_latency_ms', 0)}")
     else:
         print("  judge: not evaluated")
@@ -324,7 +329,8 @@ def print_summary(result: dict[str, Any]) -> None:
         case
         for case in cases
         if case.get("error") or not case.get("answer_pass") or case.get("retrieval_rank") == 0
-        or case.get("judge_error") or (case.get("judge_evaluated") and not case.get("judge_pass"))
+        or case.get("judge_error") or case.get("judge_warning")
+        or (case.get("judge_evaluated") and not case.get("judge_pass"))
     ]
     if failed:
         print("\nCases needing review:")
@@ -341,6 +347,8 @@ def print_summary(result: dict[str, Any]) -> None:
                 reasons.append(f"judge_error={case.get('judge_error')}")
             elif case.get("judge_evaluated") and not case.get("judge_pass"):
                 reasons.append("judge_pass=false")
+            if case.get("judge_warning"):
+                reasons.append(f"judge_warning={case.get('judge_warning')}")
             print(f"  - {case_id}: {', '.join(reasons)}")
 
 

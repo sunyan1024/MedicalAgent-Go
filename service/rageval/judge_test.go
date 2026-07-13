@@ -23,11 +23,11 @@ func (s stubJudgeModel) Generate(context.Context, []*schema.Message, ...model.Op
 }
 
 func TestParseJudgeScore(t *testing.T) {
-	got, err := parseJudgeScore("```json\n{\"correctness\":0.9,\"faithfulness\":0.8,\"relevance\":0.7,\"reason\":\"supported\"}\n```")
+	got, err := parseJudgeScore(`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"supported"}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Correctness != 0.9 || got.Faithfulness != 0.8 || got.Relevance != 0.7 || got.Reason != "supported" {
+	if got.Score != 4 || !got.Pass || got.FaithfulnessScore != 5 || got.AnswerRelevanceScore != 4 || got.ContextPrecisionScore != 3 || got.Reason != "supported" {
 		t.Fatalf("unexpected score: %+v", got)
 	}
 }
@@ -35,9 +35,14 @@ func TestParseJudgeScore(t *testing.T) {
 func TestParseJudgeScoreRejectsInvalidResponses(t *testing.T) {
 	tests := []string{
 		`not json`,
-		`{"correctness":1.1,"faithfulness":0.8,"relevance":0.7,"reason":"bad"}`,
-		`{"correctness":0.8,"faithfulness":0.8,"reason":"missing relevance"}`,
-		`{"correctness":0.8,"faithfulness":0.8,"relevance":0.8,"reason":""}`,
+		"```json\n{\"score\":4,\"pass\":true,\"faithfulness_score\":5,\"answer_relevance_score\":4,\"context_precision_score\":3,\"reason\":\"bad wrapper\"}\n```",
+		`{"score":6,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"out of range"}`,
+		`{"score":4.5,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"decimal"}`,
+		`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"reason":"missing context score"}`,
+		`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":""}`,
+		`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"","extra":1}`,
+		`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"ok"} trailing`,
+		`{"score":4,"pass":true,"faithfulness_score":5,"answer_relevance_score":4,"context_precision_score":3,"reason":"ok"} {}`,
 	}
 	for _, input := range tests {
 		if _, err := parseJudgeScore(input); err == nil {
@@ -53,26 +58,26 @@ func TestRunJudgeReturnsModelError(t *testing.T) {
 	}
 }
 
-func TestJudgePassedRequiresEveryDimensionAtThreshold(t *testing.T) {
-	if !judgePassed(judgeScore{Correctness: 0.7, Faithfulness: 0.8, Relevance: 0.9}, 0.7) {
-		t.Fatal("expected score at threshold to pass")
+func TestJudgeWarningAcceptsModelPassAndReportsConflict(t *testing.T) {
+	if warning := judgeWarning(judgeScore{Score: 4, Pass: true}, 4); warning != "" {
+		t.Fatalf("unexpected warning: %s", warning)
 	}
-	if judgePassed(judgeScore{Correctness: 0.69, Faithfulness: 1, Relevance: 1}, 0.7) {
-		t.Fatal("expected one dimension below threshold to fail")
+	if warning := judgeWarning(judgeScore{Score: 2, Pass: true}, 4); warning == "" {
+		t.Fatal("expected warning for conflicting model pass")
 	}
 }
 
 func TestSummarizeJudgeResults(t *testing.T) {
 	results := []CaseResult{
-		{JudgeEvaluated: true, JudgePass: true, JudgeCorrectness: 0.9, JudgeFaithfulness: 0.8, JudgeRelevance: 0.7, JudgeLatencyMS: 20},
-		{JudgeEvaluated: true, JudgePass: false, JudgeCorrectness: 0.5, JudgeFaithfulness: 0.6, JudgeRelevance: 0.7, JudgeLatencyMS: 40},
+		{JudgeEvaluated: true, JudgePass: true, JudgeScore: 5, JudgeFaithfulnessScore: 4, JudgeAnswerRelevanceScore: 3, JudgeContextPrecisionScore: 2, JudgeLatencyMS: 20},
+		{JudgeEvaluated: true, JudgePass: false, JudgeScore: 3, JudgeFaithfulnessScore: 2, JudgeAnswerRelevanceScore: 3, JudgeContextPrecisionScore: 4, JudgeLatencyMS: 40},
 		{JudgeError: "failed"},
 	}
 	got := summarize(results, make([]EvalCaseRequest, len(results)))
 	if got.JudgeEvaluated != 2 || got.JudgePassRate != 0.5 {
 		t.Fatalf("unexpected judge summary: %+v", got)
 	}
-	if got.AvgJudgeCorrectness != 0.7 || got.AvgJudgeFaithfulness != 0.7 || got.AvgJudgeRelevance != 0.7 || got.AvgJudgeLatencyMS != 30 {
+	if got.AvgJudgeScore != 4 || got.AvgJudgeFaithfulnessScore != 3 || got.AvgJudgeAnswerRelevanceScore != 3 || got.AvgJudgeContextPrecisionScore != 3 || got.AvgJudgeLatencyMS != 30 {
 		t.Fatalf("unexpected judge averages: %+v", got)
 	}
 }

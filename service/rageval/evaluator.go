@@ -31,50 +31,53 @@ type EvalCaseRequest struct {
 }
 
 type Summary struct {
-	Total                  int     `json:"total"`
-	RetrievalEvaluated     int     `json:"retrieval_evaluated"`
-	RetrievalRecallAt5     float64 `json:"retrieval_recall_at_5"`
-	MRR                    float64 `json:"mrr"`
-	AnswerPassRate         float64 `json:"answer_pass_rate"`
-	ErrorRate              float64 `json:"error_rate"`
-	AvgRetrievedDocs       float64 `json:"avg_retrieved_docs"`
-	AvgRetrievalLatencyMS  int64   `json:"avg_retrieval_latency_ms"`
-	AvgGenerationLatencyMS int64   `json:"avg_generation_latency_ms"`
-	JudgeEvaluated         int     `json:"judge_evaluated"`
-	JudgePassRate          float64 `json:"judge_pass_rate"`
-	AvgJudgeCorrectness    float64 `json:"avg_judge_correctness"`
-	AvgJudgeFaithfulness   float64 `json:"avg_judge_faithfulness"`
-	AvgJudgeRelevance      float64 `json:"avg_judge_relevance"`
-	AvgJudgeLatencyMS      int64   `json:"avg_judge_latency_ms"`
-	AvgLatencyMS           int64   `json:"avg_latency_ms"`
+	Total                         int     `json:"total"`
+	RetrievalEvaluated            int     `json:"retrieval_evaluated"`
+	RetrievalRecallAt5            float64 `json:"retrieval_recall_at_5"`
+	MRR                           float64 `json:"mrr"`
+	AnswerPassRate                float64 `json:"answer_pass_rate"`
+	ErrorRate                     float64 `json:"error_rate"`
+	AvgRetrievedDocs              float64 `json:"avg_retrieved_docs"`
+	AvgRetrievalLatencyMS         int64   `json:"avg_retrieval_latency_ms"`
+	AvgGenerationLatencyMS        int64   `json:"avg_generation_latency_ms"`
+	JudgeEvaluated                int     `json:"judge_evaluated"`
+	JudgePassRate                 float64 `json:"judge_pass_rate"`
+	AvgJudgeScore                 float64 `json:"avg_judge_score"`
+	AvgJudgeFaithfulnessScore     float64 `json:"avg_judge_faithfulness_score"`
+	AvgJudgeAnswerRelevanceScore  float64 `json:"avg_judge_answer_relevance_score"`
+	AvgJudgeContextPrecisionScore float64 `json:"avg_judge_context_precision_score"`
+	AvgJudgeLatencyMS             int64   `json:"avg_judge_latency_ms"`
+	AvgLatencyMS                  int64   `json:"avg_latency_ms"`
 }
 
 type CaseResult struct {
-	ID                  string   `json:"id"`
-	Question            string   `json:"question"`
-	ExpectedAnswer      string   `json:"expected_answer,omitempty"`
-	RetrievedSources    []string `json:"retrieved_sources"`
-	RetrievedDocCount   int      `json:"retrieved_doc_count"`
-	RetrievalHit        bool     `json:"retrieval_hit"`
-	RetrievalRank       int      `json:"retrieval_rank,omitempty"`
-	RetrievalScore      float64  `json:"retrieval_score"`
-	AnswerPass          bool     `json:"answer_pass"`
-	MissingKeywords     []string `json:"missing_keywords,omitempty"`
-	ForbiddenHits       []string `json:"forbidden_hits,omitempty"`
-	ValidationErrors    []string `json:"validation_errors,omitempty"`
-	Answer              string   `json:"answer"`
-	RetrievalLatencyMS  int64    `json:"retrieval_latency_ms"`
-	GenerationLatencyMS int64    `json:"generation_latency_ms"`
-	JudgeEvaluated      bool     `json:"judge_evaluated"`
-	JudgePass           bool     `json:"judge_pass"`
-	JudgeCorrectness    float64  `json:"judge_correctness"`
-	JudgeFaithfulness   float64  `json:"judge_faithfulness"`
-	JudgeRelevance      float64  `json:"judge_relevance"`
-	JudgeReason         string   `json:"judge_reason,omitempty"`
-	JudgeLatencyMS      int64    `json:"judge_latency_ms"`
-	JudgeError          string   `json:"judge_error,omitempty"`
-	LatencyMS           int64    `json:"latency_ms"`
-	Error               string   `json:"error,omitempty"`
+	ID                         string   `json:"id"`
+	Question                   string   `json:"question"`
+	ExpectedAnswer             string   `json:"expected_answer,omitempty"`
+	RetrievedSources           []string `json:"retrieved_sources"`
+	RetrievedDocCount          int      `json:"retrieved_doc_count"`
+	RetrievalHit               bool     `json:"retrieval_hit"`
+	RetrievalRank              int      `json:"retrieval_rank,omitempty"`
+	RetrievalScore             float64  `json:"retrieval_score"`
+	AnswerPass                 bool     `json:"answer_pass"`
+	MissingKeywords            []string `json:"missing_keywords,omitempty"`
+	ForbiddenHits              []string `json:"forbidden_hits,omitempty"`
+	ValidationErrors           []string `json:"validation_errors,omitempty"`
+	Answer                     string   `json:"answer"`
+	RetrievalLatencyMS         int64    `json:"retrieval_latency_ms"`
+	GenerationLatencyMS        int64    `json:"generation_latency_ms"`
+	JudgeEvaluated             bool     `json:"judge_evaluated"`
+	JudgePass                  bool     `json:"judge_pass"`
+	JudgeScore                 int      `json:"judge_score"`
+	JudgeFaithfulnessScore     int      `json:"judge_faithfulness_score"`
+	JudgeAnswerRelevanceScore  int      `json:"judge_answer_relevance_score"`
+	JudgeContextPrecisionScore int      `json:"judge_context_precision_score"`
+	JudgeReason                string   `json:"judge_reason,omitempty"`
+	JudgeWarning               string   `json:"judge_warning,omitempty"`
+	JudgeLatencyMS             int64    `json:"judge_latency_ms"`
+	JudgeError                 string   `json:"judge_error,omitempty"`
+	LatencyMS                  int64    `json:"latency_ms"`
+	Error                      string   `json:"error,omitempty"`
 }
 
 type EvalResponse struct {
@@ -171,12 +174,14 @@ func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalRespo
 					result.JudgeError = err.Error()
 				} else {
 					result.JudgeEvaluated = true
-					result.JudgeCorrectness = score.Correctness
-					result.JudgeFaithfulness = score.Faithfulness
-					result.JudgeRelevance = score.Relevance
+					result.JudgeScore = score.Score
+					result.JudgePass = score.Pass
+					result.JudgeFaithfulnessScore = score.FaithfulnessScore
+					result.JudgeAnswerRelevanceScore = score.AnswerRelevanceScore
+					result.JudgeContextPrecisionScore = score.ContextPrecisionScore
 					result.JudgeReason = score.Reason
 					threshold := judgeThreshold()
-					result.JudgePass = judgePassed(score, threshold)
+					result.JudgeWarning = judgeWarning(score, threshold)
 				}
 			}
 			result.JudgeLatencyMS = elapsedMS(judgeStart)
@@ -336,9 +341,10 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 	var totalRetrievalLatency int64
 	var totalGenerationLatency int64
 	var judgePasses int
-	var totalJudgeCorrectness float64
-	var totalJudgeFaithfulness float64
-	var totalJudgeRelevance float64
+	var totalJudgeScore int
+	var totalJudgeFaithfulnessScore int
+	var totalJudgeAnswerRelevanceScore int
+	var totalJudgeContextPrecisionScore int
 	var totalJudgeLatency int64
 	var totalLatency int64
 	var mrrSum float64
@@ -365,9 +371,10 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 			if result.JudgePass {
 				judgePasses++
 			}
-			totalJudgeCorrectness += result.JudgeCorrectness
-			totalJudgeFaithfulness += result.JudgeFaithfulness
-			totalJudgeRelevance += result.JudgeRelevance
+			totalJudgeScore += result.JudgeScore
+			totalJudgeFaithfulnessScore += result.JudgeFaithfulnessScore
+			totalJudgeAnswerRelevanceScore += result.JudgeAnswerRelevanceScore
+			totalJudgeContextPrecisionScore += result.JudgeContextPrecisionScore
 			totalJudgeLatency += result.JudgeLatencyMS
 		}
 		totalLatency += result.LatencyMS
@@ -385,9 +392,10 @@ func summarize(results []CaseResult, cases []EvalCaseRequest) Summary {
 	if summary.JudgeEvaluated > 0 {
 		count := float64(summary.JudgeEvaluated)
 		summary.JudgePassRate = float64(judgePasses) / count
-		summary.AvgJudgeCorrectness = totalJudgeCorrectness / count
-		summary.AvgJudgeFaithfulness = totalJudgeFaithfulness / count
-		summary.AvgJudgeRelevance = totalJudgeRelevance / count
+		summary.AvgJudgeScore = float64(totalJudgeScore) / count
+		summary.AvgJudgeFaithfulnessScore = float64(totalJudgeFaithfulnessScore) / count
+		summary.AvgJudgeAnswerRelevanceScore = float64(totalJudgeAnswerRelevanceScore) / count
+		summary.AvgJudgeContextPrecisionScore = float64(totalJudgeContextPrecisionScore) / count
 		summary.AvgJudgeLatencyMS = totalJudgeLatency / int64(summary.JudgeEvaluated)
 	}
 	summary.AvgLatencyMS = totalLatency / int64(len(results))
