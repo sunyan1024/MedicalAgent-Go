@@ -58,6 +58,12 @@ def parse_args() -> argparse.Namespace:
         help=f"Output JSON path. Defaults to {DEFAULT_OUTPUT}.",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Only evaluate the first N cases from the input dataset. Defaults to 0, which evaluates all cases.",
+    )
+    parser.add_argument(
         "--fail-on-low-score",
         action="store_true",
         help="Exit non-zero if summary metrics are below thresholds.",
@@ -103,6 +109,17 @@ def load_dataset(path: Path) -> dict[str, Any]:
     data = dict(data)
     data["cases"] = [normalize_case(case, index) for index, case in enumerate(cases)]
     return data
+
+
+def apply_case_limit(dataset: dict[str, Any], limit: int) -> dict[str, Any]:
+    if limit < 0:
+        raise ValueError("--limit must be greater than or equal to 0")
+    if limit == 0:
+        return dataset
+
+    limited = dict(dataset)
+    limited["cases"] = dataset["cases"][:limit]
+    return limited
 
 
 def normalize_case(case: Any, index: int) -> dict[str, Any]:
@@ -397,6 +414,7 @@ def main() -> int:
 
     try:
         dataset = load_dataset(Path(args.input))
+        dataset = apply_case_limit(dataset, args.limit)
         result = run_eval_batches(
             args.base_url,
             args.token,

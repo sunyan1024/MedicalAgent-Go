@@ -16,13 +16,24 @@ type ragRetrieveDocumentsFunc func(context.Context, string) ([]*schema.Document,
 type ragNewQueryFunc func(context.Context, string) (ragRetrieveDocumentsFunc, error)
 
 type ragWorkflowState struct {
-	Messages       []*schema.Message
-	OriginalQuery  string
-	RetrievalQuery string
-	Docs           []*schema.Document
-	MessagesForLLM []*schema.Message
-	Fallback       bool
-	FallbackReason string
+	Messages           []*schema.Message
+	OriginalQuery      string
+	RetrievalQuery     string
+	Docs               []*schema.Document
+	MessagesForLLM     []*schema.Message
+	RetrievalLatencyMS int64
+	Fallback           bool
+	FallbackReason     string
+}
+
+type RAGWorkflowPrepared struct {
+	OriginalQuery      string
+	RetrievalQuery     string
+	Docs               []*schema.Document
+	MessagesForLLM     []*schema.Message
+	RetrievalLatencyMS int64
+	Fallback           bool
+	FallbackReason     string
 }
 
 func defaultRAGNewQuery(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
@@ -117,6 +128,7 @@ func (o *AliRAGModel) retrieveRAGWorkflowDocs(ctx context.Context, state *ragWor
 
 	retrieveStart := time.Now()
 	docs, err := retrieveDocuments(ctx, state.RetrievalQuery)
+	state.RetrievalLatencyMS = time.Since(retrieveStart).Milliseconds()
 	if err != nil {
 		state.Fallback = true
 		state.FallbackReason = "retrieve_failed"
@@ -157,4 +169,27 @@ func replaceLastMessageContent(messages []*schema.Message, content string) []*sc
 		Content: content,
 	}
 	return out
+}
+
+func (o *AliRAGModel) PrepareRAGWorkflow(ctx context.Context, messages []*schema.Message) (*RAGWorkflowPrepared, error) {
+	state, err := o.ragPrepareWorkflow.Invoke(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
+	return &RAGWorkflowPrepared{
+		OriginalQuery:      state.OriginalQuery,
+		RetrievalQuery:     state.RetrievalQuery,
+		Docs:               state.Docs,
+		MessagesForLLM:     copySchemaMessages(state.MessagesForLLM),
+		RetrievalLatencyMS: state.RetrievalLatencyMS,
+		Fallback:           state.Fallback,
+		FallbackReason:     state.FallbackReason,
+	}, nil
+}
+
+func (o *AliRAGModel) GeneratePreparedRAGResponse(ctx context.Context, prepared *RAGWorkflowPrepared) (*schema.Message, error) {
+	if prepared == nil {
+		return nil, fmt.Errorf("prepared rag workflow result is nil")
+	}
+	return o.llm.Generate(ctx, prepared.MessagesForLLM)
 }

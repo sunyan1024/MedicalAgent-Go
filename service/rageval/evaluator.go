@@ -1,8 +1,7 @@
 package rageval
 
 import (
-	"GoAI/common/rag"
-	"GoAI/config"
+	"GoAI/common/aihelper"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino-ext/components/model/qwen"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -54,6 +52,9 @@ type CaseResult struct {
 	ID                         string   `json:"id"`
 	Question                   string   `json:"question"`
 	ExpectedAnswer             string   `json:"expected_answer,omitempty"`
+	RetrievalQuery             string   `json:"retrieval_query,omitempty"`
+	WorkflowFallback           bool     `json:"workflow_fallback"`
+	WorkflowFallbackReason     string   `json:"workflow_fallback_reason,omitempty"`
 	RetrievedSources           []string `json:"retrieved_sources"`
 	RetrievedDocCount          int      `json:"retrieved_doc_count"`
 	RetrievalHit               bool     `json:"retrieval_hit"`
@@ -64,6 +65,7 @@ type CaseResult struct {
 	ForbiddenHits              []string `json:"forbidden_hits,omitempty"`
 	ValidationErrors           []string `json:"validation_errors,omitempty"`
 	Answer                     string   `json:"answer"`
+	WorkflowPrepareLatencyMS   int64    `json:"workflow_prepare_latency_ms"`
 	RetrievalLatencyMS         int64    `json:"retrieval_latency_ms"`
 	GenerationLatencyMS        int64    `json:"generation_latency_ms"`
 	JudgeEvaluated             bool     `json:"judge_evaluated"`
@@ -97,8 +99,7 @@ func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalRespo
 		return nil, err
 	}
 
-	query, queryErr := rag.NewRAGQuery(ctx, username)
-	chatModel, chatErr := newRAGChatModel(ctx)
+	ragModel, ragModelErr := aihelper.NewAliRAGModel(ctx, username)
 	judgeEnabled := req.JudgeEnabled == nil || *req.JudgeEnabled
 	var judge judgeModel
 	var judgeErr error
@@ -115,38 +116,35 @@ func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalRespo
 			ExpectedAnswer: c.ExpectedAnswer,
 		}
 
-		if queryErr != nil {
-			result.Error = fmt.Sprintf("query init failed: %v", queryErr)
+		if ragModelErr != nil {
+			result.Error = fmt.Sprintf("rag workflow init failed: %v", ragModelErr)
 			result.LatencyMS = elapsedMS(caseStart)
 			results = append(results, result)
 			continue
 		}
 
-		retrieveStart := time.Now()
-		docs, err := query.RetrieveDocuments(ctx, c.Question)
-		result.RetrievalLatencyMS = elapsedMS(retrieveStart)
+		prepareStart := time.Now()
+		prepared, err := ragModel.PrepareRAGWorkflow(ctx, []*schema.Message{
+			{Role: schema.User, Content: c.Question},
+		})
+		result.WorkflowPrepareLatencyMS = elapsedMS(prepareStart)
 		if err != nil {
-			result.Error = fmt.Sprintf("retrieve failed: %v", err)
+			result.Error = fmt.Sprintf("workflow prepare failed: %v", err)
 			result.LatencyMS = elapsedMS(caseStart)
 			results = append(results, result)
 			continue
 		}
+		docs := prepared.Docs
+		result.RetrievalQuery = prepared.RetrievalQuery
+		result.WorkflowFallback = prepared.Fallback
+		result.WorkflowFallbackReason = prepared.FallbackReason
+		result.RetrievalLatencyMS = prepared.RetrievalLatencyMS
 		result.RetrievedDocCount = len(docs)
 		result.RetrievedSources = retrievedSources(docs)
 		result.RetrievalHit, result.RetrievalRank, result.RetrievalScore = scoreRetrieval(result.RetrievedSources, c.ExpectedSources)
 
-		if chatErr != nil {
-			result.Error = fmt.Sprintf("chat model init failed: %v", chatErr)
-			result.LatencyMS = elapsedMS(caseStart)
-			results = append(results, result)
-			continue
-		}
-
-		prompt := rag.BuildRAGPrompt(c.Question, docs)
 		generationStart := time.Now()
-		resp, err := chatModel.Generate(ctx, []*schema.Message{
-			{Role: schema.User, Content: prompt},
-		})
+		resp, err := ragModel.GeneratePreparedRAGResponse(ctx, prepared)
 		result.GenerationLatencyMS = elapsedMS(generationStart)
 		if err != nil {
 			result.Error = fmt.Sprintf("generate failed: %v", err)
@@ -209,22 +207,6 @@ func validateRequest(req EvalRequest) error {
 		}
 	}
 	return nil
-}
-
-func newRAGChatModel(ctx context.Context) (*qwen.ChatModel, error) {
-	conf := config.GetConfig()
-	enableThinking := conf.RagModelConfig.EnableThinking
-	chatConfig := &qwen.ChatModelConfig{
-		BaseURL:        conf.RagModelConfig.RagBaseUrl,
-		Model:          conf.RagModelConfig.RagChatModelName,
-		APIKey:         conf.RagModelConfig.RagApiKey,
-		EnableThinking: &enableThinking,
-	}
-	chatModel, err := qwen.NewChatModel(ctx, chatConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create rag chat model failed: %w", err)
-	}
-	return chatModel, nil
 }
 
 func retrievedSources(docs []*schema.Document) []string {
