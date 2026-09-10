@@ -83,10 +83,18 @@ func maskToken(token string) string {
 
 // Auth loads the current role from the database for every request.
 func RequireAdmin() gin.HandlerFunc {
+	return requireRole(model.RoleAdmin)
+}
+
+func RequireUser() gin.HandlerFunc {
+	return requireRole(model.RoleUser)
+}
+
+func requireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		value, _ := c.Get("currentUser")
 		account, ok := value.(*model.User)
-		if !ok || account == nil || account.Role != model.RoleAdmin {
+		if !ok || account == nil || account.Role != role {
 			c.AbortWithStatusJSON(http.StatusForbidden, new(controller.Response).CodeOf(code.CodeForbidden))
 			return
 		}

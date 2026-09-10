@@ -27,13 +27,6 @@
             <p>管理仅本人可访问的问答文档</p>
           </div>
         </el-card>
-        <el-card class="menu-item" @click="$router.push('/enterprise-knowledge-base')">
-          <div class="card-content">
-            <el-icon size="48" color="#409eff"><Document /></el-icon>
-            <h3>企业知识库</h3>
-            <p>查看企业共享资料，管理员可维护文档</p>
-          </div>
-        </el-card>
       </div>
     </el-main>
   </div>

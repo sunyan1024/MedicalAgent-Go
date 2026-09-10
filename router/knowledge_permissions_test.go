@@ -55,7 +55,7 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 		r.ServeHTTP(w, req)
 		return w
 	}
-	for _, user := range []string{"alice", "admin"} {
+	for _, user := range []string{"alice", "bob"} {
 		w := request(user, "GET", "/file/list?scope=enterprise&owner_key=bob", "")
 		var result struct {
 			Files []model.KnowledgeFile `json:"files"`
@@ -63,25 +63,35 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 			t.Fatal(err)
 		}
-		want := 0
-		if user == "alice" {
-			want = 1
-		}
-		if len(result.Files) != want || (want == 1 && result.Files[0].ID != "alice-file") {
+		if len(result.Files) != 1 || result.Files[0].ID != user+"-file" {
 			t.Fatalf("personal isolation failed: %s", w.Body.String())
 		}
-		w = request(user, "DELETE", "/file/bob-file", "")
+		other := "bob"
+		if user == "bob" {
+			other = "alice"
+		}
+		w = request(user, "DELETE", "/file/"+other+"-file", "")
 		if strings.Contains(w.Body.String(), `"status_code":1000`) {
 			t.Fatal("deleted another user's personal file")
 		}
 	}
-	for _, methodPath := range [][2]string{{"POST", "/enterprise/file/precheck"}, {"POST", "/enterprise/file/upload"}, {"DELETE", "/enterprise/file/enterprise-file"}} {
+	for _, methodPath := range [][2]string{{"GET", "/enterprise/file/list"}, {"POST", "/enterprise/file/precheck"}, {"POST", "/enterprise/file/upload"}, {"DELETE", "/enterprise/file/enterprise-file"}} {
 		w := request("alice", methodPath[0], methodPath[1], `{"role":"admin"}`)
 		if w.Code != http.StatusForbidden {
-			t.Fatalf("write accepted: %s %s: %s", methodPath[0], methodPath[1], w.Body.String())
+			t.Fatalf("enterprise access accepted: %s %s: %s", methodPath[0], methodPath[1], w.Body.String())
 		}
 	}
-	w := request("alice", "GET", "/enterprise/file/list", "")
+	// Every ordinary-user business route must reject administrators before invoking handlers.
+	for _, route := range r.Routes() {
+		if !strings.HasPrefix(route.Path, "/api/v2/AI/") && !strings.HasPrefix(route.Path, "/api/v2/image/") && !strings.HasPrefix(route.Path, "/api/v2/file/") {
+			continue
+		}
+		path := strings.ReplaceAll(strings.TrimPrefix(route.Path, "/api/v2"), ":id", "bob-file")
+		if w := request("admin", route.Method, path, `{}`); w.Code != http.StatusForbidden {
+			t.Fatalf("admin accessed %s %s: %s", route.Method, path, w.Body.String())
+		}
+	}
+	w := request("admin", "GET", "/enterprise/file/list", "")
 	if !strings.Contains(w.Body.String(), "enterprise-file") || strings.Contains(w.Body.String(), "bob-file") {
 		t.Fatal(w.Body.String())
 	}
@@ -93,12 +103,18 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"status_code":2001`) {
 		t.Fatal("administrator did not reach upload validation", w.Body.String())
 	}
-	// Same token must lose write access immediately after role is changed in the DB.
+	// Same token must lose enterprise access immediately after role is changed in the DB.
 	if err := db.Model(&model.User{}).Where("username = ?", "admin").Update("role", model.RoleUser).Error; err != nil {
 		t.Fatal(err)
 	}
 	if w := request("admin", "POST", "/enterprise/file/precheck", `{}`); w.Code != http.StatusForbidden {
 		t.Fatal("stale token retained admin rights")
+	}
+	if w := request("admin", "GET", "/enterprise/file/list", ""); w.Code != http.StatusForbidden {
+		t.Fatal("stale token retained enterprise read access")
+	}
+	if w := request("admin", "GET", "/file/list", ""); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"status_code":1000`) {
+		t.Fatal("new ordinary-user role did not gain personal access", w.Body.String())
 	}
 	if w := request("", "GET", "/enterprise/file/list", ""); strings.Contains(w.Body.String(), `"status_code":1000`) {
 		t.Fatal("anonymous read accepted")

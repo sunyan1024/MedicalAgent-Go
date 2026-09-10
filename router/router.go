@@ -49,19 +49,19 @@ func InitRouter() *gin.Engine {
 	//后续登录的接口需要jwt鉴权
 	{
 		AIGroup := enterRouter.Group("/AI")
-		AIGroup.Use(jwt.Auth())
+		AIGroup.Use(jwt.Auth(), jwt.RequireUser())
 		AIRouter(AIGroup)
 	}
 
 	{
 		ImageGroup := enterRouter.Group("/image")
-		ImageGroup.Use(jwt.Auth())
+		ImageGroup.Use(jwt.Auth(), jwt.RequireUser())
 		ImageRouter(ImageGroup)
 	}
 
 	{
 		FileGroup := enterRouter.Group("/file")
-		FileGroup.Use(jwt.Auth())
+		FileGroup.Use(jwt.Auth(), jwt.RequireUser())
 		FileRouter(FileGroup)
 	}
 

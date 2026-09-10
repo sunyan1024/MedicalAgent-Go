@@ -1,14 +1,15 @@
 <template>
   <div class="knowledge-page">
-    <div class="page-header">
-      <button class="icon-btn" @click="$router.push('/menu')" title="返回">
+    <div class="page-header" :class="{ 'enterprise-header': isEnterprise }">
+      <button v-if="!isEnterprise" class="icon-btn" @click="$router.push('/menu')" title="返回">
         <el-icon><ArrowLeft /></el-icon>
       </button>
+      <el-button v-if="isEnterprise" type="danger" @click="handleLogout">退出登录</el-button>
       <div class="header-content">
         <h1>{{ isEnterprise ? '企业知识库' : '个人知识库' }}</h1>
         <div class="header-meta">
           <p class="document-count">{{ files.length }} 个文档</p>
-          <p v-if="isEnterprise" class="page-description">企业资料供全体用户问答使用，由管理员维护。</p>
+          <p v-if="isEnterprise" class="page-description">仅管理员可浏览和管理文件，普通用户通过问答使用企业知识。</p>
         </div>
       </div>
       <button class="icon-btn" @click="loadFiles" :disabled="loading" title="刷新">
@@ -57,7 +58,8 @@
 
 <script>
 import { computed, watch, ref } from 'vue'
-import { currentUser } from '../utils/auth'
+import { useRouter } from 'vue-router'
+import { currentUser, clearUser } from '../utils/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Document, Refresh, Upload } from '@element-plus/icons-vue'
 import api, { getApiErrorMessage } from '../utils/api'
@@ -73,6 +75,22 @@ export default {
     Upload
   },
   setup(props) {
+    const router = useRouter()
+    const handleLogout = async () => {
+      try {
+        await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+      } catch {
+        return
+      }
+      localStorage.removeItem('token')
+      clearUser()
+      router.push('/login')
+    }
+
     const isEnterprise = computed(() => props.scope === 'enterprise')
     const canManage = computed(() => !isEnterprise.value || currentUser.value?.role === 'admin')
     const endpoint = computed(() => isEnterprise.value ? '/enterprise/file' : '/file')
@@ -198,6 +216,7 @@ export default {
     watch(() => props.scope, () => { files.value = []; loadFiles() }, { immediate: true })
 
     return {
+      handleLogout,
       isEnterprise,
       canManage,
       Delete,
@@ -235,6 +254,10 @@ export default {
   color: var(--app-text);
   font-size: 28px;
   font-weight: 700;
+}
+
+.enterprise-header {
+  grid-template-columns: auto 1fr 44px;
 }
 
 .header-content {

@@ -27,33 +27,33 @@ const routes = [
     path: '/menu',
     name: 'Menu',
     component: Menu,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'user' }
   },
   {
     path: '/ai-chat',
     name: 'AIChat',
     component: AIChat,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'user' }
   },
   {
     path: '/image-recognition',
     name: 'ImageRecognition',
     component: ImageRecognition,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'user' }
   },
   {
     path: '/knowledge-base',
     name: 'KnowledgeBase',
     component: KnowledgeBase,
     props: { scope: 'personal' },
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'user' }
   },
   {
     path: '/enterprise-knowledge-base',
     name: 'EnterpriseKnowledgeBase',
     component: KnowledgeBase,
     props: { scope: 'enterprise' },
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, role: 'admin' }
   }
 ]
 
@@ -69,7 +69,10 @@ router.beforeEach(async (to) => {
     return '/login'
   }
   try {
-    await loadCurrentUser()
+    const user = await loadCurrentUser()
+    if (to.matched.some(record => record.meta.role && record.meta.role !== user.role)) {
+      return user.role === 'admin' ? '/enterprise-knowledge-base' : '/menu'
+    }
     return true
   } catch (error) {
     clearUser()
