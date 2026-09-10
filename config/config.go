@@ -12,6 +12,12 @@ type MainConfig struct {
 	Host    string `toml:"host"`
 }
 
+type AdminConfig struct {
+	Username string `toml:"username"`
+	Email    string `toml:"email"`
+	Password string `toml:"password"`
+}
+
 type EmailConfig struct {
 	Authcode string `toml:"authcode"`
 	Email    string `toml:"email" `
@@ -104,6 +110,7 @@ type MCPConfig struct {
 }
 
 type Config struct {
+	AdminConfig    `toml:"adminConfig"`
 	EmailConfig    `toml:"emailConfig"`
 	RedisConfig    `toml:"redisConfig"`
 	MysqlConfig    `toml:"mysqlConfig"`

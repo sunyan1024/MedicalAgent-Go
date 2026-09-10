@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"GoAI/config"
 	"GoAI/internal/testutil"
 	"GoAI/model"
 	"GoAI/utils"
@@ -22,8 +23,7 @@ func TestReadAdminCredentials(t *testing.T) {
 		{"long password", "admin", "admin@example.com", strings.Repeat("a", 73), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			values := map[string]string{"GOPHERAI_ADMIN_USERNAME": tc.username, "GOPHERAI_ADMIN_EMAIL": tc.email, "GOPHERAI_ADMIN_PASSWORD": tc.password}
-			_, err := readAdminCredentials(func(key string) string { return values[key] })
+			_, err := readAdminCredentials(config.AdminConfig{Username: tc.username, Email: tc.email, Password: tc.password})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v", err)
 			}

@@ -3,10 +3,10 @@ package user
 import (
 	"fmt"
 	"net/mail"
-	"os"
 	"strings"
 	"unicode/utf8"
 
+	"GoAI/config"
 	"GoAI/model"
 	"GoAI/utils"
 	"gorm.io/gorm"
@@ -14,13 +14,13 @@ import (
 
 type adminCredentials struct{ username, email, password string }
 
-func readAdminCredentials(getenv func(string) string) (adminCredentials, error) {
-	c := adminCredentials{strings.TrimSpace(getenv("GOPHERAI_ADMIN_USERNAME")), strings.TrimSpace(getenv("GOPHERAI_ADMIN_EMAIL")), getenv("GOPHERAI_ADMIN_PASSWORD")}
+func readAdminCredentials(cfg config.AdminConfig) (adminCredentials, error) {
+	c := adminCredentials{strings.TrimSpace(cfg.Username), strings.TrimSpace(cfg.Email), cfg.Password}
 	if c.username == "" && c.email == "" && c.password == "" {
 		return c, nil
 	}
 	if c.username == "" || c.email == "" || strings.TrimSpace(c.password) == "" {
-		return c, fmt.Errorf("管理员初始化需要同时设置 GOPHERAI_ADMIN_USERNAME、GOPHERAI_ADMIN_EMAIL、GOPHERAI_ADMIN_PASSWORD")
+		return c, fmt.Errorf("管理员初始化需要同时设置 config/config.toml 中 adminConfig 的 username、email、password")
 	}
 	address, err := mail.ParseAddress(c.email)
 	if err != nil || address.Address != c.email || utf8.RuneCountInString(c.email) > 100 || utf8.RuneCountInString(c.username) > 50 || len(c.password) > 72 {
@@ -31,7 +31,7 @@ func readAdminCredentials(getenv func(string) string) (adminCredentials, error) 
 
 // BootstrapAdmin never resets a password or elevates an existing ordinary account.
 func BootstrapAdmin(db *gorm.DB) error {
-	credentials, err := readAdminCredentials(os.Getenv)
+	credentials, err := readAdminCredentials(config.GetConfig().AdminConfig)
 	if err != nil {
 		return err
 	}
