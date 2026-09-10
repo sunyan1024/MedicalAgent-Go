@@ -9,6 +9,7 @@ import (
 	"GoAI/config"
 	"GoAI/dao/message"
 	"GoAI/router"
+	userService "GoAI/service/user"
 	"fmt"
 	"log"
 )
@@ -73,6 +74,11 @@ func main() {
 		return
 	} else {
 		log.Println("[InitMysql] success ")
+	}
+
+	if err := userService.BootstrapAdmin(mysql.DB); err != nil {
+		log.Printf("[BootstrapAdmin] %v", err)
+		return
 	}
 
 	// 初始化 AIHelperManager，并从数据库加载历史消息数据

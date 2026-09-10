@@ -37,13 +37,13 @@ type PrecheckResult struct {
 	File       *model.KnowledgeFile `json:"file,omitempty"`
 }
 
-func PrecheckRagFile(username string, originalName string, fileSHA256 string, size int64) (*PrecheckResult, error) {
+func PrecheckRagFile(owner model.KnowledgeOwner, originalName string, fileSHA256 string, size int64) (*PrecheckResult, error) {
 	ext, storedName, err := validatePrecheckInput(originalName, fileSHA256, size)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := ensureUserDoesNotHaveFile(username, storedName); err != nil {
+	if err := ensureOwnerDoesNotHaveFile(owner, storedName); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +55,7 @@ func PrecheckRagFile(username string, originalName string, fileSHA256 string, si
 		return nil, err
 	}
 
-	knowledgeFile, err := createUserFileFromStoredFile(username, originalName, storedName, size, storedFile)
+	knowledgeFile, err := createKnowledgeFileFromStoredFile(owner, originalName, storedName, size, storedFile)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func PrecheckRagFile(username string, originalName string, fileSHA256 string, si
 }
 
 // 上传 RAG 文件。客户端 SHA-256 只用于提前发现传输错误，服务端计算值是最终可信值。
-func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 string) (*model.KnowledgeFile, error) {
+func UploadRagFile(owner model.KnowledgeOwner, file *multipart.FileHeader, clientSHA256 string) (*model.KnowledgeFile, error) {
 	if err := utils.ValidateFile(file); err != nil {
 		log.Printf("[UploadRagFile] File validation failed: %v", err)
 		return nil, err
@@ -80,7 +80,7 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	storedName := clientSHA256 + ext
-	if err := ensureUserDoesNotHaveFile(username, storedName); err != nil {
+	if err := ensureOwnerDoesNotHaveFile(owner, storedName); err != nil {
 		return nil, err
 	}
 
@@ -105,10 +105,9 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 		return nil, err
 	}
 
-	createdStoredFile := false
 	storedFile, err := fileDao.GetStoredFileBySHA256AndExt(serverSHA256, ext)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		storedFile, createdStoredFile, err = createStoredFileFromTemp(serverSHA256, ext, tempPath, storedDir, file.Size)
+		storedFile, _, err = createStoredFileFromTemp(serverSHA256, ext, tempPath, storedDir, file.Size)
 		if err != nil {
 			os.Remove(tempPath)
 			return nil, err
@@ -120,31 +119,33 @@ func UploadRagFile(username string, file *multipart.FileHeader, clientSHA256 str
 		}
 	}
 
-	knowledgeFile, err := createUserFileFromStoredFile(username, file.Filename, storedName, file.Size, storedFile)
+	knowledgeFile, err := createKnowledgeFileFromStoredFile(owner, file.Filename, storedName, file.Size, storedFile)
 	if err != nil {
-		if createdStoredFile {
-			os.Remove(storedFile.FilePath)
-			fileDao.HardDeleteStoredFileByID(mysql.DB, storedFile.ID)
-		}
+		// Keep the shared physical record for retries; another request may already reference it.
 		return nil, err
 	}
 
 	return knowledgeFile, nil
 }
 
-func ListKnowledgeFiles(username string) ([]model.KnowledgeFile, error) {
-	return fileDao.GetKnowledgeFilesByUserName(username)
+func ListKnowledgeFiles(owner model.KnowledgeOwner) ([]model.KnowledgeFile, error) {
+	return fileDao.GetKnowledgeFiles(owner)
 }
 
-func DeleteKnowledgeFile(username string, fileID string) error {
+func DeleteKnowledgeFile(owner model.KnowledgeOwner, fileID string) error {
 	if fileID == "" {
 		return fmt.Errorf("文件ID不能为空")
 	}
 
-	knowledgeFile, err := fileDao.GetKnowledgeFileByID(username, fileID)
+	knowledgeFile, err := fileDao.GetKnowledgeFileByID(owner, fileID)
 	if err != nil {
 		return err
 	}
+	release, err := lockStoredFileLifecycle(knowledgeFile.StoredFileID)
+	if err != nil {
+		return err
+	}
+	defer release()
 	storedFile, err := fileDao.GetStoredFileByID(knowledgeFile.StoredFileID)
 	if err != nil {
 		return err
@@ -152,7 +153,7 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 
 	deleteStoredIndex := false
 	if err := mysql.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_name = ? AND id = ?", username, fileID).Delete(&model.KnowledgeFile{}).Error; err != nil {
+		if err := fileDao.DeleteKnowledgeFile(tx, owner, fileID); err != nil {
 			return err
 		}
 		if err := fileDao.DecrementStoredFileRefCount(tx, storedFile.ID); err != nil {
@@ -176,10 +177,10 @@ func DeleteKnowledgeFile(username string, fileID string) error {
 
 	if deleteStoredIndex {
 		indexKey := rag.BuildStoredFileIndexKey(storedFile.ID)
-		if err := rag.DeleteIndex(context.Background(), indexKey); err != nil {
+		if err := fileDao.UpdateStoredFileIndexPending(storedFile.ID); err != nil {
 			return err
 		}
-		if err := fileDao.UpdateStoredFileIndexPending(storedFile.ID); err != nil {
+		if err := rag.DeleteIndex(context.Background(), indexKey); err != nil {
 			return err
 		}
 	}
@@ -202,8 +203,8 @@ func validatePrecheckInput(originalName string, fileSHA256 string, size int64) (
 	return ext, fileSHA256 + ext, nil
 }
 
-func ensureUserDoesNotHaveFile(username string, storedName string) error {
-	if _, err := fileDao.GetKnowledgeFileByUserNameAndStoredName(username, storedName); err == nil {
+func ensureOwnerDoesNotHaveFile(owner model.KnowledgeOwner, storedName string) error {
+	if _, err := fileDao.GetKnowledgeFileByStoredName(owner, storedName); err == nil {
 		return ErrDuplicateFile
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -268,14 +269,25 @@ func createStoredFileFromTemp(fileSHA256 string, ext string, tempPath string, st
 	return storedFile, true, nil
 }
 
-func createUserFileFromStoredFile(username string, originalName string, storedName string, size int64, storedFile *model.StoredFile) (*model.KnowledgeFile, error) {
+func createKnowledgeFileFromStoredFile(owner model.KnowledgeOwner, originalName string, storedName string, size int64, storedFile *model.StoredFile) (*model.KnowledgeFile, error) {
+	release, err := lockStoredFileLifecycle(storedFile.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	storedFile, err = fileDao.GetStoredFileByIDUnscoped(storedFile.ID)
+	if err != nil {
+		return nil, err
+	}
 	if err := ensureStoredFileIndexed(storedFile); err != nil {
 		return nil, err
 	}
 
 	knowledgeFile := &model.KnowledgeFile{
 		ID:           utils.GenerateUUID(),
-		UserName:     username,
+		UserName:     owner.UserName,
+		Scope:        owner.Scope,
+		OwnerKey:     owner.Key,
 		OriginalName: originalName,
 		StoredName:   storedName,
 		StoredFileID: storedFile.ID,
@@ -377,4 +389,23 @@ func normalizeRAGIndexError(err error) error {
 	default:
 		return fmt.Errorf("知识库文件解析或索引失败: %w", err)
 	}
+}
+
+// Serialize reference changes and index cleanup across both knowledge scopes.
+func lockStoredFileLifecycle(id string) (func(), error) {
+	ctx := context.Background()
+	key := "rag:lifecycle:lock:" + id
+	token := utils.GenerateUUID()
+	locked, err := redisPkg.AcquireLock(ctx, key, token, 10*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	if !locked {
+		return nil, ErrFileIndexing
+	}
+	return func() {
+		if err := redisPkg.ReleaseLock(ctx, key, token); err != nil {
+			log.Printf("[KnowledgeFile] release lifecycle lock failed stored_file_id=%s err=%v", id, err)
+		}
+	}, nil
 }

@@ -59,6 +59,7 @@ func Register(username, email, password string) (*model.User, bool) {
 	}
 
 	if user, err := InsertUser(&model.User{
+		Role:     model.RoleUser,
 		Email:    email,
 		Name:     username,
 		Username: username,

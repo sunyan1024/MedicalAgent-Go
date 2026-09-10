@@ -5,7 +5,7 @@
         <el-icon><ArrowLeft /></el-icon>
       </button>
       <div>
-        <h1>知识库</h1>
+        <h1>{{ isEnterprise ? '企业知识库' : '个人知识库' }}</h1>
         <p>{{ files.length }} 个文档</p>
       </div>
       <button class="icon-btn" @click="loadFiles" :disabled="loading" title="刷新">
@@ -13,7 +13,8 @@
       </button>
     </div>
 
-    <div class="toolbar">
+    <p v-if="isEnterprise">企业资料供全体用户问答使用，由管理员维护。</p>
+    <div v-if="canManage" class="toolbar">
       <el-upload
         class="upload"
         drag
@@ -43,7 +44,7 @@
       <el-table-column label="上传时间" width="190">
         <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="100" align="right">
+      <el-table-column v-if="canManage" label="操作" width="100" align="right">
         <template #default="{ row }">
           <el-button type="danger" :icon="Delete" circle plain @click="deleteFile(row)" />
         </template>
@@ -53,7 +54,8 @@
 </template>
 
 <script>
-import { onMounted, ref } from 'vue'
+import { computed, watch, ref } from 'vue'
+import { currentUser } from '../utils/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Document, Refresh, Upload } from '@element-plus/icons-vue'
 import api, { getApiErrorMessage } from '../utils/api'
@@ -61,21 +63,27 @@ import { calculateFileSHA256 } from '../utils/hash'
 
 export default {
   name: 'KnowledgeBase',
+  props: { scope: { type: String, default: 'personal' } },
   components: {
     ArrowLeft,
     Document,
     Refresh,
     Upload
   },
-  setup() {
+  setup(props) {
+    const isEnterprise = computed(() => props.scope === 'enterprise')
+    const canManage = computed(() => !isEnterprise.value || currentUser.value?.role === 'admin')
+    const endpoint = computed(() => isEnterprise.value ? '/enterprise/file' : '/file')
     const files = ref([])
     const loading = ref(false)
     const uploading = ref(false)
 
     const loadFiles = async () => {
       loading.value = true
+      const listEndpoint = endpoint.value
       try {
-        const response = await api.get('/file/list')
+        const response = await api.get(`${listEndpoint}/list`)
+        if (listEndpoint !== endpoint.value) return
         if (response.data && response.data.status_code === 1000) {
           files.value = response.data.files || []
         } else {
@@ -99,13 +107,15 @@ export default {
     }
 
     const handleUpload = async (uploadFile) => {
+      if (!canManage.value) return
+      const uploadEndpoint = endpoint.value
       const rawFile = uploadFile.raw
       if (!rawFile || !validateFile(rawFile)) return
 
       uploading.value = true
       try {
         const fileSHA256 = await calculateFileSHA256(rawFile)
-        const precheck = await api.post('/file/precheck', {
+        const precheck = await api.post(`${uploadEndpoint}/precheck`, {
           original_name: rawFile.name,
           file_sha256: fileSHA256,
           size: rawFile.size
@@ -127,7 +137,7 @@ export default {
         const formData = new FormData()
         formData.append('file', rawFile)
         formData.append('file_sha256', fileSHA256)
-        const response = await api.post('/file/upload', formData)
+        const response = await api.post(`${uploadEndpoint}/upload`, formData)
         if (response.data && response.data.status_code === 1000) {
           ElMessage.success('文件上传成功')
           await loadFiles()
@@ -143,13 +153,15 @@ export default {
     }
 
     const deleteFile = async (row) => {
+      if (!canManage.value) return
+      const deleteEndpoint = endpoint.value
       try {
         await ElMessageBox.confirm(`确定删除「${row.original_name}」吗？`, '删除文件', {
           confirmButtonText: '删除',
           cancelButtonText: '取消',
           type: 'warning'
         })
-        const response = await api.delete(`/file/${row.id}`)
+        const response = await api.delete(`${deleteEndpoint}/${row.id}`)
         if (response.data && response.data.status_code === 1000) {
           ElMessage.success('文件已删除')
           await loadFiles()
@@ -181,9 +193,11 @@ export default {
       return new Date(time).toLocaleString()
     }
 
-    onMounted(loadFiles)
+    watch(() => props.scope, () => { files.value = []; loadFiles() }, { immediate: true })
 
     return {
+      isEnterprise,
+      canManage,
       Delete,
       files,
       loading,

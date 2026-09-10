@@ -3,6 +3,7 @@ package user
 import (
 	"GoAI/common/code"
 	"GoAI/controller"
+	"GoAI/model"
 	"GoAI/service/user"
 	"net/http"
 
@@ -117,6 +118,21 @@ func HandleCaptcha(c *gin.Context) {
 
 	//匿名字段，其实本身res.Success()调用就是res.Response.Success()
 	//res.Response.Success()
+	res.Success()
+	c.JSON(http.StatusOK, res)
+}
+
+func Me(c *gin.Context) {
+	value, _ := c.Get("currentUser")
+	account, ok := value.(*model.User)
+	if !ok || account == nil {
+		c.JSON(http.StatusUnauthorized, new(controller.Response).CodeOf(code.CodeInvalidToken))
+		return
+	}
+	res := struct {
+		controller.Response
+		UserInfo *model.User `json:"user_info"`
+	}{UserInfo: account}
 	res.Success()
 	c.JSON(http.StatusOK, res)
 }

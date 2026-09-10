@@ -5,6 +5,8 @@ import Menu from '../views/Menu.vue'
 import AIChat from '../views/AIChat.vue'
 import ImageRecognition from '../views/ImageRecognition.vue'
 import KnowledgeBase from '../views/KnowledgeBase.vue'
+import { loadCurrentUser, clearUser } from '../utils/auth'
+import { ElMessage } from 'element-plus'
 
 const routes = [
   {
@@ -43,6 +45,14 @@ const routes = [
     path: '/knowledge-base',
     name: 'KnowledgeBase',
     component: KnowledgeBase,
+    props: { scope: 'personal' },
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/enterprise-knowledge-base',
+    name: 'EnterpriseKnowledgeBase',
+    component: KnowledgeBase,
+    props: { scope: 'enterprise' },
     meta: { requiresAuth: true }
   }
 ]
@@ -52,12 +62,19 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  if (to.matched.some(record => record.meta.requiresAuth) && !token) {
-    next('/login')
-  } else {
-    next()
+router.beforeEach(async (to) => {
+  if (!to.matched.some(record => record.meta.requiresAuth)) return true
+  if (!localStorage.getItem('token')) {
+    clearUser()
+    return '/login'
+  }
+  try {
+    await loadCurrentUser()
+    return true
+  } catch (error) {
+    clearUser()
+    ElMessage.error(error.message || '获取用户信息失败，请重新登录')
+    return '/login'
   }
 })
 

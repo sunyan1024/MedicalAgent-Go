@@ -1,7 +1,7 @@
 <template>
   <div class="menu-container">
     <el-header class="header">
-      <h1>AI应用平台</h1>
+      <h1>AI应用平台 <el-tag v-if="currentUser?.role === 'admin'">管理员</el-tag></h1>
       <el-button type="danger" @click="handleLogout">退出登录</el-button>
     </el-header>
     <el-main class="main">
@@ -23,8 +23,15 @@
         <el-card class="menu-item" @click="$router.push('/knowledge-base')">
           <div class="card-content">
             <el-icon size="48" color="#e6a23c"><Document /></el-icon>
-            <h3>知识库</h3>
-            <p>管理RAG问答文档</p>
+            <h3>个人知识库</h3>
+            <p>管理仅本人可访问的问答文档</p>
+          </div>
+        </el-card>
+        <el-card class="menu-item" @click="$router.push('/enterprise-knowledge-base')">
+          <div class="card-content">
+            <el-icon size="48" color="#409eff"><Document /></el-icon>
+            <h3>企业知识库</h3>
+            <p>查看企业共享资料，管理员可维护文档</p>
           </div>
         </el-card>
       </div>
@@ -34,6 +41,7 @@
 
 <script>
 import { useRouter } from 'vue-router'
+import { clearUser, currentUser } from '../utils/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChatDotRound, Camera, Document } from '@element-plus/icons-vue'
 
@@ -55,6 +63,7 @@ export default {
           type: 'warning'
         })
         localStorage.removeItem('token')
+        clearUser()
         ElMessage.success('退出登录成功')
         router.push('/login')
       } catch {
@@ -63,6 +72,7 @@ export default {
     }
 
     return {
+      currentUser,
       handleLogout
     }
   }

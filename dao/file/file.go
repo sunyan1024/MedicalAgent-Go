@@ -13,26 +13,46 @@ func CreateKnowledgeFile(file *model.KnowledgeFile) (*model.KnowledgeFile, error
 	return file, err
 }
 
-func GetKnowledgeFilesByUserName(userName string) ([]model.KnowledgeFile, error) {
-	var files []model.KnowledgeFile
-	err := mysql.DB.Where("user_name = ?", userName).Order("created_at desc").Find(&files).Error
+func ownedFiles(db *gorm.DB, owner model.KnowledgeOwner) *gorm.DB {
+	return db.Where("scope = ? AND owner_key = ?", owner.Scope, owner.Key)
+}
+
+func GetKnowledgeFiles(owner model.KnowledgeOwner) ([]model.KnowledgeFile, error) {
+	files := make([]model.KnowledgeFile, 0)
+	err := ownedFiles(mysql.DB, owner).Order("created_at desc").Find(&files).Error
 	return files, err
 }
 
-func GetKnowledgeFileByID(userName string, fileID string) (*model.KnowledgeFile, error) {
+func GetKnowledgeFileByID(owner model.KnowledgeOwner, fileID string) (*model.KnowledgeFile, error) {
 	var file model.KnowledgeFile
-	err := mysql.DB.Where("user_name = ? AND id = ?", userName, fileID).First(&file).Error
+	err := ownedFiles(mysql.DB, owner).Where("id = ?", fileID).First(&file).Error
 	return &file, err
 }
 
-func GetKnowledgeFileByUserNameAndStoredName(userName string, storedName string) (*model.KnowledgeFile, error) {
+func GetKnowledgeFileByStoredName(owner model.KnowledgeOwner, storedName string) (*model.KnowledgeFile, error) {
 	var file model.KnowledgeFile
-	err := mysql.DB.Where("user_name = ? AND stored_name = ?", userName, storedName).First(&file).Error
+	err := ownedFiles(mysql.DB, owner).Where("stored_name = ?", storedName).First(&file).Error
 	return &file, err
 }
 
-func DeleteKnowledgeFileByID(userName string, fileID string) error {
-	return mysql.DB.Where("user_name = ? AND id = ?", userName, fileID).Delete(&model.KnowledgeFile{}).Error
+func DeleteKnowledgeFile(tx *gorm.DB, owner model.KnowledgeOwner, fileID string) error {
+	result := ownedFiles(tx, owner).Where("id = ?", fileID).Delete(&model.KnowledgeFile{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// The same authorized set feeds both vector and keyword retrieval.
+func GetAccessibleKnowledgeFiles(username string) ([]model.KnowledgeFile, error) {
+	files := make([]model.KnowledgeFile, 0)
+	err := mysql.DB.Where("(scope = ? AND owner_key = ?) OR (scope = ? AND owner_key = ?)",
+		model.KnowledgeScopePersonal, username, model.KnowledgeScopeEnterprise, model.EnterpriseOwnerKey).
+		Order("created_at desc").Find(&files).Error
+	return files, err
 }
 
 func CreateStoredFile(storedFile *model.StoredFile) (*model.StoredFile, error) {

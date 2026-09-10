@@ -80,13 +80,23 @@ func migration() error {
 		return err
 	}
 
-	return DB.AutoMigrate( // 自动迁移以下模型
+	if err := prepareKnowledgeOwnershipMigration(); err != nil {
+		return err
+	}
+
+	if err := DB.AutoMigrate( // 自动迁移以下模型
 		new(model.User),
 		new(model.Session),
 		new(model.Message),
 		new(model.StoredFile),
 		new(model.KnowledgeFile),
-	)
+	); err != nil {
+		return err
+	}
+	if DB.Migrator().HasIndex(&model.KnowledgeFile{}, "idx_user_stored_name") {
+		return DB.Migrator().DropIndex(&model.KnowledgeFile{}, "idx_user_stored_name")
+	}
+	return nil
 }
 
 func prepareKnowledgeFileMigration() error {
@@ -118,4 +128,22 @@ func prepareKnowledgeFileMigration() error {
 		log.Printf("[MySQL][migration] dropped legacy knowledge_files file_path column")
 	}
 	return nil
+}
+
+// Backfill before AutoMigrate creates the new unique index: legacy users may share a file.
+func prepareKnowledgeOwnershipMigration() error {
+	m := DB.Migrator()
+	if !m.HasTable(&model.KnowledgeFile{}) {
+		return nil
+	}
+	for _, column := range []string{"Scope", "OwnerKey"} {
+		if !m.HasColumn(&model.KnowledgeFile{}, column) {
+			if err := m.AddColumn(&model.KnowledgeFile{}, column); err != nil {
+				return err
+			}
+		}
+	}
+	return DB.Model(&model.KnowledgeFile{}).
+		Where("owner_key = '' OR owner_key IS NULL").
+		Updates(map[string]interface{}{"scope": model.KnowledgeScopePersonal, "owner_key": gorm.Expr("user_name")}).Error
 }

@@ -7,6 +7,10 @@ import (
 )
 
 const (
+	KnowledgeScopePersonal   = "personal"
+	KnowledgeScopeEnterprise = "enterprise"
+	EnterpriseOwnerKey       = "default"
+
 	StoredFileIndexStatusPending = "pending"
 	StoredFileIndexStatusReady   = "ready"
 	StoredFileIndexStatusFailed  = "failed"
@@ -15,9 +19,11 @@ const (
 // KnowledgeFile 记录用户知识库中的单个文件。
 type KnowledgeFile struct {
 	ID           string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	UserName     string    `gorm:"index;uniqueIndex:idx_user_stored_name,priority:1;not null" json:"username"`
+	Scope        string    `gorm:"type:varchar(16);not null;default:personal;uniqueIndex:idx_scope_owner_stored,priority:1" json:"scope"`
+	OwnerKey     string    `gorm:"type:varchar(50);not null;default:'';uniqueIndex:idx_scope_owner_stored,priority:2" json:"-"`
+	UserName     string    `gorm:"index;not null" json:"username"`
 	OriginalName string    `gorm:"type:varchar(255);not null" json:"original_name"`
-	StoredName   string    `gorm:"type:varchar(255);uniqueIndex:idx_user_stored_name,priority:2;not null" json:"stored_name"`
+	StoredName   string    `gorm:"type:varchar(255);uniqueIndex:idx_scope_owner_stored,priority:3;not null" json:"stored_name"`
 	StoredFileID string    `gorm:"type:varchar(36);index;not null" json:"stored_file_id"`
 	Size         int64     `json:"size"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -39,4 +45,19 @@ type StoredFile struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// KnowledgeOwner is constructed by the server, never bound from request data.
+type KnowledgeOwner struct {
+	Scope    string
+	Key      string
+	UserName string
+}
+
+func PersonalKnowledgeOwner(username string) KnowledgeOwner {
+	return KnowledgeOwner{Scope: KnowledgeScopePersonal, Key: username, UserName: username}
+}
+
+func EnterpriseKnowledgeOwner(username string) KnowledgeOwner {
+	return KnowledgeOwner{Scope: KnowledgeScopeEnterprise, Key: EnterpriseOwnerKey, UserName: username}
 }

@@ -57,7 +57,7 @@ func PrecheckRagFile(c *gin.Context) {
 		return
 	}
 
-	result, err := file.PrecheckRagFile(username, req.OriginalName, req.FileSHA256, req.Size)
+	result, err := file.PrecheckRagFile(knowledgeOwner(c), req.OriginalName, req.FileSHA256, req.Size)
 	if err != nil {
 		log.Println("[PrecheckRagFile] fail ", err)
 		res.CodeOf(code.CodeInvalidParams)
@@ -94,7 +94,7 @@ func UploadRagFile(c *gin.Context) {
 
 	//indexer 会在 service 层根据实际文件名创建
 	fileSHA256 := c.PostForm("file_sha256")
-	knowledgeFile, err := file.UploadRagFile(username, uploadedFile, fileSHA256)
+	knowledgeFile, err := file.UploadRagFile(knowledgeOwner(c), uploadedFile, fileSHA256)
 	if err != nil {
 		log.Println("[UploadRagFile] fail ", err)
 		if strings.Contains(err.Error(), "文件类型不正确") ||
@@ -129,7 +129,7 @@ func ListKnowledgeFiles(c *gin.Context) {
 		return
 	}
 
-	files, err := file.ListKnowledgeFiles(username)
+	files, err := file.ListKnowledgeFiles(knowledgeOwner(c))
 	if err != nil {
 		log.Println("[ListKnowledgeFiles] fail ", err)
 		res.CodeOf(code.CodeServerBusy)
@@ -159,7 +159,7 @@ func DeleteKnowledgeFile(c *gin.Context) {
 		return
 	}
 
-	if err := file.DeleteKnowledgeFile(username, fileID); err != nil {
+	if err := file.DeleteKnowledgeFile(knowledgeOwner(c), fileID); err != nil {
 		log.Println("[DeleteKnowledgeFile] fail ", err)
 		res.CodeOf(code.CodeServerBusy)
 		res.StatusMsg = err.Error()
@@ -169,4 +169,11 @@ func DeleteKnowledgeFile(c *gin.Context) {
 
 	res.Success()
 	c.JSON(http.StatusOK, res)
+}
+
+func knowledgeOwner(c *gin.Context) model.KnowledgeOwner {
+	if c.GetBool("enterpriseKnowledge") {
+		return model.EnterpriseKnowledgeOwner(c.GetString("userName"))
+	}
+	return model.PersonalKnowledgeOwner(c.GetString("userName"))
 }

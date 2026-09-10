@@ -6,8 +6,14 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	RoleUser  = "user"
+	RoleAdmin = "admin"
+)
+
 // User 表示系统中的用户模型
 type User struct {
+	Role      string         `gorm:"type:varchar(16);not null;default:user" json:"role"`
 	ID        int64          `gorm:"primaryKey" json:"id"`                         // 用户主键
 	Name      string         `gorm:"type:varchar(50)" json:"name"`                 // 用户昵称
 	Email     string         `gorm:"type:varchar(100);index" json:"email"`         // 用户邮箱，建立索引

@@ -2,6 +2,7 @@ package router
 
 import (
 	"GoAI/controller/user"
+	"GoAI/middleware/jwt"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,6 +17,7 @@ func RegisterUserRouter(r *gin.RouterGroup) {
 	{
 		r.POST("/register", user.Register) // func Register(c *gin.Context)
 		r.POST("/login", user.Login)
+		r.GET("/me", jwt.Auth(), user.Me)
 		r.POST("/captcha", user.HandleCaptcha)
 	}
 }

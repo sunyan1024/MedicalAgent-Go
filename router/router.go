@@ -64,5 +64,8 @@ func InitRouter() *gin.Engine {
 		FileRouter(FileGroup)
 	}
 
+	enterprise := enterRouter.Group("/enterprise/file", jwt.Auth())
+	EnterpriseFileRouter(enterprise)
+
 	return r
 }

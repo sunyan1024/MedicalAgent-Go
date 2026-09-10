@@ -3,12 +3,16 @@ package jwt
 import (
 	"GoAI/common/code"
 	"GoAI/controller"
+	userDao "GoAI/dao/user"
+	"GoAI/model"
 	"GoAI/utils/myjwt"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Auth 返回一个 Gin 中间件函数，用于验证请求的 JWT Token
@@ -51,6 +55,16 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
+		account, err := userDao.GetUserByUsername(userName)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, res.CodeOf(code.CodeInvalidToken))
+			} else {
+				c.AbortWithStatusJSON(http.StatusServiceUnavailable, res.CodeOf(code.CodeServerBusy))
+			}
+			return
+		}
+		c.Set("currentUser", account)
 		// 验证成功，将用户名存入Gin上下文
 		c.Set("userName", userName)
 		c.Next()
@@ -65,4 +79,17 @@ func maskToken(token string) string {
 	// }
 
 	// return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
+}
+
+// Auth loads the current role from the database for every request.
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		value, _ := c.Get("currentUser")
+		account, ok := value.(*model.User)
+		if !ok || account == nil || account.Role != model.RoleAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, new(controller.Response).CodeOf(code.CodeForbidden))
+			return
+		}
+		c.Next()
+	}
 }

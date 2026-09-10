@@ -4,6 +4,7 @@ import (
 	redisPkg "GoAI/common/redis"
 	"GoAI/config"
 	fileDao "GoAI/dao/file"
+	"GoAI/model"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -1168,7 +1169,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
-	knowledgeFiles, err := fileDao.GetKnowledgeFilesByUserName(username)
+	knowledgeFiles, err := fileDao.GetAccessibleKnowledgeFiles(username)
 	if err != nil {
 		log.Printf("[RAG][Query] load knowledge files failed username=%s err=%v", username, err)
 		return nil, err
@@ -1182,7 +1183,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 	rdb := redisPkg.Rdb
 	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
 	keywordTargets := make([]keywordSearchTarget, 0, len(knowledgeFiles))
-	for _, knowledgeFile := range knowledgeFiles {
+	for _, knowledgeFile := range uniqueKnowledgeFiles(knowledgeFiles) {
 		filename := strings.TrimSpace(knowledgeFile.StoredName)
 		storedFileID := strings.TrimSpace(knowledgeFile.StoredFileID)
 		if filename == "" || storedFileID == "" {
@@ -1836,4 +1837,24 @@ func BuildRAGPromptWithRetrievalQuery(originalQuery, retrievalQuery string, docs
 请提供准确、完整的回答：`, contextText.String(), retrievalQuery, originalQuery)
 
 	return prompt
+}
+
+// Prefer the user's own display name when a physical file belongs to both libraries.
+func uniqueKnowledgeFiles(files []model.KnowledgeFile) []model.KnowledgeFile {
+	result := make([]model.KnowledgeFile, 0, len(files))
+	positions := make(map[string]int)
+	for _, file := range files {
+		if file.StoredFileID == "" {
+			continue
+		}
+		if i, ok := positions[file.StoredFileID]; ok {
+			if file.Scope == model.KnowledgeScopePersonal {
+				result[i] = file
+			}
+			continue
+		}
+		positions[file.StoredFileID] = len(result)
+		result = append(result, file)
+	}
+	return result
 }

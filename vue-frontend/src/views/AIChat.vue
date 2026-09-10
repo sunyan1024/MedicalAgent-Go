@@ -32,6 +32,8 @@
         </label>
       </div>
 
+      <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与企业知识库</p>
+
       <div class="chat-messages" ref="messagesRef">
         <div v-for="(message, index) in currentMessages" :key="index"
           :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']">
