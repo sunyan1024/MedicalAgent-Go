@@ -4,16 +4,18 @@
       <button class="icon-btn" @click="$router.push('/menu')" title="返回">
         <el-icon><ArrowLeft /></el-icon>
       </button>
-      <div>
+      <div class="header-content">
         <h1>{{ isEnterprise ? '企业知识库' : '个人知识库' }}</h1>
-        <p>{{ files.length }} 个文档</p>
+        <div class="header-meta">
+          <p class="document-count">{{ files.length }} 个文档</p>
+          <p v-if="isEnterprise" class="page-description">企业资料供全体用户问答使用，由管理员维护。</p>
+        </div>
       </div>
       <button class="icon-btn" @click="loadFiles" :disabled="loading" title="刷新">
         <el-icon><Refresh /></el-icon>
       </button>
     </div>
 
-    <p v-if="isEnterprise">企业资料供全体用户问答使用，由管理员维护。</p>
     <div v-if="canManage" class="toolbar">
       <el-upload
         class="upload"
@@ -235,10 +237,32 @@ export default {
   font-weight: 700;
 }
 
-.page-header p {
-  margin: 6px 0 0;
+.header-content {
+  min-width: 0;
+}
+
+.header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-top: 6px;
+}
+
+.header-meta p {
+  margin: 0;
   color: var(--app-text-muted);
   font-size: 14px;
+  line-height: 1.6;
+}
+
+.document-count {
+  flex-shrink: 0;
+}
+
+.page-description {
+  border-left: 1px solid var(--app-border);
+  padding-left: 16px;
 }
 
 .icon-btn {
@@ -320,6 +344,12 @@ export default {
 
   .page-header {
     grid-template-columns: 40px 1fr 40px;
+  }
+
+  .page-description {
+    flex-basis: 100%;
+    border-left: 0;
+    padding-left: 0;
   }
 }
 </style>
