@@ -42,7 +42,8 @@ func InitRouter() *gin.Engine {
 	enterRouter := r.Group("/api/v2")
 
 	{
-		RegisterUserRouter(enterRouter.Group("/user"))
+		userGroup := enterRouter.Group("/user")
+		RegisterUserRouter(userGroup)
 	}
 
 	//后续登录的接口需要jwt鉴权
