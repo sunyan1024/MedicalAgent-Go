@@ -132,7 +132,7 @@ func TestRAGGenerateResponseUsesWorkflow(t *testing.T) {
 	chatModel := &testChatModel{response: "workflow answer"}
 	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
-			return []*schema.Document{{Content: "上下文内容"}}, nil
+			return []*schema.Document{{Content: "上下文内容", MetaData: map[string]any{"knowledge_scope": "personal"}}}, nil
 		}, nil
 	})
 
@@ -145,7 +145,7 @@ func TestRAGGenerateResponseUsesWorkflow(t *testing.T) {
 	if resp.Content != "workflow answer" {
 		t.Fatalf("response: got %q", resp.Content)
 	}
-	if len(chatModel.lastGenerateInput) != 1 || !strings.Contains(chatModel.lastGenerateInput[0].Content, "上下文内容") {
+	if len(chatModel.lastGenerateInput) != 1 || (!strings.Contains(chatModel.lastGenerateInput[0].Content, "上下文内容") || !strings.Contains(chatModel.lastGenerateInput[0].Content, "资料来源：当前用户个人库")) {
 		t.Fatalf("chat model should receive rag prompt, got %#v", chatModel.lastGenerateInput)
 	}
 }
@@ -154,7 +154,7 @@ func TestRAGStreamResponseUsesPreparedWorkflowMessages(t *testing.T) {
 	chatModel := &testChatModel{streamChunks: []string{"chunk1", "chunk2"}}
 	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
-			return []*schema.Document{{Content: "流式上下文"}}, nil
+			return []*schema.Document{{Content: "流式上下文", MetaData: map[string]any{"knowledge_scope": "personal"}}}, nil
 		}, nil
 	})
 
@@ -170,7 +170,7 @@ func TestRAGStreamResponseUsesPreparedWorkflowMessages(t *testing.T) {
 	if content != "chunk1chunk2" || streamed.String() != content {
 		t.Fatalf("streamed content mismatch: content=%q streamed=%q", content, streamed.String())
 	}
-	if len(chatModel.lastStreamInput) != 1 || !strings.Contains(chatModel.lastStreamInput[0].Content, "流式上下文") {
+	if len(chatModel.lastStreamInput) != 1 || (!strings.Contains(chatModel.lastStreamInput[0].Content, "流式上下文") || !strings.Contains(chatModel.lastStreamInput[0].Content, "资料来源：当前用户个人库")) {
 		t.Fatalf("stream should receive rag prompt, got %#v", chatModel.lastStreamInput)
 	}
 }
@@ -219,4 +219,17 @@ func (m *testChatModel) Stream(ctx context.Context, input []*schema.Message, opt
 
 func (m *testChatModel) WithTools(tools []*schema.ToolInfo) (einoModel.ToolCallingChatModel, error) {
 	return m, nil
+}
+
+func TestRewritePromptPreservesMedicalRecordOwnership(t *testing.T) {
+	prompt := buildRAGRewritePrompt([]*schema.Message{
+		{Role: schema.User, Content: "这是我父亲的病历"},
+		{Role: schema.Assistant, Content: "请继续"},
+		{Role: schema.User, Content: "他的检查结果是什么"},
+	})
+	for _, want := range []string{"这是我父亲的病历", "他的检查结果是什么", "保留“我的、父亲的、家属的”等病历归属", "不得改写为泛化的类似病例查询"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing context or constraint %q", want)
+		}
+	}
 }
