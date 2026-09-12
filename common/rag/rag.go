@@ -1173,6 +1173,15 @@ func convertKnowledgeVectorDocument(doc redis.Document, knowledgeFile model.Know
 
 // NewRAGQuery 创建 RAG 查询器（用于向量检索和问答）
 func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
+	return newScopedRAGQuery(ctx, username, false)
+}
+
+// NewMedicalRAGQuery only searches administrator-managed public knowledge.
+func NewMedicalRAGQuery(ctx context.Context) (*RAGQuery, error) {
+	return newScopedRAGQuery(ctx, "", true)
+}
+
+func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool) (*RAGQuery, error) {
 	start := time.Now()
 	log.Printf("[RAG][Query] init start username=%s", username)
 
@@ -1192,7 +1201,12 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
-	knowledgeFiles, err := fileDao.GetAccessibleKnowledgeFiles(username)
+	var knowledgeFiles []model.KnowledgeFile
+	if enterpriseOnly {
+		knowledgeFiles, err = fileDao.GetKnowledgeFiles(model.EnterpriseKnowledgeOwner(""))
+	} else {
+		knowledgeFiles, err = fileDao.GetAccessibleKnowledgeFiles(username)
+	}
 	if err != nil {
 		log.Printf("[RAG][Query] load knowledge files failed username=%s err=%v", username, err)
 		return nil, err
@@ -1216,6 +1230,14 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		scope := knowledgeFile.Scope
 		indexKey := BuildStoredFileIndexKey(storedFileID)
 		indexName := redisPkg.GenerateIndexName(indexKey)
+		keywordIndexName := indexName
+		if retrieveOpts.hybridEnabled {
+			keywordIndexName, err = redisPkg.EnsureChineseKeywordIndex(ctx, rdb, indexKey)
+			if err != nil {
+				log.Printf("[RAG][Query] Chinese keyword index unavailable index=%s err=%v", indexName, err)
+				keywordIndexName = ""
+			}
+		}
 		retrieverConfig := &redisRetriever.RetrieverConfig{
 			Client:       rdb,
 			Index:        indexName,
@@ -1238,7 +1260,7 @@ func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
 		}
 		retrievers = append(retrievers, rtr)
 		keywordTargets = append(keywordTargets, keywordSearchTarget{
-			indexName:    indexName,
+			indexName:    keywordIndexName,
 			filename:     filename,
 			originalName: originalName,
 			scope:        scope,
@@ -1334,15 +1356,26 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		rerankCandidateTopK = finalTopK
 	}
 	if len(allDocs) > rerankCandidateTopK {
+		allDocs = prioritizeKeywordCandidates(allDocs, rerankCandidateTopK)
+		for i, doc := range allDocs {
+			if doc != nil && doc.MetaData["keyword_retrieved"] == true {
+				log.Printf("[RAG][Retrieve] keyword candidate id=%s title=%q fused_rank=%d retained=%v coverage=%v", doc.ID, ragDocumentLabel(doc, i+1), i+1, i < rerankCandidateTopK, doc.MetaData["keyword_coverage"])
+			}
+		}
 		log.Printf("[RAG][Retrieve] rerank candidate cap before=%d after=%d", len(allDocs), rerankCandidateTopK)
 		allDocs = allDocs[:rerankCandidateTopK]
+	}
+	for i, doc := range allDocs {
+		if doc != nil {
+			log.Printf("[RAG][Retrieve] rerank candidate index=%d id=%s title=%q content_len=%d", i, doc.ID, ragDocumentLabel(doc, i+1), len(doc.Content))
+		}
 	}
 	if r.reranker != nil {
 		rerankStart := time.Now()
 		candidateCount := len(allDocs)
 		rerankedDocs, err := r.reranker.Rerank(ctx, query, allDocs, finalTopK)
 		if err != nil {
-			log.Printf("[RAG][Retrieve] rerank failed fallback=vector_sort candidates=%d err=%v elapsed=%s", candidateCount, err, time.Since(rerankStart))
+			log.Printf("[RAG][Retrieve] rerank failed fallback=recall_order candidates=%d err=%v elapsed=%s", candidateCount, err, time.Since(rerankStart))
 		} else {
 			allDocs = rerankedDocs
 			log.Printf("[RAG][Retrieve] rerank success candidates=%d docs=%d elapsed=%s", candidateCount, len(rerankedDocs), time.Since(rerankStart))
@@ -1406,9 +1439,13 @@ func (r *RAGQuery) retrieveKeywordDocuments(ctx context.Context, query string) (
 
 	docs := make([]*schema.Document, 0, topK*len(r.keywordTargets))
 	for _, target := range r.keywordTargets {
+		if target.indexName == "" {
+			continue
+		}
 		targetStart := time.Now()
 		result, err := r.rdb.Do(ctx,
 			"FT.SEARCH", target.indexName, searchQuery,
+			"LANGUAGE", "chinese",
 			"RETURN", "2", "content", "metadata",
 			"LIMIT", "0", topK,
 		).Result()
@@ -1420,7 +1457,82 @@ func (r *RAGQuery) retrieveKeywordDocuments(ctx context.Context, query string) (
 		log.Printf("[RAG][Retrieve] keyword target success index=%s filename=%s original_name=%s docs=%d total_hits=%d elapsed=%s top_ids=%s", target.indexName, target.filename, target.originalName, len(targetDocs), redisSearchTotalHits(result), time.Since(targetStart), previewDocIDs(targetDocs, 3))
 		docs = append(docs, targetDocs...)
 	}
+	sortKeywordDocuments(docs, terms)
 	return docs, nil
+}
+
+// Scores from separate Redis indexes use different corpus statistics. Rank by
+// query coverage first, then by each file's local rank, never file load order.
+func sortKeywordDocuments(docs []*schema.Document, terms []string) {
+	coverage := func(doc *schema.Document) int {
+		text := strings.ToLower(doc.Content)
+		score := 0
+		for _, term := range terms {
+			if strings.Contains(text, strings.ToLower(term)) {
+				n := runeLen(term)
+				score += n * n
+			}
+		}
+		return score
+	}
+	for _, doc := range docs {
+		doc.MetaData["keyword_coverage"] = coverage(doc)
+	}
+	sort.SliceStable(docs, func(i, j int) bool {
+		a, b := docs[i], docs[j]
+		if a.MetaData["keyword_coverage"] != b.MetaData["keyword_coverage"] {
+			return a.MetaData["keyword_coverage"].(int) > b.MetaData["keyword_coverage"].(int)
+		}
+		if a.MetaData["keyword_rank"] != b.MetaData["keyword_rank"] {
+			return a.MetaData["keyword_rank"].(int) < b.MetaData["keyword_rank"].(int)
+		}
+		return a.ID < b.ID
+	})
+}
+
+// Reserve half the bounded pool for the best lexical hits. RRF otherwise can
+// let weak shared hits exclude every document retrieved only by keywords.
+// Preserve fused order within the selected pool for rerank failure fallback.
+func prioritizeKeywordCandidates(docs []*schema.Document, limit int) []*schema.Document {
+	if limit <= 0 || len(docs) <= limit {
+		return docs
+	}
+	var keywords []*schema.Document
+	for _, doc := range docs {
+		if doc != nil && doc.MetaData["keyword_retrieved"] == true {
+			keywords = append(keywords, doc)
+		}
+	}
+	sort.SliceStable(keywords, func(i, j int) bool {
+		a, _ := keywords[i].MetaData["keyword_global_rank"].(int)
+		b, _ := keywords[j].MetaData["keyword_global_rank"].(int)
+		return a < b
+	})
+	selected := map[string]bool{}
+	for _, doc := range keywords {
+		if len(selected) >= (limit+1)/2 {
+			break
+		}
+		selected[documentUniqueKey(doc)] = true
+	}
+	for _, doc := range docs {
+		if len(selected) >= limit {
+			break
+		}
+		selected[documentUniqueKey(doc)] = true
+	}
+	result := make([]*schema.Document, 0, len(docs))
+	for _, doc := range docs {
+		if selected[documentUniqueKey(doc)] {
+			result = append(result, doc)
+		}
+	}
+	for _, doc := range docs {
+		if !selected[documentUniqueKey(doc)] {
+			result = append(result, doc)
+		}
+	}
+	return result
 }
 
 func redisSearchTotalHits(result any) int {
@@ -1483,6 +1595,7 @@ func parseKeywordSearchResult(result any, target keywordSearchTarget) []*schema.
 			MetaData: map[string]any{
 				"filename":          target.filename,
 				"keyword_retrieved": true,
+				"keyword_rank":      (i + 1) / 2,
 				"knowledge_scope":   target.scope,
 			},
 		}
@@ -1558,6 +1671,15 @@ func mergeRRFDocuments(vectorDocs, keywordDocs []*schema.Document, rrfK int) []*
 					firstRank: rank + 1,
 				}
 				merged[key] = item
+			}
+			if doc.MetaData["keyword_retrieved"] == true {
+				if item.doc.MetaData == nil {
+					item.doc.MetaData = map[string]any{}
+				}
+				item.doc.MetaData["keyword_global_rank"] = rank + 1
+				for _, field := range []string{"keyword_retrieved", "keyword_rank", "keyword_coverage"} {
+					item.doc.MetaData[field] = doc.MetaData[field]
+				}
 			}
 			item.score += 1 / float64(rrfK+rank+1)
 		}

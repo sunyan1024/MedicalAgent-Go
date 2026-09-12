@@ -90,6 +90,8 @@ func migration() error {
 		new(model.Message),
 		new(model.StoredFile),
 		new(model.KnowledgeFile),
+		new(model.MedicalReport),
+		new(model.MedicalRun),
 	); err != nil {
 		return err
 	}

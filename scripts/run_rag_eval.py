@@ -23,7 +23,7 @@ DEFAULT_TIMEOUT_SECONDS = 900
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Batch call /api/v2/AI/rag/evaluate and save the result."
+        description="Batch call /api/v3/AI/rag/evaluate and save the result."
     )
     parser.add_argument(
         "--base-url",
@@ -156,7 +156,7 @@ def call_eval_api(
     payload: dict[str, Any],
     timeout: int,
 ) -> dict[str, Any]:
-    url = base_url.rstrip("/") + "/api/v2/AI/rag/evaluate"
+    url = base_url.rstrip("/") + "/api/v3/AI/rag/evaluate"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         url,

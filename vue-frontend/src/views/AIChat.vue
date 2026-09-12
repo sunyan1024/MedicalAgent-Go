@@ -20,11 +20,12 @@
         <button class="back-btn" @click="$router.push('/menu')">← 返回</button>
         <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
         <label for="modelType">选择模型：</label>
-        <select id="modelType" v-model="selectedModel" class="model-select">
-          <option value="qwen">阿里百炼</option>
+        <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">
           <option value="ollama">Ollama</option>
+          <option value="qwen">阿里百炼</option>
           <option value="rag">阿里百炼 RAG</option>
           <option value="mcp">阿里百炼 MCP</option>
+          <option value="medical_agent">医疗 Agent</option>
         </select>
         <label for="streamingMode" style="margin-left: 20px;">
           <input type="checkbox" id="streamingMode" v-model="isStreaming" />
@@ -34,6 +35,9 @@
 
       <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与企业知识库</p>
 
+      <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading"
+        @report="medicalReportId = $event" @ready="medicalReportReady = $event" @example="inputMessage = $event" />
+      <button v-if="loading && selectedModel === 'medical_agent'" @click="cancelMedical">停止本次回答</button>
       <div class="chat-messages" ref="messagesRef">
         <div v-for="(message, index) in currentMessages" :key="index"
           :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']">
@@ -71,10 +75,13 @@
 
 import { ref, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { renderMarkdown } from '../utils/markdown'
 import api, { getApiErrorMessage } from '../utils/api'
+import MedicalPanel from '../components/MedicalPanel.vue'
 
 export default {
   name: 'AIChat',
+  components: { MedicalPanel },
   setup() {
 
     const sessions = ref({})
@@ -85,7 +92,13 @@ export default {
     const loading = ref(false)
     const messagesRef = ref(null)
     const messageInput = ref(null)
-    const selectedModel = ref('qwen')
+    const selectedModel = ref('medical_agent')
+    const savingModel = ref(false)
+    const medicalEvents = ref([])
+    const medicalReportId = ref('')
+    const medicalReportReady = ref(true)
+    let medicalAbort = null
+    const cancelMedical = () => medicalAbort?.abort()
     const isStreaming = ref(false)
     const isRecording = ref(false)
     const isTranscribing = ref(false)
@@ -104,15 +117,6 @@ export default {
     let silentGain = null
     let audioChunks = []
 
-
-    const renderMarkdown = (text) => {
-      if (!text && text !== '') return ''
-      return String(text)
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>')
-        .replace(/\n/g, '<br>')
-    }
 
     const playTTS = async (text) => {
       try {
@@ -425,6 +429,7 @@ export default {
             const sid = String(s.sessionId)
             sessionMap[sid] = {
               id: sid,
+              modelType: s.modelType || 'medical_agent',
               // name: s.name || `会话 ${sid}`, // 已废弃，统一使用 title 字段
               title: s.title || `会话 ${sid}`, // 添加 title 字段
               updated_at: s.updated_at ? new Date(s.updated_at) : new Date(0), // 添加更新时间字段
@@ -450,7 +455,27 @@ export default {
       })
     })
 
+    const saveSessionModel = async () => {
+      if (!currentSessionId.value || tempSession.value) return
+      const session = sessions.value[currentSessionId.value]
+      savingModel.value = true
+      try {
+        const { data } = await api.post('/AI/chat/model', {
+          sessionId: currentSessionId.value, modelType: selectedModel.value
+        })
+        if (data.status_code !== 1000) throw new Error(data.message || '保存失败')
+        session.modelType = selectedModel.value
+      } catch (error) {
+        selectedModel.value = session.modelType || 'medical_agent'
+        ElMessage.error('模型选择保存失败，请重试')
+      } finally {
+        savingModel.value = false
+      }
+    }
+
     const createNewSession = () => {
+      if (loading.value || savingModel.value) return
+      medicalEvents.value = []
       currentSessionId.value = 'temp'
       tempSession.value = true
       currentMessages.value = []
@@ -461,9 +486,11 @@ export default {
     }
 
     const switchSession = async (sessionId) => {
-      if (!sessionId) return
+      if (!sessionId || loading.value || savingModel.value) return
+      medicalEvents.value = []
       currentSessionId.value = String(sessionId)
       tempSession.value = false
+      selectedModel.value = sessions.value[sessionId].modelType || 'medical_agent'
 
       // lazy load history if not present
       if (!sessions.value[sessionId].messages || sessions.value[sessionId].messages.length === 0) {
@@ -514,6 +541,8 @@ export default {
 
 
     const sendMessage = async () => {
+      if (loading.value || savingModel.value) return
+      if (selectedModel.value === 'medical_agent' && !medicalReportReady.value) { ElMessage.warning('请先确认报告识别结果'); return }
       if (isRecording.value || isTranscribing.value) {
         ElMessage.warning('请先完成语音输入')
         return
@@ -537,8 +566,9 @@ export default {
 
       try {
         loading.value = true
-        if (isStreaming.value) {
-
+        if (selectedModel.value === 'medical_agent') {
+          await handleMedical(currentInput)
+        } else if (isStreaming.value) {
           await handleStreaming(currentInput)
         } else {
 
@@ -555,7 +585,7 @@ export default {
         }
         currentMessages.value.pop()
       } finally {
-        if (!isStreaming.value) {
+        if (!isStreaming.value || selectedModel.value === 'medical_agent') {
           loading.value = false
         }
         await nextTick()
@@ -563,6 +593,72 @@ export default {
       }
     }
 
+
+    async function handleMedical(question) {
+      const assistant = { role: 'assistant', content: '', meta: { status: 'streaming' } }
+      currentMessages.value.push(assistant)
+      medicalEvents.value = []
+      medicalAbort = new AbortController()
+      const body = { question, modelType: 'medical_agent', reportId: medicalReportId.value }
+      const isNew = tempSession.value || !currentSessionId.value
+      if (!isNew) body.sessionId = currentSessionId.value
+      const bindSession = id => {
+        if (!id) return
+        currentSessionId.value = id; tempSession.value = false
+        if (!sessions.value[id]) sessions.value[id] = { id, modelType: 'medical_agent', title: question.slice(0, 30), messages: [], updated_at: new Date() }
+      }
+      const accept = event => {
+        if (event.sessionId) bindSession(event.sessionId)
+        medicalEvents.value.push(event)
+        if (event.type === 'answer_delta') assistant.content += event.delta || ''
+        if (event.type === 'error') throw new Error(event.summary || '运行失败')
+        if (event.type === 'run_end') assistant.meta.status = event.status
+        currentMessages.value = [...currentMessages.value]
+      }
+      try {
+        if (!isStreaming.value) {
+          const { data } = await api.post(isNew ? '/AI/chat/send-new-session' : '/AI/chat/send', body, { signal: medicalAbort.signal })
+          if (data.status_code !== 1000) throw new Error(data.status_msg || '发送失败')
+          bindSession(data.sessionId)
+          assistant.content = data.Information || ''
+          assistant.meta.status = data.run?.status || 'completed'
+          medicalEvents.value = JSON.parse(data.run?.eventsJson || '[]')
+        } else {
+          const response = await fetch(isNew ? '/api/AI/chat/send-stream-new-session' : '/api/AI/chat/send-stream', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') || ''}` }, body: JSON.stringify(body), signal: medicalAbort.signal
+          })
+          if (!response.ok) { const data = await response.json(); throw new Error(data.status_msg || '请求失败') }
+          const reader = response.body.getReader(), decoder = new TextDecoder()
+          let buffer = '', completed = false
+          try {
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const { value, done } = await reader.read()
+              buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+              const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || ''
+              for (const frame of frames) {
+                const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n')
+                if (data === '[DONE]') { completed = true; continue }
+                if (data) accept(JSON.parse(data))
+              }
+              if (done) break
+            }
+          } finally { reader.releaseLock() }
+          if (!completed) throw new Error('连接已结束，运行状态可在历史记录中查看')
+        }
+      } catch (e) {
+        assistant.meta.status = 'failed'
+        if (!assistant.content) assistant.content = medicalAbort.signal.aborted ? '已停止本次回答。' : (e.message || '运行失败')
+        if (!medicalAbort.signal.aborted) ElMessage.error(getApiErrorMessage(e, '运行失败'))
+      } finally {
+        if (!tempSession.value && sessions.value[currentSessionId.value]) {
+          sessions.value[currentSessionId.value].messages = [...currentMessages.value]
+          sessions.value[currentSessionId.value].updated_at = new Date()
+        }
+        currentMessages.value = [...currentMessages.value]
+        medicalAbort = null
+      }
+    }
 
     async function handleStreaming(question) {
 
@@ -656,6 +752,7 @@ export default {
                     if (tempSession.value) {
                       sessions.value[newSid] = {
                         id: newSid,
+                        modelType: selectedModel.value,
                         title: '新会话',
                         messages: [...currentMessages.value]
                       }
@@ -733,6 +830,7 @@ export default {
 
           sessions.value[sessionId] = {
             id: sessionId,
+            modelType: selectedModel.value,
             title: '新会话',
             messages: [ { role: 'user', content: question }, aiMessage ]
           }
@@ -788,12 +886,14 @@ export default {
     })
 
     onUnmounted(() => {
+      cancelMedical()
       isRecording.value = false
       cleanupRecorder()
     })
 
     // expose to template
     return {
+      medicalEvents, medicalReportId, medicalReportReady, cancelMedical,
       // sessions: computed(() => Object.values(sessions.value)),
       sortedSessions,
       currentSessionId,
@@ -804,6 +904,8 @@ export default {
       messagesRef,
       messageInput,
       selectedModel,
+      savingModel,
+      saveSessionModel,
       isStreaming,
       isRecording,
       isTranscribing,
@@ -1031,24 +1133,101 @@ export default {
 
 /* message content */
 .message-content {
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
+
+.message-content :deep(h1),
+.message-content :deep(h2),
+.message-content :deep(h3),
+.message-content :deep(h4),
+.message-content :deep(h5),
+.message-content :deep(h6) {
+  margin: 1em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.message-content :deep(h1) { font-size: 1.5em; }
+.message-content :deep(h2) { font-size: 1.3em; }
+.message-content :deep(h3) { font-size: 1.15em; }
+.message-content :deep(h4),
+.message-content :deep(h5),
+.message-content :deep(h6) { font-size: 1em; }
+
+.message-content :deep(p),
+.message-content :deep(ul),
+.message-content :deep(ol),
+.message-content :deep(blockquote),
+.message-content :deep(pre) { margin: 0.65em 0; }
+
+.message-content :deep(ul),
+.message-content :deep(ol) { padding-left: 1.6em; }
+.message-content :deep(li) { margin: 0.25em 0; }
+.message-content :deep(blockquote) {
+  padding-left: 12px;
+  border-left: 3px solid var(--app-border);
+  color: var(--app-text-muted);
+}
+
+.message-content :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--app-surface-subtle);
+  color: var(--app-text);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.message-content :deep(pre) {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 12px;
+  background: var(--app-surface-subtle);
+  border-radius: var(--app-radius);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.message-content :deep(pre code) { padding: 0; }
+.message-content :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+.message-content :deep(th),
+.message-content :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  text-align: left;
+}
+.message-content :deep(a) { color: inherit; text-decoration: underline; }
+.message-content :deep(img) { max-width: 100%; height: auto; }
+.message-content :deep(hr) { border: 0; border-top: 1px solid var(--app-border); }
+.message-content :deep(> :first-child) { margin-top: 0; }
+.message-content :deep(> :last-child) { margin-bottom: 0; }
 
 /* input area */
 .chat-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
   padding: 16px 20px;
   background: var(--app-surface);
   border-top: 1px solid var(--app-border-soft);
-  position: relative;
 }
 
 .chat-input textarea {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   resize: none;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  padding: 12px 154px 12px 14px;
+  padding: 12px 14px;
   font-size: 15px;
   outline: none;
   background: var(--app-surface);
@@ -1064,9 +1243,7 @@ export default {
 }
 
 .voice-btn {
-  position: absolute;
-  right: 96px;
-  bottom: 26px;
+  white-space: nowrap;
   min-width: 52px;
   height: 32px;
   padding: 0 10px;
@@ -1098,9 +1275,7 @@ export default {
 }
 
 .send-btn {
-  position: absolute;
-  right: 30px;
-  bottom: 26px;
+  white-space: nowrap;
   height: 32px;
   padding: 0 16px;
   border: none;
@@ -1120,6 +1295,16 @@ export default {
 .send-btn:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .chat-input textarea {
+    grid-column: 1 / -1;
+  }
+
+  .voice-btn {
+    grid-column: 2;
+  }
 }
 
 @media (max-width: 820px) {

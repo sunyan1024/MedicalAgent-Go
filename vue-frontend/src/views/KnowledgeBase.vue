@@ -6,10 +6,10 @@
       </button>
       <el-button v-if="isEnterprise" type="danger" @click="handleLogout">退出登录</el-button>
       <div class="header-content">
-        <h1>{{ isEnterprise ? '企业知识库' : '个人知识库' }}</h1>
+        <h1>{{ isEnterprise ? '医学知识库' : '个人知识库' }}</h1>
         <div class="header-meta">
           <p class="document-count">{{ files.length }} 个文档</p>
-          <p v-if="isEnterprise" class="page-description">仅管理员可浏览和管理文件，普通用户通过问答使用企业知识。</p>
+          <p v-if="isEnterprise" class="page-description">管理员维护公共医学资料，请注明来源与日期；普通用户通过医疗问答检索。不要上传个人报告。</p>
         </div>
       </div>
       <button class="icon-btn" @click="loadFiles" :disabled="loading" title="刷新">

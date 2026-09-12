@@ -3,6 +3,7 @@ package session
 import (
 	"GoAI/common/code"
 	"GoAI/controller"
+	medical "GoAI/controller/medical"
 	"GoAI/model"
 	"GoAI/service/session"
 	"fmt"
@@ -18,6 +19,7 @@ type (
 	}
 
 	CreateSessionAndSendMessageRequest struct {
+		ReportID     string `json:"reportId,omitempty"`
 		UserQuestion string `json:"question" binding:"required"`  // 用户问题;
 		ModelType    string `json:"modelType" binding:"required"` // 模型类型;
 	}
@@ -29,6 +31,7 @@ type (
 	}
 
 	ChatSendRequest struct {
+		ReportID     string `json:"reportId,omitempty"`
 		UserQuestion string `json:"question" binding:"required"`            // 用户问题;
 		ModelType    string `json:"modelType" binding:"required"`           // 模型类型;
 		SessionID    string `json:"sessionId,omitempty" binding:"required"` // 当前会话ID
@@ -89,6 +92,10 @@ func CreateSessionAndSendMessage(c *gin.Context) {
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
 		return
 	}
+	if req.ModelType == "medical_agent" {
+		medical.Chat(c, req.UserQuestion, "", req.ReportID, false)
+		return
+	}
 
 	//内部会创建会话并发送消息，并会将AI回答、当前会话返回
 	session_id, aiInformation, code_ := session.CreateSessionAndSendMessage(userName, req.UserQuestion, req.ModelType)
@@ -128,6 +135,10 @@ func CreateStreamSessionAndSendMessage(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"error": "Invalid parameters"})
 		return
 	}
+	if req.ModelType == "medical_agent" {
+		medical.Chat(c, req.UserQuestion, "", req.ReportID, true)
+		return
+	}
 
 	// 设置SSE头
 	c.Header("Content-Type", "text/event-stream") // 设置为SSE流式传输
@@ -137,7 +148,7 @@ func CreateStreamSessionAndSendMessage(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")           // 禁止代理缓存
 
 	// 先创建会话并立即把 sessionId 下发给前端，随后再开始流式输出
-	sessionID, code_ := session.CreateStreamSessionOnly(userName, req.UserQuestion)
+	sessionID, code_ := session.CreateStreamSessionOnly(userName, req.UserQuestion, req.ModelType)
 	if code_ != code.CodeSuccess {
 		c.SSEvent("error", gin.H{"message": "Failed to create session"})
 		return
@@ -175,6 +186,10 @@ func ChatSend(c *gin.Context) {
 	// 解析参数
 	if err := c.ShouldBindJSON(req); err != nil {
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	if req.ModelType == "medical_agent" {
+		medical.Chat(c, req.UserQuestion, req.SessionID, req.ReportID, false)
 		return
 	}
 
@@ -215,6 +230,10 @@ func ChatStreamSend(c *gin.Context) {
 	// 解析参数
 	if err := c.ShouldBindJSON(req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"error": "Invalid parameters"})
+		return
+	}
+	if req.ModelType == "medical_agent" {
+		medical.Chat(c, req.UserQuestion, req.SessionID, req.ReportID, true)
 		return
 	}
 
@@ -259,4 +278,18 @@ func ChatHistory(c *gin.Context) {
 	res.History = history
 
 	c.JSON(http.StatusOK, res)
+}
+
+// SaveSessionModel 保存会话模型选择，无需发送消息。
+func SaveSessionModel(c *gin.Context) {
+	var req struct {
+		SessionID string `json:"sessionId" binding:"required"`
+		ModelType string `json:"modelType" binding:"required"`
+	}
+	res := new(controller.Response)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
+		return
+	}
+	c.JSON(http.StatusOK, res.CodeOf(session.SaveSessionModel(c.GetString("userName"), req.SessionID, req.ModelType)))
 }

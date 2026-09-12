@@ -1,0 +1,259 @@
+package medical
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/schema"
+)
+
+type scenarioModel struct {
+	mu         sync.Mutex
+	calls      map[string]int
+	withReport bool
+	loop       bool
+	childInput []*schema.Message
+}
+
+func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ ...model.Option) (*schema.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.calls == nil {
+		m.calls = map[string]int{}
+	}
+	role := "main"
+	if strings.Contains(msgs[0].Content, "你是报告分析子 Agent") {
+		role = "report"
+	}
+	if strings.Contains(msgs[0].Content, "你是医学证据检索子 Agent") {
+		role = "research"
+	}
+	n := m.calls[role]
+	m.calls[role]++
+	call := func(name, args string) *schema.Message {
+		return schema.AssistantMessage("", []schema.ToolCall{{ID: fmt.Sprintf("%s_%d", role, n), Type: "function", Function: schema.FunctionCall{Name: name, Arguments: args}}})
+	}
+	if role == "main" {
+		if n == 0 || m.loop {
+			if m.withReport && n == 0 {
+				return call("report_analyst", `{"request":"解读已确认报告"}`), nil
+			}
+			return call("medical_researcher", `{"request":"查找指标解释证据"}`), nil
+		}
+		if m.withReport && n == 1 {
+			return call("medical_researcher", `{"request":"查询报告指标相关资料"}`), nil
+		}
+		return schema.AssistantMessage("已完成，资料见 [med_abc123]。", nil), nil
+	}
+	if role == "report" {
+		if n == 0 {
+			return call("read_report", `{}`), nil
+		}
+		if n == 1 {
+			return call("compare_reference_ranges", `{}`), nil
+		}
+		return schema.AssistantMessage(`{"findings":["指标偏高"],"evidence":["第1行"],"missing":[]}`, nil), nil
+	}
+	if n == 0 {
+		m.childInput = append([]*schema.Message(nil), msgs...)
+	}
+	if n%3 == 0 {
+		return call("search_medical_knowledge", `{"query":"第一次查询"}`), nil
+	}
+	if n%3 == 1 {
+		return call("search_medical_knowledge", `{"query":"改写后的查询"}`), nil
+	}
+	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["med_abc123"],"missing":[]}`, nil), nil
+}
+func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	out, err := m.Generate(ctx, msgs, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return schema.StreamReaderFromArray([]*schema.Message{out}), nil
+}
+
+func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
+	m := &scenarioModel{withReport: true}
+	queries := []string{}
+	r := NewRuntime("test", Dependencies{Model: m, ReadReport: func(context.Context) ([]Indicator, error) {
+		return []Indicator{{Name: "合成指标", Value: "12", Unit: "U", Reference: "1-10", Source: "第1行"}}, nil
+	}, Search: func(_ context.Context, q string) ([]Source, error) {
+		queries = append(queries, q)
+		if len(queries) == 1 {
+			return nil, nil
+		}
+		return []Source{{ID: "med_abc123", Title: "测试资料", Content: "测试证据"}}, nil
+	}})
+	answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("仅主Agent可见的历史"), schema.UserMessage("请解释报告")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer, "[med_abc123]") {
+		t.Fatalf("answer: %s", answer)
+	}
+	if len(queries) != 2 || queries[0] == queries[1] {
+		t.Fatalf("not replanned: %v", queries)
+	}
+	if r.used != 6 {
+		t.Fatalf("want 6 calls including delegation, got %d", r.used)
+	}
+	for _, msg := range m.childInput {
+		if strings.Contains(msg.Content, "仅主Agent可见的历史") {
+			t.Fatal("parent history leaked to child")
+		}
+	}
+	starts := 0
+	for _, e := range r.Events {
+		if e.Type == "subagent_start" {
+			starts++
+		}
+		if e.Type == "tool_start" && e.ParentID == "" {
+			t.Fatal("missing delegation parent")
+		}
+	}
+	if starts != 2 {
+		t.Fatalf("delegations: %d", starts)
+	}
+}
+
+func TestKnowledgeOnlyDoesNotReadReport(t *testing.T) {
+	r := NewRuntime("test", Dependencies{Model: &scenarioModel{}, ReadReport: func(context.Context) ([]Indicator, error) { t.Fatal("knowledge question read report"); return nil, nil }, Search: func(context.Context, string) ([]Source, error) { return []Source{{ID: "med_abc123"}}, nil }})
+	if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("什么是血常规")}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBoundedToolsBudgetErrorsAndCancellation(t *testing.T) {
+	r := NewRuntime("test", Dependencies{})
+	local := 0
+	calls := 0
+	task := r.bounded("child", "parent", &local, toolInfo("tool", "test", ""), func(context.Context, string, string) (string, error) { calls++; return "", errors.New("retryable") }).(tool.InvokableTool)
+	for i := 0; i < 3; i++ {
+		out, err := task.InvokableRun(context.Background(), `{}`)
+		if err != nil || !strings.Contains(out, "retryable") {
+			t.Fatalf("error not observation: %s %v", out, err)
+		}
+	}
+	if _, err := task.InvokableRun(context.Background(), `{}`); !errors.Is(err, ErrBudget) {
+		t.Fatal(err)
+	}
+	if calls != 3 {
+		t.Fatal(calls)
+	}
+	local = 0
+	r.used = 9
+	if _, err := task.InvokableRun(context.Background(), `{}`); !errors.Is(err, ErrBudget) {
+		t.Fatal("global budget not enforced")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r.used = 0
+	if _, err := task.InvokableRun(ctx, `{}`); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancel ignored")
+	}
+}
+
+func TestAgentLoopTerminates(t *testing.T) {
+	r := NewRuntime("loop", Dependencies{Model: &scenarioModel{loop: true}, Search: func(context.Context, string) ([]Source, error) { return nil, nil }})
+	answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("循环")})
+	if err == nil || r.used > 9 || !strings.Contains(answer, "未完成") {
+		t.Fatalf("used=%d err=%v answer=%s", r.used, err, answer)
+	}
+}
+
+func TestCompareDoesNotInventRanges(t *testing.T) {
+	items := []Indicator{{Value: "2", Unit: "U", Reference: "1-3"}, {Value: "4", Unit: "U", Reference: "1～3"}, {Value: "0", Unit: "U", Reference: "1-3"}, {Value: "4", Unit: "U"}, {Value: "NaN", Unit: "U", Reference: "1-3"}, {Value: "4", Unit: "mg/L", Reference: "1-3 mmol/L"}, {Value: "2", Reference: "1-3"}, {Value: "2", Unit: "U", Reference: "3-1"}}
+	want := []string{"范围内", "偏高", "偏低", "待核对", "待核对", "待核对", "待核对", "待核对"}
+	for i, f := range Compare(items) {
+		if f.Status != want[i] {
+			t.Fatalf("case %d: %s", i, f.Status)
+		}
+	}
+}
+
+func TestCitationAndParameterValidation(t *testing.T) {
+	r := NewRuntime("", Dependencies{})
+	r.sources["med_abc"] = Source{ID: "med_abc"}
+	if got := r.validateCitations("[med_abc] [med_bad]"); got != "[med_abc] [来源未验证]" {
+		t.Fatal(got)
+	}
+	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","username":"victim"}`} {
+		if _, err := argument(raw, "query"); err == nil {
+			t.Fatal(raw)
+		}
+	}
+}
+
+func TestMCPTransportUsesRealToolResult(t *testing.T) {
+	sources, err := searchMCP(context.Background(), "测试查询", func(_ context.Context, q string) ([]Source, error) {
+		if q != "测试查询" {
+			t.Fatal(q)
+		}
+		return []Source{{ID: "med_abc", Title: "测试", Content: "证据"}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].Content != "证据" {
+		t.Fatal(sources)
+	}
+}
+
+func TestCancellationStopsInFlightChildTool(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	r := NewRuntime("cancel", Dependencies{Model: &scenarioModel{}, Search: func(ctx context.Context, _ string) ([]Source, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}})
+	done := make(chan error, 1)
+	go func() { _, err := r.Run(ctx, []*schema.Message{schema.UserMessage("查询资料")}); done <- err }()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("child tool did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancellation was not propagated")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("agent did not stop after cancellation")
+	}
+}
+
+func TestBudgetModelDisablesToolsForFinalSummary(t *testing.T) {
+	r := NewRuntime("budget", Dependencies{})
+	local := 3
+	m := &budgetModel{runtime: r, local: &local}
+	input := []*schema.Message{schema.UserMessage("question")}
+	messages, opts := m.prepare(input, []model.Option{model.WithTools([]*schema.ToolInfo{toolInfo("search", "test", "query")})})
+	options := model.GetCommonOptions(nil, opts...)
+	if len(options.Tools) != 0 || options.ToolChoice == nil || *options.ToolChoice != schema.ToolChoiceForbidden {
+		t.Fatal("exhausted agent can still request tools")
+	}
+	if len(input) != 1 || !strings.Contains(messages[len(messages)-1].Content, "必须根据已有结果") {
+		t.Fatal("final summary instruction missing or input mutated")
+	}
+	local = 0
+	r.used = 9
+	_, opts = m.prepare(input, nil)
+	if model.GetCommonOptions(nil, opts...).ToolChoice == nil {
+		t.Fatal("shared budget did not disable tools")
+	}
+}

@@ -46,7 +46,7 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	}
 	request := func(username, method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(method, "/api/v2"+path, strings.NewReader(body))
+		req := httptest.NewRequest(method, "/api/v3"+path, strings.NewReader(body))
 		if username != "" {
 			req.Header.Set("Authorization", "Bearer "+tokens[username])
 		}
@@ -83,10 +83,10 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	}
 	// Every ordinary-user business route must reject administrators before invoking handlers.
 	for _, route := range r.Routes() {
-		if !strings.HasPrefix(route.Path, "/api/v2/AI/") && !strings.HasPrefix(route.Path, "/api/v2/image/") && !strings.HasPrefix(route.Path, "/api/v2/file/") {
+		if !strings.HasPrefix(route.Path, "/api/v3/AI/") && !strings.HasPrefix(route.Path, "/api/v3/image/") && !strings.HasPrefix(route.Path, "/api/v3/file/") && !strings.HasPrefix(route.Path, "/api/v3/medical/") {
 			continue
 		}
-		path := strings.ReplaceAll(strings.TrimPrefix(route.Path, "/api/v2"), ":id", "bob-file")
+		path := strings.ReplaceAll(strings.TrimPrefix(route.Path, "/api/v3"), ":id", "bob-file")
 		if w := request("admin", route.Method, path, `{}`); w.Code != http.StatusForbidden {
 			t.Fatalf("admin accessed %s %s: %s", route.Method, path, w.Body.String())
 		}

@@ -9,8 +9,8 @@
         <el-card class="menu-item" @click="$router.push('/ai-chat')">
           <div class="card-content">
             <el-icon size="48" color="#409eff"><ChatDotRound /></el-icon>
-            <h3>AI聊天</h3>
-            <p>与AI进行智能对话</p>
+            <h3>医疗 Agent</h3>
+            <p>报告解读、症状咨询与医学证据检索</p>
           </div>
         </el-card>
         <el-card class="menu-item" @click="$router.push('/image-recognition')">

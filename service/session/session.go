@@ -3,6 +3,7 @@ package session
 import (
 	"GoAI/common/aihelper"
 	"GoAI/common/code"
+	"GoAI/common/mysql"
 	"GoAI/dao/session"
 	"GoAI/model"
 	"GoAI/utils"
@@ -38,6 +39,7 @@ func GetUserSessionsByUserName(userName string) ([]model.SessionInfo, error) {
 	for _, s := range sessions {
 		SessionInfos = append(SessionInfos, model.SessionInfo{
 			SessionID: s.ID,
+			ModelType: s.ModelType,
 			Title:     s.Title,     // 使用数据库中的title
 			UpdatedAt: s.UpdatedAt, // 使用数据库中的updated_at
 		})
@@ -87,9 +89,10 @@ func CreateSessionAndSendMessage(userName string, userQuestion string, modelType
 
 	//创建会话
 	newSession := &model.Session{
-		ID:       utils.GenerateUUID(),
-		UserName: userName,
-		Title:    title, // 使用截取后的问题作为标题
+		ID:        utils.GenerateUUID(),
+		UserName:  userName,
+		ModelType: modelType,
+		Title:     title, // 使用截取后的问题作为标题
 	}
 	createdSession, err := session.CreateSession(newSession)
 	if err != nil {
@@ -124,15 +127,16 @@ func CreateSessionAndSendMessage(userName string, userQuestion string, modelType
 // 返回值:
 //   - string: 新创建的会话ID
 //   - code.Code: 操作状态码，成功返回code.CodeSuccess，失败返回code.CodeServerBusy
-func CreateStreamSessionOnly(userName string, userQuestion string) (string, code.Code) {
+func CreateStreamSessionOnly(userName string, userQuestion string, modelType string) (string, code.Code) {
 	// 安全截取用户问题的前90个字节作为标题
 	title := safeTruncateString(userQuestion, 90)
 
 	// 创建会话
 	newSession := &model.Session{
-		ID:       utils.GenerateUUID(),
-		UserName: userName,
-		Title:    title, // 使用截取后的问题作为标题
+		ID:        utils.GenerateUUID(),
+		UserName:  userName,
+		ModelType: modelType,
+		Title:     title, // 使用截取后的问题作为标题
 	}
 	createdSession, err := session.CreateSession(newSession)
 	if err != nil {
@@ -163,6 +167,9 @@ func CreateStreamSessionOnly(userName string, userQuestion string) (string, code
 //  3. 通过回调函数实时发送SSE格式的AI响应
 //  4. 最后发送[DONE]标记表示流结束
 func StreamMessageToExistingSession(userName string, sessionID string, userQuestion string, modelType string, writer http.ResponseWriter) code.Code {
+	if status := SaveSessionModel(userName, sessionID, modelType); status != code.CodeSuccess {
+		return status
+	}
 	// 确保 writer 支持 Flush
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
@@ -226,7 +233,7 @@ func StreamMessageToExistingSession(userName string, sessionID string, userQuest
 //	string: 创建的会话ID
 //	code.Code: 操作状态码，CodeSuccess表示成功
 func CreateStreamSessionAndSendMessage(userName string, userQuestion string, modelType string, writer http.ResponseWriter) (string, code.Code) {
-	sessionID, code_ := CreateStreamSessionOnly(userName, userQuestion)
+	sessionID, code_ := CreateStreamSessionOnly(userName, userQuestion, modelType)
 	if code_ != code.CodeSuccess {
 		return "", code_
 	}
@@ -254,6 +261,9 @@ func CreateStreamSessionAndSendMessage(userName string, userQuestion string, mod
 //	string: AI生成的回答内容
 //	code.Code: 操作状态码，成功返回CodeSuccess，失败返回对应错误码
 func ChatSend(userName string, sessionID string, userQuestion string, modelType string) (string, code.Code) {
+	if status := SaveSessionModel(userName, sessionID, modelType); status != code.CodeSuccess {
+		return "", status
+	}
 	//1：获取AIHelper
 	manager := aihelper.GetGlobalManager()
 	config := map[string]interface{}{"username": userName} // 用于 RAG 模型获取用户文档
@@ -311,8 +321,22 @@ func GetChatHistory(userName string, sessionID string) ([]model.History, code.Co
 	// 获取AIHelper中的消息历史
 	manager := aihelper.GetGlobalManager()
 	helper, exists := manager.GetAIHelper(userName, sessionID)
-	if !exists {
-		return nil, code.CodeServerBusy
+	var medicalCount int64
+	if mysql.DB.Migrator().HasTable(&model.MedicalRun{}) {
+		if err := mysql.DB.Model(&model.MedicalRun{}).Where("user_name = ? AND session_id = ?", userName, sessionID).Count(&medicalCount).Error; err != nil {
+			return nil, code.CodeServerBusy
+		}
+	}
+	if !exists || medicalCount > 0 {
+		var records []model.Message
+		if err := mysql.DB.Where("user_name = ? AND session_id = ?", userName, sessionID).Order("id asc").Find(&records).Error; err != nil {
+			return nil, code.CodeServerBusy
+		}
+		history := make([]model.History, 0, len(records))
+		for _, msg := range records {
+			history = append(history, model.History{IsUser: msg.IsUser, Content: msg.Content})
+		}
+		return history, code.CodeSuccess
 	}
 
 	messages := helper.GetMessages()
@@ -327,4 +351,22 @@ func GetChatHistory(userName string, sessionID string) ([]model.History, code.Co
 	}
 
 	return history, code.CodeSuccess
+}
+
+// SaveSessionModel 保存当前用户会话的模型选择。
+func SaveSessionModel(userName, sessionID, modelType string) code.Code {
+	switch modelType {
+	case "ollama", "qwen", "rag", "mcp", "medical_agent":
+	default:
+		return code.CodeInvalidParams
+	}
+	// 先查询归属，避免 MySQL 对未变化的更新返回零行时误判。
+	existing, err := session.GetSessionByID(sessionID)
+	if err != nil || existing.UserName != userName {
+		return code.CodeRecordNotFound
+	}
+	if err := mysql.DB.Model(&model.Session{}).Where("id = ? AND user_name = ?", sessionID, userName).Update("model_type", modelType).Error; err != nil {
+		return code.CodeServerBusy
+	}
+	return code.CodeSuccess
 }

@@ -2,6 +2,7 @@ package router
 
 import (
 	"GoAI/common/logging"
+	medical "GoAI/controller/medical"
 	"GoAI/middleware/jwt"
 	"fmt"
 	"os"
@@ -12,10 +13,10 @@ import (
 
 // InitRouter 初始化并配置 Gin 路由引擎
 // 返回配置好的 *gin.Engine 实例，包含以下路由组：
-// - /api/v2/user: 用户相关路由
-// - /api/v2/AI: 需要 JWT 认证的 AI 相关路由
-// - /api/v2/image: 需要 JWT 认证的图像相关路由
-// - /api/v2/file: 需要 JWT 认证的文件相关路由
+// - /api/v3/user: 用户相关路由
+// - /api/v3/AI: 需要 JWT 认证的 AI 相关路由
+// - /api/v3/image: 需要 JWT 认证的图像相关路由
+// - /api/v3/file: 需要 JWT 认证的文件相关路由
 func InitRouter() *gin.Engine {
 	gin.DefaultWriter = logging.NewColoredTimeWriter(os.Stdout)
 	gin.DefaultErrorWriter = logging.NewColoredTimeWriter(os.Stderr)
@@ -39,7 +40,7 @@ func InitRouter() *gin.Engine {
 	}))
 	r.Use(gin.RecoveryWithWriter(gin.DefaultErrorWriter))
 
-	enterRouter := r.Group("/api/v2")
+	enterRouter := r.Group("/api/v3")
 
 	{
 		userGroup := enterRouter.Group("/user")
@@ -64,6 +65,12 @@ func InitRouter() *gin.Engine {
 		FileGroup.Use(jwt.Auth(), jwt.RequireUser())
 		FileRouter(FileGroup)
 	}
+
+	medicalGroup := enterRouter.Group("/medical", jwt.Auth(), jwt.RequireUser())
+	medicalGroup.POST("/reports", medical.CreateReport)
+	medicalGroup.GET("/reports/:id", medical.GetReport)
+	medicalGroup.PATCH("/reports/:id", medical.ConfirmReport)
+	medicalGroup.GET("/runs", medical.Runs)
 
 	enterprise := enterRouter.Group("/enterprise/file", jwt.Auth())
 	EnterpriseFileRouter(enterprise)

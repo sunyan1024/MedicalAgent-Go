@@ -202,6 +202,9 @@ func InitRedisIndex(ctx context.Context, filename string, dimension int) error {
 func DeleteRedisIndex(ctx context.Context, filename string) error {
 	indexName := GenerateIndexName(filename)
 	prefix := GenerateIndexNamePrefix(filename)
+	if err := Rdb.Do(ctx, "FT.DROPINDEX", ChineseKeywordIndexName(filename)).Err(); err != nil && !strings.Contains(err.Error(), "Unknown Index name") && !strings.Contains(err.Error(), "Unknown index name") {
+		return fmt.Errorf("删除关键词索引失败: %w", err)
+	}
 
 	// 1. 先删除索引
 	if err := Rdb.Do(ctx, "FT.DROPINDEX", indexName).Err(); err != nil {

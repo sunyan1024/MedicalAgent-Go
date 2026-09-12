@@ -1,0 +1,119 @@
+<template>
+  <section class="medical-panel">
+    <div class="medical-heading"><strong>医疗信息助理</strong><span>报告解读 · 症状咨询 · 医学知识检索</span></div>
+    <p>用于辅助理解和就医准备，不能替代医生诊断。请先核对报告识别结果。</p>
+    <div class="medical-actions">
+      <label class="upload-button">上传报告<input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" :disabled="busy || parsing" @change="uploadFile" /></label>
+      <button :disabled="busy || parsing" @click="showText = !showText">粘贴报告</button>
+      <button :disabled="busy || parsing" @click="useExample">合成报告样例</button>
+      <button :disabled="busy" @click="$emit('example', '我最近感觉乏力，你需要了解哪些信息？')">症状咨询示例</button>
+      <button :disabled="busy" @click="$emit('example', '血常规能检查什么？请引用医学知识库资料。')">医学知识示例</button>
+    </div>
+    <div v-if="showText" class="paste-box">
+      <textarea v-model="text" placeholder="粘贴报告原文，保留数值、单位和参考范围" maxlength="60000" />
+      <button :disabled="busy || parsing || !text.trim()" @click="uploadText">提交文字</button>
+    </div>
+    <div v-if="report" class="report-box">
+      <strong>{{ report.name }}</strong> · {{ statusLabel }}
+      <p v-if="report.error" class="medical-error">{{ report.error }}</p>
+      <details v-if="report.text"><summary>查看报告原文</summary><pre>{{ report.text }}</pre></details>
+      <div v-if="!parsing" class="indicator-scroll">
+        <table><thead><tr><th>指标</th><th>结果</th><th>单位</th><th>同单位参考范围</th><th>原文位置</th><th></th></tr></thead>
+          <tbody><tr v-for="(item, index) in indicators" :key="index">
+            <td v-for="key in ['name', 'value', 'unit', 'reference', 'source']" :key="key"><input v-model="item[key]" :disabled="busy" @input="markUnconfirmed" /></td>
+            <td><button :disabled="busy" @click="indicators.splice(index, 1); markUnconfirmed()">删除</button></td>
+          </tr></tbody>
+        </table>
+        <button :disabled="busy" @click="addIndicator">添加指标</button>
+        <button :disabled="busy || !indicators.length" @click="confirm">确认以上数值和单位</button>
+        <button :disabled="busy" @click="clearReport">收起报告</button>
+      </div>
+    </div>
+    <details class="trace" :open="busy || allEvents.length > 0">
+      <summary>Agent 执行轨迹 · {{ allEvents.filter(e => e.type.endsWith('_start')).length }} 个步骤</summary>
+      <div v-if="!allEvents.length">发送问题后，可查看主 Agent 委派、工具调用和来源。</div>
+      <ol><li v-for="(event, index) in traceEvents" :key="index" :class="{ child: event.agent && event.agent !== 'medical_assistant' }">
+        <strong>{{ agentName(event.agent) }}</strong> {{ eventLabel(event) }}
+        <span v-if="event.tool"> · {{ event.tool }}</span>
+        <span v-if="event.durationMs"> · {{ event.durationMs }} ms</span>
+        <small v-if="event.summary">{{ event.summary }}</small>
+      </li></ol>
+    </details>
+    <div v-if="sources.length" class="sources"><details v-for="source in sources" :key="source.id">
+      <summary>{{ source.title }} · [{{ source.id }}]</summary><pre>{{ source.content }}</pre>
+    </details></div>
+    <details v-if="runs.length"><summary>历史运行记录（最近30次）</summary>
+      <button v-for="run in runs" :key="run.runId" @click="historyEvents = JSON.parse(run.eventsJson || '[]')">{{ run.question }} · {{ run.status }}</button>
+    </details>
+  </section>
+</template>
+<script>
+import { ref, computed, watch, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import api, { getApiErrorMessage } from '../utils/api'
+export default {
+  name: 'MedicalPanel',
+  props: { sessionId: String, events: { type: Array, default: () => [] }, busy: Boolean },
+  emits: ['report', 'ready', 'example'],
+  setup(props, { emit }) {
+    const report = ref(null), indicators = ref([]), text = ref(''), showText = ref(false), parsing = ref(false)
+    const historyEvents = ref([]), runs = ref([])
+    let timer, disposed = false, pollGeneration = 0
+    const allEvents = computed(() => props.events.length ? props.events : historyEvents.value)
+    const traceEvents = computed(() => allEvents.value.filter(e => !['answer_delta', 'sources'].includes(e.type)))
+    const sources = computed(() => [...new Map(allEvents.value.flatMap(e => e.sources || []).map(s => [s.id, s])).values()])
+    const statusLabel = computed(() => ({ parsing: '正在识别', ready: '待确认', confirmed: '已确认', failed: '请手动核对' }[report.value?.status] || ''))
+    const markUnconfirmed = () => { if (report.value) report.value.status = 'ready'; emit('ready', false); emit('report', '') }
+    const apply = r => { report.value = r; indicators.value = JSON.parse(r.indicatorsJson || '[]'); parsing.value = r.status === 'parsing'; emit('ready', r.status === 'confirmed'); emit('report', r.status === 'confirmed' ? r.id : '') }
+    const poll = async (id, generation) => {
+      try {
+        const { data } = await api.get(`/medical/reports/${id}`)
+        if (disposed || generation !== pollGeneration) return
+        apply(data.report)
+        if (parsing.value) timer = setTimeout(() => poll(id, generation), 1800)
+      } catch (e) { if (disposed || generation !== pollGeneration) return; parsing.value = false; ElMessage.error(getApiErrorMessage(e, '报告读取失败')) }
+    }
+    const upload = async form => {
+      clearTimeout(timer); const generation = ++pollGeneration
+      parsing.value = true; emit('ready', false); emit('report', '')
+      try {
+        const { data } = await api.post('/medical/reports', form)
+        if (disposed || generation !== pollGeneration) return
+        apply(data.report); poll(data.report.id, generation)
+      } catch (e) { parsing.value = false; emit('ready', !report.value || report.value.status === 'confirmed'); ElMessage.error(getApiErrorMessage(e, '上传失败')) }
+    }
+    const uploadFile = event => { const file = event.target.files[0]; if (!file) return; const form = new FormData(); form.append('file', file); upload(form); event.target.value = '' }
+    const uploadText = () => { const form = new FormData(); form.append('text', text.value); upload(form) }
+    const useExample = () => { text.value = '合成演示报告（非真实患者）\n白细胞 11.2 10^9/L 参考范围 3.5-9.5\n血红蛋白 125 g/L 参考范围 115-150\n血小板 220 10^9/L 参考范围 125-350\n葡萄糖 6.3 mmol/L 参考范围 3.9-6.1\n以上数值和范围仅为演示输入，不作为通用医学参考范围。'; showText.value = true }
+    const addIndicator = () => { indicators.value.push({ name: '', value: '', unit: '', reference: '', source: '' }); markUnconfirmed() }
+    const confirm = async () => { try { const { data } = await api.patch(`/medical/reports/${report.value.id}`, { indicators: indicators.value }); apply(data.report); ElMessage.success('报告已确认，可以开始提问') } catch (e) { ElMessage.error(getApiErrorMessage(e, '确认失败')) } }
+    const clearReport = () => { clearTimeout(timer); ++pollGeneration; report.value = null; indicators.value = []; parsing.value = false; emit('report', ''); emit('ready', true) }
+    watch(() => props.sessionId, async id => {
+      historyEvents.value = []; runs.value = []
+      emit('report', ''); emit('ready', true)
+      if (!id || id === 'temp') { clearReport(); return }
+      try {
+        const { data } = await api.get('/medical/runs', { params: { sessionId: id } })
+        if (disposed || id !== props.sessionId) return
+        runs.value = data.runs || []
+        const last = runs.value[0]
+        if (last) historyEvents.value = JSON.parse(last.eventsJson || '[]')
+        if (last?.reportId) {
+          const res = await api.get(`/medical/reports/${last.reportId}`)
+          if (!disposed && id === props.sessionId) apply(res.data.report)
+        } else if (report.value?.sessionId && report.value.sessionId !== id) clearReport()
+      } catch (e) { ElMessage.error(getApiErrorMessage(e, '运行历史读取失败')) }
+    }, { immediate: true })
+    onUnmounted(() => { disposed = true; ++pollGeneration; clearTimeout(timer) })
+    const agentName = name => ({ medical_assistant: '主 Agent', report_analyst: '报告分析 Agent', medical_researcher: '医学检索 Agent' }[name] || '系统')
+    const eventLabel = e => ({ run_start: '开始处理', run_end: e.status === 'completed' ? '完成' : '部分完成', subagent_start: '委派任务', subagent_end: '子任务返回', tool_start: '调用工具', tool_end: e.status === 'failed' ? '工具失败' : '工具返回', error: '运行失败' }[e.type] || e.type)
+    return { report, indicators, text, showText, parsing, statusLabel, allEvents, traceEvents, sources, runs, historyEvents, markUnconfirmed, uploadFile, uploadText, useExample, addIndicator, confirm, clearReport, agentName, eventLabel }
+  }
+}
+</script>
+<style scoped>
+.medical-panel{padding:16px 20px;background:var(--app-surface,#f6faf9);border-bottom:1px solid #d9e5e1;max-height:48vh;overflow:auto;font-size:13px;color:var(--app-text,#253b34)}
+.medical-heading{display:flex;gap:16px;align-items:center}.medical-heading strong{font-size:18px}.medical-heading span,p{color:var(--app-text-muted,#567066)}
+.medical-actions{display:flex;gap:8px;flex-wrap:wrap}button,.upload-button{border:1px solid #aacdc0;border-radius:6px;background:var(--app-surface,#fff);color:inherit;padding:7px 10px;cursor:pointer;font-size:12px}.upload-button input{display:none}button:disabled{opacity:.5;cursor:wait}
+textarea{box-sizing:border-box;width:100%;min-height:90px;margin-top:10px}.report-box,.trace,.sources{margin-top:12px}.indicator-scroll{overflow:auto}table{width:100%;margin:10px 0}td input{width:100%;min-width:65px;box-sizing:border-box}th{text-align:left;white-space:nowrap}.medical-error{color:#b84334}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--app-bg,#fff);padding:12px;max-height:220px;overflow:auto}summary{cursor:pointer;padding:5px}li{padding:4px 0}li.child{margin-left:20px}small{display:block;color:var(--app-text-muted,#567066)}.sources details{border-left:3px solid #55977e;margin:6px 0;padding-left:8px}
+</style>

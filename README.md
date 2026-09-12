@@ -1,5 +1,11 @@
 # Go项目：AI应用服务平台（GoAI）
 
+## 医疗 Agent Demo
+
+新增医疗报告解读、症状咨询和医学知识检索，包含主 Agent、两个独立子 Agent、受限工具调用循环、MCP 检索、报告确认与运行轨迹。
+
+启动、资料导入、接口、评测与录屏脚本见 [医疗 Demo 文档](docs/medical/README.md)。公共知识库在界面显示为“医学知识库”，仍沿用原管理员权限；原 RAG 行为保留。
+
 ## 个人知识库、企业知识库与管理员
 
 - **个人知识库**：原知识库入口，普通用户的文件仅本人可管理和检索，管理员不能访问个人知识库。
@@ -28,12 +34,12 @@ password = "<your-password>"
 
 | 接口 | 权限 |
 | --- | --- |
-| `GET /api/v2/user/me` | 登录用户；返回 `user_info`，包含 `role` |
-| `/api/v2/file/list`、`precheck`、`upload`、`DELETE /:id` | 普通用户，仅本人 |
-| `/api/v2/AI/*`、`/api/v2/image/*` | 普通用户 |
-| `GET /api/v2/enterprise/file/list` | 管理员 |
-| `POST /api/v2/enterprise/file/precheck`、`upload` | 管理员 |
-| `DELETE /api/v2/enterprise/file/:id` | 管理员 |
+| `GET /api/v3/user/me` | 登录用户；返回 `user_info`，包含 `role` |
+| `/api/v3/file/list`、`precheck`、`upload`、`DELETE /:id` | 普通用户，仅本人 |
+| `/api/v3/AI/*`、`/api/v3/image/*` | 普通用户 |
+| `GET /api/v3/enterprise/file/list` | 管理员 |
+| `POST /api/v3/enterprise/file/precheck`、`upload` | 管理员 |
+| `DELETE /api/v3/enterprise/file/:id` | 管理员 |
 
 企业文件接口沿用个人文件请求及响应格式。后端从数据库读取当前角色，角色不符合接口要求时返回 HTTP 403 和 `status_code=3001`；前端角色显示不能作为权限依据。文件归属由服务端生成。
 

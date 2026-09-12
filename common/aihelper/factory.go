@@ -40,14 +40,14 @@ func (f *AIModelFactory) registerCreators() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	//OpenAI 类型接口（阿里百炼）
-	f.creators["qwen"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
-		return NewQwenModel(ctx)
-	}
-
 	//Ollama 本地部署
 	f.creators["ollama"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
 		return NewOllamaModel(ctx)
+	}
+
+	//OpenAI 类型接口（阿里百炼）
+	f.creators["qwen"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
+		return NewQwenModel(ctx)
 	}
 
 	// 阿里百炼 RAG 模型
@@ -62,6 +62,11 @@ func (f *AIModelFactory) registerCreators() {
 	// 阿里百炼 MCP 模型（集成MCP服务）
 	f.creators["mcp"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
 		return NewMCPModel(ctx)
+	}
+
+	// 阿里百炼医疗 agent 模型
+	f.creators["medical_agent"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
+		return NewMedicalModel(ctx)
 	}
 }
 
