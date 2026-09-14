@@ -35,7 +35,7 @@
 
       <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与企业知识库</p>
 
-      <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading"
+      <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading" :question="medicalQuestion" :request-status="medicalRequestStatus"
         @report="medicalReportId = $event" @ready="medicalReportReady = $event" @example="inputMessage = $event" />
       <button v-if="loading && selectedModel === 'medical_agent'" @click="cancelMedical">停止本次回答</button>
       <div class="chat-messages" ref="messagesRef">
@@ -95,6 +95,8 @@ export default {
     const selectedModel = ref('medical_agent')
     const savingModel = ref(false)
     const medicalEvents = ref([])
+    const medicalQuestion = ref('')
+    const medicalRequestStatus = ref('')
     const medicalReportId = ref('')
     const medicalReportReady = ref(true)
     let medicalAbort = null
@@ -476,6 +478,7 @@ export default {
     const createNewSession = () => {
       if (loading.value || savingModel.value) return
       medicalEvents.value = []
+      medicalQuestion.value = ''; medicalRequestStatus.value = ''
       currentSessionId.value = 'temp'
       tempSession.value = true
       currentMessages.value = []
@@ -488,6 +491,7 @@ export default {
     const switchSession = async (sessionId) => {
       if (!sessionId || loading.value || savingModel.value) return
       medicalEvents.value = []
+      medicalQuestion.value = ''; medicalRequestStatus.value = ''
       currentSessionId.value = String(sessionId)
       tempSession.value = false
       selectedModel.value = sessions.value[sessionId].modelType || 'medical_agent'
@@ -598,6 +602,7 @@ export default {
       const assistant = { role: 'assistant', content: '', meta: { status: 'streaming' } }
       currentMessages.value.push(assistant)
       medicalEvents.value = []
+      medicalQuestion.value = question; medicalRequestStatus.value = 'running'
       medicalAbort = new AbortController()
       const body = { question, modelType: 'medical_agent', reportId: medicalReportId.value }
       const isNew = tempSession.value || !currentSessionId.value
@@ -622,6 +627,7 @@ export default {
           bindSession(data.sessionId)
           assistant.content = data.Information || ''
           assistant.meta.status = data.run?.status || 'completed'
+          medicalRequestStatus.value = assistant.meta.status
           medicalEvents.value = JSON.parse(data.run?.eventsJson || '[]')
         } else {
           const response = await fetch(isNew ? '/api/AI/chat/send-stream-new-session' : '/api/AI/chat/send-stream', {
@@ -645,8 +651,10 @@ export default {
             }
           } finally { reader.releaseLock() }
           if (!completed) throw new Error('连接已结束，运行状态可在历史记录中查看')
+          medicalRequestStatus.value = medicalEvents.value.find(e => e.type === 'run_end')?.status || 'unknown'
         }
       } catch (e) {
+        medicalRequestStatus.value = medicalAbort.signal.aborted ? 'stopped' : (medicalEvents.value.some(e => e.type === 'error') || e.response ? 'failed' : 'unknown')
         assistant.meta.status = 'failed'
         if (!assistant.content) assistant.content = medicalAbort.signal.aborted ? '已停止本次回答。' : (e.message || '运行失败')
         if (!medicalAbort.signal.aborted) ElMessage.error(getApiErrorMessage(e, '运行失败'))
@@ -893,7 +901,7 @@ export default {
 
     // expose to template
     return {
-      medicalEvents, medicalReportId, medicalReportReady, cancelMedical,
+      medicalEvents, medicalQuestion, medicalRequestStatus, medicalReportId, medicalReportReady, cancelMedical,
       // sessions: computed(() => Object.values(sessions.value)),
       sortedSessions,
       currentSessionId,

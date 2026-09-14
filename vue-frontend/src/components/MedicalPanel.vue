@@ -29,39 +29,22 @@
         <button :disabled="busy" @click="clearReport">收起报告</button>
       </div>
     </div>
-    <details class="trace" :open="busy || allEvents.length > 0">
-      <summary>Agent 执行轨迹 · {{ allEvents.filter(e => e.type.endsWith('_start')).length }} 个步骤</summary>
-      <div v-if="!allEvents.length">发送问题后，可查看主 Agent 委派、工具调用和来源。</div>
-      <ol><li v-for="(event, index) in traceEvents" :key="index" :class="{ child: event.agent && event.agent !== 'medical_assistant' }">
-        <strong>{{ agentName(event.agent) }}</strong> {{ eventLabel(event) }}
-        <span v-if="event.tool"> · {{ event.tool }}</span>
-        <span v-if="event.durationMs"> · {{ event.durationMs }} ms</span>
-        <small v-if="event.summary">{{ event.summary }}</small>
-      </li></ol>
-    </details>
-    <div v-if="sources.length" class="sources"><details v-for="source in sources" :key="source.id">
-      <summary>{{ source.title }} · [{{ source.id }}]</summary><pre>{{ source.content }}</pre>
-    </details></div>
-    <details v-if="runs.length"><summary>历史运行记录（最近30次）</summary>
-      <button v-for="run in runs" :key="run.runId" @click="historyEvents = JSON.parse(run.eventsJson || '[]')">{{ run.question }} · {{ run.status }}</button>
-    </details>
+    <MedicalRunPanel :session-id="sessionId" :events="events" :busy="busy" :question="question" :request-status="requestStatus" />
   </section>
 </template>
 <script>
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import MedicalRunPanel from './MedicalRunPanel.vue'
 import api, { getApiErrorMessage } from '../utils/api'
 export default {
   name: 'MedicalPanel',
-  props: { sessionId: String, events: { type: Array, default: () => [] }, busy: Boolean },
+  components: { MedicalRunPanel },
+  props: { sessionId: String, events: { type: Array, default: () => [] }, busy: Boolean, question: String, requestStatus: String },
   emits: ['report', 'ready', 'example'],
   setup(props, { emit }) {
     const report = ref(null), indicators = ref([]), text = ref(''), showText = ref(false), parsing = ref(false)
-    const historyEvents = ref([]), runs = ref([])
     let timer, disposed = false, pollGeneration = 0
-    const allEvents = computed(() => props.events.length ? props.events : historyEvents.value)
-    const traceEvents = computed(() => allEvents.value.filter(e => !['answer_delta', 'sources'].includes(e.type)))
-    const sources = computed(() => [...new Map(allEvents.value.flatMap(e => e.sources || []).map(s => [s.id, s])).values()])
     const statusLabel = computed(() => ({ parsing: '正在识别', ready: '待确认', confirmed: '已确认', failed: '请手动核对' }[report.value?.status] || ''))
     const markUnconfirmed = () => { if (report.value) report.value.status = 'ready'; emit('ready', false); emit('report', '') }
     const apply = r => { report.value = r; indicators.value = JSON.parse(r.indicatorsJson || '[]'); parsing.value = r.status === 'parsing'; emit('ready', r.status === 'confirmed'); emit('report', r.status === 'confirmed' ? r.id : '') }
@@ -89,15 +72,12 @@ export default {
     const confirm = async () => { try { const { data } = await api.patch(`/medical/reports/${report.value.id}`, { indicators: indicators.value }); apply(data.report); ElMessage.success('报告已确认，可以开始提问') } catch (e) { ElMessage.error(getApiErrorMessage(e, '确认失败')) } }
     const clearReport = () => { clearTimeout(timer); ++pollGeneration; report.value = null; indicators.value = []; parsing.value = false; emit('report', ''); emit('ready', true) }
     watch(() => props.sessionId, async id => {
-      historyEvents.value = []; runs.value = []
       emit('report', ''); emit('ready', true)
       if (!id || id === 'temp') { clearReport(); return }
       try {
         const { data } = await api.get('/medical/runs', { params: { sessionId: id } })
         if (disposed || id !== props.sessionId) return
-        runs.value = data.runs || []
-        const last = runs.value[0]
-        if (last) historyEvents.value = JSON.parse(last.eventsJson || '[]')
+        const last = (data.runs || [])[0]
         if (last?.reportId) {
           const res = await api.get(`/medical/reports/${last.reportId}`)
           if (!disposed && id === props.sessionId) apply(res.data.report)
@@ -105,9 +85,7 @@ export default {
       } catch (e) { ElMessage.error(getApiErrorMessage(e, '运行历史读取失败')) }
     }, { immediate: true })
     onUnmounted(() => { disposed = true; ++pollGeneration; clearTimeout(timer) })
-    const agentName = name => ({ medical_assistant: '主 Agent', report_analyst: '报告分析 Agent', medical_researcher: '医学检索 Agent' }[name] || '系统')
-    const eventLabel = e => ({ run_start: '开始处理', run_end: e.status === 'completed' ? '完成' : '部分完成', subagent_start: '委派任务', subagent_end: '子任务返回', tool_start: '调用工具', tool_end: e.status === 'failed' ? '工具失败' : '工具返回', error: '运行失败' }[e.type] || e.type)
-    return { report, indicators, text, showText, parsing, statusLabel, allEvents, traceEvents, sources, runs, historyEvents, markUnconfirmed, uploadFile, uploadText, useExample, addIndicator, confirm, clearReport, agentName, eventLabel }
+    return { report, indicators, text, showText, parsing, statusLabel, markUnconfirmed, uploadFile, uploadText, useExample, addIndicator, confirm, clearReport }
   }
 }
 </script>
@@ -115,5 +93,5 @@ export default {
 .medical-panel{padding:16px 20px;background:var(--app-surface,#f6faf9);border-bottom:1px solid #d9e5e1;max-height:48vh;overflow:auto;font-size:13px;color:var(--app-text,#253b34)}
 .medical-heading{display:flex;gap:16px;align-items:center}.medical-heading strong{font-size:18px}.medical-heading span,p{color:var(--app-text-muted,#567066)}
 .medical-actions{display:flex;gap:8px;flex-wrap:wrap}button,.upload-button{border:1px solid #aacdc0;border-radius:6px;background:var(--app-surface,#fff);color:inherit;padding:7px 10px;cursor:pointer;font-size:12px}.upload-button input{display:none}button:disabled{opacity:.5;cursor:wait}
-textarea{box-sizing:border-box;width:100%;min-height:90px;margin-top:10px}.report-box,.trace,.sources{margin-top:12px}.indicator-scroll{overflow:auto}table{width:100%;margin:10px 0}td input{width:100%;min-width:65px;box-sizing:border-box}th{text-align:left;white-space:nowrap}.medical-error{color:#b84334}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--app-bg,#fff);padding:12px;max-height:220px;overflow:auto}summary{cursor:pointer;padding:5px}li{padding:4px 0}li.child{margin-left:20px}small{display:block;color:var(--app-text-muted,#567066)}.sources details{border-left:3px solid #55977e;margin:6px 0;padding-left:8px}
+textarea{box-sizing:border-box;width:100%;min-height:90px;margin-top:10px}.report-box{margin-top:12px}.indicator-scroll{overflow:auto}table{width:100%;margin:10px 0}td input{width:100%;min-width:65px;box-sizing:border-box}th{text-align:left;white-space:nowrap}.medical-error{color:#b84334}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--app-bg,#fff);padding:12px;max-height:220px;overflow:auto}summary{cursor:pointer;padding:5px}
 </style>
