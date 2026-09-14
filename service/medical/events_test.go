@@ -35,7 +35,7 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	cancel()
 	w.append(e)
 	var row model.MedicalRunEvent
-	if err := db.First(&row, "id = ?", e.ID).Error; err != nil {
+	if err := db.First(&row, "event_id = ?", e.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if row.Input != secret || row.Sequence != 1 || row.OccurredAt.IsZero() {
@@ -144,7 +144,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 				runID = e.RunID
 				observed++
 				var count int64
-				if queryErr := db.Model(&model.MedicalRunEvent{}).Where("id = ?", e.ID).Count(&count).Error; queryErr != nil || count != 1 {
+				if queryErr := db.Model(&model.MedicalRunEvent{}).Where("event_id = ?", e.ID).Count(&count).Error; queryErr != nil || count != 1 {
 					t.Errorf("SSE preceded commit: %d %v", count, queryErr)
 				}
 				if !terminalFailure && e.Type == "run_start" {
@@ -165,7 +165,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 				t.Fatal("terminal events missing", len(rows), observed)
 			}
 			var run model.MedicalRun
-			if err := db.First(&run, "id = ?", runID).Error; err != nil {
+			if err := db.First(&run, "run_id = ?", runID).Error; err != nil {
 				t.Fatal(err)
 			}
 			if terminalFailure && run.Status != "running" {

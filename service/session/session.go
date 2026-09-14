@@ -329,7 +329,7 @@ func GetChatHistory(uid string, sessionID string) ([]model.History, code.Code) {
 	}
 	if !exists || medicalCount > 0 {
 		var records []model.Message
-		if err := mysql.DB.Where("uid = ? AND session_id = ?", uid, sessionID).Order("id asc").Find(&records).Error; err != nil {
+		if err := mysql.DB.Where("uid = ? AND session_id = ?", uid, sessionID).Order("message_id asc").Find(&records).Error; err != nil {
 			return nil, code.CodeServerBusy
 		}
 		history := make([]model.History, 0, len(records))
@@ -365,7 +365,7 @@ func SaveSessionModel(uid, sessionID, modelType string) code.Code {
 	if err != nil || existing.UID != uid {
 		return code.CodeRecordNotFound
 	}
-	if err := mysql.DB.Model(&model.Session{}).Where("id = ? AND uid = ?", sessionID, uid).Update("model_type", modelType).Error; err != nil {
+	if err := mysql.DB.Model(&model.Session{}).Where("session_id = ? AND uid = ?", sessionID, uid).Update("model_type", modelType).Error; err != nil {
 		return code.CodeServerBusy
 	}
 	return code.CodeSuccess

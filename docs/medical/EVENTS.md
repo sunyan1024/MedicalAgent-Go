@@ -19,17 +19,17 @@ SET @until_utc = '2026-09-15 00:00:00';
 -- 单轮完整事件与层级。
 SELECT e.*
 FROM medical_run_events e
-JOIN medical_runs r ON r.id = e.run_id
+JOIN medical_runs r ON r.run_id = e.run_id
 WHERE e.run_id = @run_id AND r.uid = @uid
 ORDER BY e.sequence;
 
 -- 将一次调用的输入与输出、错误合并展示。
-SELECT s.id, s.parent_id, s.agent, s.tool, s.input,
+SELECT s.event_id, s.parent_id, s.agent, s.tool, s.input,
        f.status, f.duration_ms, f.output, f.error
 FROM medical_run_events s
-JOIN medical_runs r ON r.id = s.run_id
+JOIN medical_runs r ON r.run_id = s.run_id
 LEFT JOIN medical_run_events f
-  ON f.run_id = s.run_id AND f.parent_id = s.id
+  ON f.run_id = s.run_id AND f.parent_id = s.event_id
  AND f.type IN ('tool_end', 'subagent_end')
 WHERE s.run_id = @run_id AND r.uid = @uid
   AND s.type IN ('tool_start', 'subagent_start')
@@ -39,7 +39,7 @@ ORDER BY s.sequence;
 SELECT e.run_id, e.sequence, e.agent, e.tool, e.type,
        e.status, e.error, e.occurred_at
 FROM medical_run_events e
-JOIN medical_runs r ON r.id = e.run_id
+JOIN medical_runs r ON r.run_id = e.run_id
 WHERE r.uid = @uid AND e.status IN ('failed', 'rejected')
   AND e.occurred_at >= @from_utc AND e.occurred_at < @until_utc
 ORDER BY e.occurred_at, e.run_id, e.sequence;
@@ -50,21 +50,21 @@ SELECT e.agent, e.tool, COUNT(*) AS finished_calls,
        ROUND(100.0 * SUM(e.status = 'failed') / COUNT(*), 2) AS failure_percent,
        ROUND(AVG(e.duration_ms), 2) AS average_duration_ms
 FROM medical_run_events e
-JOIN medical_runs r ON r.id = e.run_id
+JOIN medical_runs r ON r.run_id = e.run_id
 WHERE r.uid = @uid AND e.type = 'tool_end'
   AND e.occurred_at >= @from_utc AND e.occurred_at < @until_utc
 GROUP BY e.agent, e.tool;
 
 -- 未观察到结束事件的调用，不能直接视作工具失败。
-SELECT s.run_id, s.id, s.agent, s.tool, r.status AS run_status
+SELECT s.run_id, s.event_id, s.agent, s.tool, r.status AS run_status
 FROM medical_run_events s
-JOIN medical_runs r ON r.id = s.run_id
+JOIN medical_runs r ON r.run_id = s.run_id
 WHERE r.uid = @uid
   AND s.type IN ('tool_start', 'subagent_start')
   AND s.occurred_at >= @from_utc AND s.occurred_at < @until_utc
   AND NOT EXISTS (
     SELECT 1 FROM medical_run_events f
-    WHERE f.run_id = s.run_id AND f.parent_id = s.id
+    WHERE f.run_id = s.run_id AND f.parent_id = s.event_id
       AND f.type IN ('tool_end', 'subagent_end')
   );
 ```

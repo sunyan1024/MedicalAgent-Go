@@ -161,7 +161,7 @@ func DeleteKnowledgeFile(owner model.KnowledgeOwner, fileID string) error {
 		}
 
 		var current model.StoredFile
-		if err := tx.Where("id = ?", storedFile.ID).First(&current).Error; err != nil {
+		if err := tx.Where("stored_file_id = ?", storedFile.ID).First(&current).Error; err != nil {
 			return err
 		}
 		if current.RefCount == 0 {

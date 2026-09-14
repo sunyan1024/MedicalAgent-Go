@@ -50,7 +50,7 @@ func TestSessionModelPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	var legacy model.Session
-	if err := db.First(&legacy, "id = ?", "legacy").Error; err != nil {
+	if err := db.First(&legacy, "session_id = ?", "legacy").Error; err != nil {
 		t.Fatal(err)
 	}
 	if legacy.ModelType != "medical_agent" {

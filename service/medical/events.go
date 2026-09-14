@@ -89,7 +89,7 @@ func loadRunResponses(ctx context.Context, runs []model.MedicalRun) ([]RunRespon
 	}
 	var rows []model.MedicalRunEvent
 	// Raw inputs, outputs and errors never enter the public response path.
-	if err := mysql.DB.WithContext(ctx).Select("id", "run_id", "sequence", "parent_id", "type", "agent", "tool", "status", "summary", "duration_ms", "sources", "delta").Where("run_id IN ?", ids).Order("run_id, sequence").Find(&rows).Error; err != nil {
+	if err := mysql.DB.WithContext(ctx).Select("event_id", "run_id", "sequence", "parent_id", "type", "agent", "tool", "status", "summary", "duration_ms", "sources", "delta").Where("run_id IN ?", ids).Order("run_id, sequence").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	events := make(map[string][]core.Event)

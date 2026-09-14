@@ -4,7 +4,7 @@ import "time"
 
 // MedicalReport is private task data, never a shared knowledge document.
 type MedicalReport struct {
-	ID         string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	ID         string    `gorm:"column:report_id;primaryKey;type:varchar(36)" json:"id"`
 	UID        string    `gorm:"index;not null" json:"-"`
 	SessionID  string    `gorm:"type:varchar(36);index" json:"sessionId"`
 	Name       string    `json:"name"`
@@ -17,7 +17,7 @@ type MedicalReport struct {
 }
 
 type MedicalRun struct {
-	ID        string    `gorm:"primaryKey;type:varchar(36)" json:"runId"`
+	ID        string    `gorm:"column:run_id;primaryKey;type:varchar(36)" json:"runId"`
 	UID       string    `gorm:"index;not null" json:"-"`
 	SessionID string    `gorm:"type:varchar(36);index" json:"sessionId"`
 	ReportID  string    `gorm:"type:varchar(36)" json:"reportId,omitempty"`
@@ -30,7 +30,7 @@ type MedicalRun struct {
 
 // MedicalRunEvent is an independently committed execution event.
 type MedicalRunEvent struct {
-	ID         string    `gorm:"primaryKey;type:varchar(36)"`
+	ID         string    `gorm:"column:event_id;primaryKey;type:varchar(36)"`
 	RunID      string    `gorm:"type:varchar(36);not null;uniqueIndex:idx_medical_event_sequence,priority:1"`
 	Sequence   int64     `gorm:"not null;uniqueIndex:idx_medical_event_sequence,priority:2"`
 	ParentID   string    `gorm:"type:varchar(36);index"`

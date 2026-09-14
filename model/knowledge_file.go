@@ -18,7 +18,7 @@ const (
 
 // KnowledgeFile 记录用户知识库中的单个文件。
 type KnowledgeFile struct {
-	ID           string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	ID           string    `gorm:"column:knowledge_file_id;primaryKey;type:varchar(36)" json:"id"`
 	Scope        string    `gorm:"type:varchar(16);not null;default:personal;uniqueIndex:idx_scope_owner_stored,priority:1" json:"scope"`
 	OwnerKey     string    `gorm:"type:varchar(50);not null;default:'';uniqueIndex:idx_scope_owner_stored,priority:2" json:"-"`
 	UID          string    `gorm:"index;not null" json:"uid"`
@@ -32,7 +32,7 @@ type KnowledgeFile struct {
 
 // StoredFile 记录全局物理文件。用户知识库文件通过 StoredFileID 引用它。
 type StoredFile struct {
-	ID          string         `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	ID          string         `gorm:"column:stored_file_id;primaryKey;type:varchar(36)" json:"id"`
 	FileSHA256  string         `gorm:"type:char(64);uniqueIndex:idx_sha256_ext,priority:1;not null" json:"file_sha256"`
 	Ext         string         `gorm:"type:varchar(16);uniqueIndex:idx_sha256_ext,priority:2;not null" json:"ext"`
 	StoredName  string         `gorm:"type:varchar(255);not null" json:"stored_name"`

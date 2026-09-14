@@ -79,6 +79,9 @@ func migration() error {
 	if err := prepareUIDSchema(); err != nil {
 		return err
 	}
+	if err := prepareReadableIDMigration(); err != nil {
+		return err
+	}
 	if err := prepareKnowledgeFileMigration(); err != nil {
 		return err
 	}
@@ -104,6 +107,34 @@ func migration() error {
 	}
 	if DB.Migrator().HasIndex(&model.KnowledgeFile{}, "idx_user_stored_name") {
 		return DB.Migrator().DropIndex(&model.KnowledgeFile{}, "idx_user_stored_name")
+	}
+	return nil
+}
+
+// Rename generic primary-key columns before AutoMigrate sees the new model names.
+func prepareReadableIDMigration() error {
+	migrator := DB.Migrator()
+	columns := []struct {
+		table string
+		model interface{}
+		name  string
+	}{
+		{"sessions", &model.Session{}, "session_id"},
+		{"messages", &model.Message{}, "message_id"},
+		{"knowledge_files", &model.KnowledgeFile{}, "knowledge_file_id"},
+		{"stored_files", &model.StoredFile{}, "stored_file_id"},
+		{"medical_reports", &model.MedicalReport{}, "report_id"},
+		{"medical_runs", &model.MedicalRun{}, "run_id"},
+		{"medical_run_events", &model.MedicalRunEvent{}, "event_id"},
+	}
+	for _, column := range columns {
+		if !migrator.HasTable(column.table) || !migrator.HasColumn(column.table, "id") || migrator.HasColumn(column.table, column.name) {
+			continue
+		}
+		if err := migrator.RenameColumn(column.model, "id", column.name); err != nil {
+			return fmt.Errorf("rename %s.id to %s.%s failed: %w", column.table, column.table, column.name, err)
+		}
+		log.Printf("[MySQL][migration] renamed %s.id to %s.%s", column.table, column.table, column.name)
 	}
 	return nil
 }

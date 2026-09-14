@@ -36,8 +36,11 @@ func TestKnowledgeOwnershipMigration(t *testing.T) {
 		}
 	}
 	var files []model.KnowledgeFile
-	if err := db.Order("id").Find(&files).Error; err != nil {
+	if err := db.Order("knowledge_file_id").Find(&files).Error; err != nil {
 		t.Fatal(err)
+	}
+	if !db.Migrator().HasColumn("knowledge_files", "knowledge_file_id") || db.Migrator().HasColumn("knowledge_files", "id") {
+		t.Fatal("knowledge_files primary key was not renamed")
 	}
 	if len(files) != 2 {
 		t.Fatalf("files = %d", len(files))

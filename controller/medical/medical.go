@@ -121,7 +121,7 @@ func parseReport(id, path, text string) {
 		if recover() != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("id = ? AND status = ?", id, "parsing").
+			mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("report_id = ? AND status = ?", id, "parsing").
 				Updates(map[string]any{"status": "failed", "error": "解析任务中断，请重新上传或手工录入指标"})
 		}
 	}()
@@ -157,7 +157,7 @@ func parseReport(id, path, text string) {
 	}
 	finish, cancelFinish := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelFinish()
-	mysql.DB.WithContext(finish).Model(&model.MedicalReport{}).Where("id = ? AND status = ?", id, "parsing").Updates(map[string]any{"text": text, "indicators": indicators, "status": status, "error": errorText})
+	mysql.DB.WithContext(finish).Model(&model.MedicalReport{}).Where("report_id = ? AND status = ?", id, "parsing").Updates(map[string]any{"text": text, "indicators": indicators, "status": status, "error": errorText})
 }
 
 func GetReport(c *gin.Context) {

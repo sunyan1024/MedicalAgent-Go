@@ -25,7 +25,7 @@ func GetKnowledgeFiles(owner model.KnowledgeOwner) ([]model.KnowledgeFile, error
 
 func GetKnowledgeFileByID(owner model.KnowledgeOwner, fileID string) (*model.KnowledgeFile, error) {
 	var file model.KnowledgeFile
-	err := ownedFiles(mysql.DB, owner).Where("id = ?", fileID).First(&file).Error
+	err := ownedFiles(mysql.DB, owner).Where("knowledge_file_id = ?", fileID).First(&file).Error
 	return &file, err
 }
 
@@ -36,7 +36,7 @@ func GetKnowledgeFileByStoredName(owner model.KnowledgeOwner, storedName string)
 }
 
 func DeleteKnowledgeFile(tx *gorm.DB, owner model.KnowledgeOwner, fileID string) error {
-	result := ownedFiles(tx, owner).Where("id = ?", fileID).Delete(&model.KnowledgeFile{})
+	result := ownedFiles(tx, owner).Where("knowledge_file_id = ?", fileID).Delete(&model.KnowledgeFile{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -68,19 +68,19 @@ func GetStoredFileBySHA256AndExt(fileSHA256 string, ext string) (*model.StoredFi
 
 func GetStoredFileByID(id string) (*model.StoredFile, error) {
 	var storedFile model.StoredFile
-	err := mysql.DB.Where("id = ?", id).First(&storedFile).Error
+	err := mysql.DB.Where("stored_file_id = ?", id).First(&storedFile).Error
 	return &storedFile, err
 }
 
 func GetStoredFileByIDUnscoped(id string) (*model.StoredFile, error) {
 	var storedFile model.StoredFile
-	err := mysql.DB.Unscoped().Where("id = ?", id).First(&storedFile).Error
+	err := mysql.DB.Unscoped().Where("stored_file_id = ?", id).First(&storedFile).Error
 	return &storedFile, err
 }
 
 func UpdateStoredFileIndexPending(storedFileID string) error {
 	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
-		Where("id = ?", storedFileID).
+		Where("stored_file_id = ?", storedFileID).
 		Updates(map[string]interface{}{
 			"index_status": model.StoredFileIndexStatusPending,
 			"index_error":  "",
@@ -90,7 +90,7 @@ func UpdateStoredFileIndexPending(storedFileID string) error {
 
 func UpdateStoredFileIndexReady(storedFileID string, indexedAt time.Time) error {
 	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
-		Where("id = ?", storedFileID).
+		Where("stored_file_id = ?", storedFileID).
 		Updates(map[string]interface{}{
 			"index_status": model.StoredFileIndexStatusReady,
 			"index_error":  "",
@@ -100,7 +100,7 @@ func UpdateStoredFileIndexReady(storedFileID string, indexedAt time.Time) error 
 
 func UpdateStoredFileIndexFailed(storedFileID string, indexError string) error {
 	return mysql.DB.Unscoped().Model(&model.StoredFile{}).
-		Where("id = ?", storedFileID).
+		Where("stored_file_id = ?", storedFileID).
 		Updates(map[string]interface{}{
 			"index_status": model.StoredFileIndexStatusFailed,
 			"index_error":  indexError,
@@ -110,7 +110,7 @@ func UpdateStoredFileIndexFailed(storedFileID string, indexError string) error {
 
 func IncrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
 	return tx.Unscoped().Model(&model.StoredFile{}).
-		Where("id = ?", storedFileID).
+		Where("stored_file_id = ?", storedFileID).
 		Updates(map[string]interface{}{
 			"ref_count":  gorm.Expr("ref_count + ?", 1),
 			"deleted_at": nil,
@@ -119,14 +119,14 @@ func IncrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
 
 func DecrementStoredFileRefCount(tx *gorm.DB, storedFileID string) error {
 	return tx.Model(&model.StoredFile{}).
-		Where("id = ? AND ref_count > 0", storedFileID).
+		Where("stored_file_id = ? AND ref_count > 0", storedFileID).
 		UpdateColumn("ref_count", gorm.Expr("ref_count - ?", 1)).Error
 }
 
 func DeleteStoredFileByID(tx *gorm.DB, storedFileID string) error {
-	return tx.Where("id = ?", storedFileID).Delete(&model.StoredFile{}).Error
+	return tx.Where("stored_file_id = ?", storedFileID).Delete(&model.StoredFile{}).Error
 }
 
 func HardDeleteStoredFileByID(tx *gorm.DB, storedFileID string) error {
-	return tx.Unscoped().Where("id = ?", storedFileID).Delete(&model.StoredFile{}).Error
+	return tx.Unscoped().Where("stored_file_id = ?", storedFileID).Delete(&model.StoredFile{}).Error
 }

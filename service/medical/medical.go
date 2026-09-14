@@ -24,7 +24,7 @@ var newRuntime = aihelper.NewMedicalRuntime
 
 func ownedReport(ctx context.Context, user, id string) (*model.MedicalReport, error) {
 	var report model.MedicalReport
-	if err := mysql.DB.WithContext(ctx).Where("id = ? AND uid = ?", id, user).First(&report).Error; err != nil {
+	if err := mysql.DB.WithContext(ctx).Where("report_id = ? AND uid = ?", id, user).First(&report).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -119,14 +119,14 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		}
 	} else {
 		var s model.Session
-		if err = mysql.DB.WithContext(ctx).Where("id = ? AND uid = ?", req.SessionID, user).First(&s).Error; err != nil {
+		if err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).First(&s).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, ErrNotFound
 			}
 			return nil, err
 		}
 	}
-	if err = mysql.DB.WithContext(ctx).Model(&model.Session{}).Where("id = ? AND uid = ?", req.SessionID, user).Update("model_type", "medical_agent").Error; err != nil {
+	if err = mysql.DB.WithContext(ctx).Model(&model.Session{}).Where("session_id = ? AND uid = ?", req.SessionID, user).Update("model_type", "medical_agent").Error; err != nil {
 		return nil, err
 	}
 	lock, _ := sessions.LoadOrStore(req.SessionID, &sync.Mutex{})
@@ -136,7 +136,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	}
 	defer mu.Unlock()
 	if report != nil {
-		res := mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("id = ? AND uid = ? AND (session_id = '' OR session_id = ?)", report.ID, user, req.SessionID).Update("session_id", req.SessionID)
+		res := mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("report_id = ? AND uid = ? AND (session_id = '' OR session_id = ?)", report.ID, user, req.SessionID).Update("session_id", req.SessionID)
 		if res.Error != nil {
 			return nil, res.Error
 		}
@@ -181,7 +181,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	runtime, err := newRuntime(ctx, run.ID, read, callback)
 	var history []model.Message
 	if err == nil {
-		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).Order("id desc").Limit(20).Find(&history).Error
+		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).Order("message_id desc").Limit(20).Find(&history).Error
 	}
 	if err != nil {
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
@@ -217,7 +217,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		if e := tx.Create(&messages).Error; e != nil {
 			return e
 		}
-		return tx.Model(&model.Session{}).Where("id = ? AND uid = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
+		return tx.Model(&model.Session{}).Where("session_id = ? AND uid = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
 	})
 	if persistErr != nil {
 		return nil, fmt.Errorf("结果持久化失败: %w", errors.Join(persistErr, eventErr))

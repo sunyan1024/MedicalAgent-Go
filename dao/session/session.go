@@ -23,12 +23,12 @@ func CreateSession(session *model.Session) (*model.Session, error) {
 // 根据会话ID查询单个会话
 func GetSessionByID(sessionID string) (*model.Session, error) {
 	var session model.Session
-	err := mysql.DB.Where("id = ?", sessionID).First(&session).Error
+	err := mysql.DB.Where("session_id = ?", sessionID).First(&session).Error
 	return &session, err
 }
 
 // 更新会话的updated_at字段
 func UpdateSessionTimestamp(sessionID string) error {
 	// 更新操作和复杂查询用model
-	return mysql.DB.Model(&model.Session{}).Where("id = ?", sessionID).Update("updated_at", mysql.DB.NowFunc()).Error
+	return mysql.DB.Model(&model.Session{}).Where("session_id = ?", sessionID).Update("updated_at", mysql.DB.NowFunc()).Error
 }
