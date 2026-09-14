@@ -66,7 +66,7 @@ func ConfirmReport(ctx context.Context, user, id string, items []core.Indicator)
 	return ownedReport(ctx, user, id)
 }
 
-func Runs(ctx context.Context, user, session string) ([]model.MedicalRun, error) {
+func Runs(ctx context.Context, user, session string) ([]RunResponse, error) {
 	// An active run has a 120s deadline plus bounded persistence. Older running
 	// records indicate a process interruption, not an indefinitely active task.
 	if err := mysql.DB.WithContext(ctx).Model(&model.MedicalRun{}).
@@ -76,7 +76,10 @@ func Runs(ctx context.Context, user, session string) ([]model.MedicalRun, error)
 	}
 	var runs []model.MedicalRun
 	err := mysql.DB.WithContext(ctx).Where("user_name = ? AND session_id = ?", user, session).Order("created_at desc").Limit(30).Find(&runs).Error
-	return runs, err
+	if err != nil {
+		return nil, err
+	}
+	return loadRunResponses(ctx, runs)
 }
 
 type ChatRequest struct {
@@ -87,7 +90,7 @@ type ChatRequest struct {
 
 // Run creates fresh request-scoped agents. Conversation state is loaded from SQL
 // so follow-up questions survive process restarts and model cache eviction.
-func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event)) (*model.MedicalRun, error) {
+func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event)) (*RunResponse, error) {
 	if len(req.Question) == 0 || len(req.Question) > 12000 {
 		return nil, fmt.Errorf("问题长度应在 1～12000 字节之间")
 	}
@@ -163,11 +166,13 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 			return append([]core.Indicator(nil), snapshot...), nil
 		}
 	}
-	run := &model.MedicalRun{ID: uuid.NewString(), UserName: user, SessionID: req.SessionID, ReportID: req.ReportID, Status: "running", Question: req.Question, Events: "[]"}
+	run := &model.MedicalRun{ID: uuid.NewString(), UserName: user, SessionID: req.SessionID, ReportID: req.ReportID, Status: "running", Question: req.Question}
 	if err = mysql.DB.WithContext(ctx).Create(run).Error; err != nil {
 		return nil, err
 	}
+	writer := newEventWriter(mysql.DB)
 	callback := func(e core.Event) {
+		writer.append(e)
 		e.SessionID = req.SessionID
 		if emit != nil {
 			emit(e)
@@ -200,7 +205,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	if err != nil {
 		run.Status = "partial"
 	}
-	run.Events = core.JSON(runtime.Events)
+	eventErr := writer.finish()
 	// Persist terminal state even when the browser has disconnected.
 	finishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -215,7 +220,10 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		return tx.Model(&model.Session{}).Where("id = ? AND user_name = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
 	})
 	if persistErr != nil {
-		return run, fmt.Errorf("结果持久化失败: %w", persistErr)
+		return nil, fmt.Errorf("结果持久化失败: %w", errors.Join(persistErr, eventErr))
 	}
-	return run, nil
+	if eventErr != nil {
+		return nil, fmt.Errorf("事件持久化失败: %w", eventErr)
+	}
+	return &RunResponse{MedicalRun: *run, Events: core.JSON(runtime.Events)}, nil
 }

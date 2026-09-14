@@ -92,7 +92,11 @@ func migration() error {
 		new(model.KnowledgeFile),
 		new(model.MedicalReport),
 		new(model.MedicalRun),
+		new(model.MedicalRunEvent),
 	); err != nil {
+		return err
+	}
+	if err := removeMedicalEventsColumn(); err != nil {
 		return err
 	}
 	if DB.Migrator().HasIndex(&model.KnowledgeFile{}, "idx_user_stored_name") {
@@ -148,4 +152,11 @@ func prepareKnowledgeOwnershipMigration() error {
 	return DB.Model(&model.KnowledgeFile{}).
 		Where("owner_key = '' OR owner_key IS NULL").
 		Updates(map[string]interface{}{"scope": model.KnowledgeScopePersonal, "owner_key": gorm.Expr("user_name")}).Error
+}
+
+func removeMedicalEventsColumn() error {
+	if DB.Migrator().HasColumn(&model.MedicalRun{}, "events") {
+		return DB.Migrator().DropColumn(&model.MedicalRun{}, "events")
+	}
+	return nil
 }

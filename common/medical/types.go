@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Indicator struct {
@@ -72,18 +73,23 @@ type Source struct {
 }
 
 type Event struct {
-	SessionID  string   `json:"sessionId,omitempty"`
-	RunID      string   `json:"runId"`
-	ID         string   `json:"id"`
-	ParentID   string   `json:"parentId,omitempty"`
-	Type       string   `json:"type"`
-	Agent      string   `json:"agent,omitempty"`
-	Tool       string   `json:"tool,omitempty"`
-	Summary    string   `json:"summary,omitempty"`
-	DurationMS int64    `json:"durationMs,omitempty"`
-	Status     string   `json:"status,omitempty"`
-	Sources    []Source `json:"sources,omitempty"`
-	Delta      string   `json:"delta,omitempty"`
+	Sequence   int64     `json:"-"`
+	OccurredAt time.Time `json:"-"`
+	Input      string    `json:"-"`
+	Output     string    `json:"-"`
+	Error      string    `json:"-"`
+	SessionID  string    `json:"sessionId,omitempty"`
+	RunID      string    `json:"runId"`
+	ID         string    `json:"id"`
+	ParentID   string    `json:"parentId,omitempty"`
+	Type       string    `json:"type"`
+	Agent      string    `json:"agent,omitempty"`
+	Tool       string    `json:"tool,omitempty"`
+	Summary    string    `json:"summary,omitempty"`
+	DurationMS int64     `json:"durationMs,omitempty"`
+	Status     string    `json:"status,omitempty"`
+	Sources    []Source  `json:"sources,omitempty"`
+	Delta      string    `json:"delta,omitempty"`
 }
 
 func JSON(v any) string { b, _ := json.Marshal(v); return string(b) }

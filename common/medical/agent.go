@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -50,11 +51,33 @@ func (r *Runtime) emit(e Event) {
 		e.ID = uuid.NewString()
 	}
 	r.mu.Lock()
+	e.Sequence = int64(len(r.Events) + 1)
+	e.OccurredAt = time.Now().UTC()
 	r.Events = append(r.Events, e)
+	logEvent(e)
 	if r.deps.Emit != nil {
 		r.deps.Emit(e)
 	}
 	r.mu.Unlock()
+}
+
+// logEvent is independent of the SSE callback and never logs answer/source bodies.
+func logEvent(e Event) {
+	limit := 400
+	switch e.Type {
+	case "subagent_start", "tool_start":
+		limit = 300
+	case "run_start", "run_end", "subagent_end", "tool_end", "subagent_rejected", "tool_rejected":
+	default:
+		return
+	}
+	// Include the ellipsis in the limit; quote all strings to keep one log line.
+	summary := []rune(e.Summary)
+	if len(summary) > limit {
+		summary = append(summary[:limit-1], '…')
+	}
+	log.Printf("[MedicalAgent] run_id=%q event_id=%q parent_id=%q type=%q agent=%q tool=%q status=%q duration_ms=%d summary=%q",
+		e.RunID, e.ID, e.ParentID, e.Type, e.Agent, e.Tool, e.Status, e.DurationMS, string(summary))
 }
 
 type callable struct {
@@ -78,38 +101,47 @@ func toolInfo(name, desc, param string) *schema.ToolInfo {
 // Every invocation, including delegation and invalid arguments, consumes budget.
 func (r *Runtime) bounded(agent, parent string, local *int, info *schema.ToolInfo, fn func(context.Context, string, string) (string, error)) tool.BaseTool {
 	return &callable{info: info, run: func(ctx context.Context, args string) (string, error) {
+		kind := "tool"
+		if agent == MainAgent {
+			kind = "subagent"
+		}
+		rejected := func(err error) {
+			r.emit(Event{RunID: r.RunID, ID: uuid.NewString(), ParentID: parent, Type: kind + "_rejected", Agent: agent, Tool: info.Name, Status: "rejected", Summary: preview(err.Error(), 400), Input: args, Error: err.Error()})
+		}
 		if err := ctx.Err(); err != nil {
+			rejected(err)
 			return "", err
 		}
 		r.mu.Lock()
 		if r.used >= 9 || *local >= 3 {
 			r.mu.Unlock()
+			rejected(ErrBudget)
 			return "", ErrBudget
 		}
 		r.used++
 		*local++
 		r.mu.Unlock()
 		id := uuid.NewString()
+		r.emit(Event{ID: id, ParentID: parent, Type: kind + "_start", Agent: agent, Tool: info.Name, Status: "running", Summary: preview(args, 300), Input: args})
 		start := time.Now()
-		kind := "tool"
-		if agent == MainAgent {
-			kind = "subagent"
-		}
-		r.emit(Event{ID: id, ParentID: parent, Type: kind + "_start", Agent: agent, Tool: info.Name, Status: "running", Summary: preview(args, 300)})
 		out, err := fn(ctx, args, id)
 		status := "completed"
 		summary := preview(out, 400)
 		if err != nil {
 			status = "failed"
-			summary = err.Error()
+			summary = preview(err.Error(), 400)
 		}
-		r.emit(Event{ParentID: id, Type: kind + "_end", Agent: agent, Tool: info.Name, Summary: summary, Status: status, DurationMS: time.Since(start).Milliseconds()})
+		errorText := ""
+		if err != nil {
+			errorText = err.Error()
+		}
+		r.emit(Event{Output: out, Error: errorText, ParentID: id, Type: kind + "_end", Agent: agent, Tool: info.Name, Summary: summary, Status: status, DurationMS: time.Since(start).Milliseconds()})
 		if errors.Is(err, ErrBudget) || ctx.Err() != nil {
 			return "", err
 		}
 		// Recoverable errors become tool observations so the model can replan.
 		if err != nil {
-			return JSON(map[string]string{"error": summary}), nil
+			return JSON(map[string]string{"error": err.Error()}), nil
 		}
 		return out, nil
 	}}
@@ -251,7 +283,7 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 			}
 			out, err := adk.NewAgentTool(ctx, child).(tool.InvokableTool).InvokableRun(ctx, args)
 			if err != nil {
-				return "", err
+				return out, err
 			}
 			var result struct {
 				Findings []string `json:"findings"`
@@ -259,17 +291,17 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 				Missing  []string `json:"missing"`
 			}
 			if err = json.Unmarshal([]byte(out), &result); err != nil {
-				return "", fmt.Errorf("子Agent结果不是约定的JSON，请缩小任务重新委派")
+				return out, fmt.Errorf("子Agent结果不是约定的JSON，请缩小任务重新委派")
 			}
 			if result.Findings == nil || result.Evidence == nil || result.Missing == nil {
-				return "", fmt.Errorf("子Agent结果缺少 findings、evidence 或 missing 数组")
+				return out, fmt.Errorf("子Agent结果缺少 findings、evidence 或 missing 数组")
 			}
 			if n == "medical_researcher" {
 				r.mu.Lock()
 				for _, sourceID := range result.Evidence {
 					if _, ok := r.sources[sourceID]; !ok {
 						r.mu.Unlock()
-						return "", fmt.Errorf("子Agent引用了本次未检索到的来源")
+						return out, fmt.Errorf("子Agent引用了本次未检索到的来源")
 					}
 				}
 				r.mu.Unlock()
@@ -383,7 +415,7 @@ func (r *Runtime) validateCitations(answer string) string {
 func preview(value string, limit int) string {
 	text := []rune(value)
 	if len(text) > limit {
-		return string(text[:limit]) + "…"
+		return string(text[:limit-1]) + "…"
 	}
 	return value
 }

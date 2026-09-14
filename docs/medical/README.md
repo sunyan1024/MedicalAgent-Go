@@ -5,7 +5,7 @@
 ## 启动与资料准备
 
 1. 使用项目现有 `config/config.toml` 配置 MySQL、Redis Stack、RabbitMQ、Qwen 和 RAG embedding/rerank。Qwen 必须支持原生工具调用。图片和扫描 PDF 需要 `ragModelConfig.ocrAccessToken`；文本 PDF 优先原生提取。
-2. 在项目根目录运行 `go run .`。启动迁移新增 `medical_reports` 和 `medical_runs` 两张表；不搬迁已有知识库文件。
+2. 在项目根目录运行 `go run .`。启动迁移创建 `medical_reports`、`medical_runs` 和 `medical_run_events` 表，并删除已废弃的 `medical_runs.events` 列；不搬迁已有知识库文件。
 3. 管理员登录后，在“医学知识库”上传本目录 `knowledge/` 中的三份 Markdown 摘要，等待索引完成。它们是带来源的演示科普资料，不是完整医疗知识库。不要上传个人报告到公共库。医学模式只检索管理员维护的公共资料；原 RAG 模式仍保留原有联合检索行为。
 4. `cd vue-frontend` 后运行 `npm run serve`，普通用户登录，进入医疗 Agent。
 5. 点击“合成报告样例”，提交文字，待识别后核对并确认。也可上传 PDF/JPG/PNG/TXT，单个文件不超过10MB、抽取文字不超过60000字节。
@@ -102,3 +102,5 @@ python3 scripts/evaluate_medical.py --live --limit 20
 - 当前边界：少量人工整理科普资料、单实例、有限历史、无临床验证；扩展方向是增加有版本的权威资料、效果对比和运行恢复。
 
 简历可用：“基于 Go 与 Eino 实现医疗多 Agent 助手，使用 ReAct 循环、AgentAsTool 委派及 MCP 检索完成报告解读与多轮信息采集，提供报告人工确认、引用来源、执行轨迹和场景评测。”指标只填写实测值。
+
+执行事件逐条落库，完整输入输出及 SQL 分析示例见 [执行事件与 SQL 调试](EVENTS.md)。
