@@ -12,6 +12,9 @@
         :rules="registerRules"
         label-width="80px"
       >
+        <el-form-item label="昵称" prop="nickname">
+          <el-input v-model="registerForm.nickname" maxlength="50" placeholder="请输入昵称（选填，留空默认使用 UID）" />
+        </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input
             v-model="registerForm.email"
@@ -96,6 +99,7 @@ export default {
     const countdown = ref(0)
 
     const registerForm = reactive({
+      nickname: '',
       email: '',
       captcha: '',
       password: '',
@@ -161,6 +165,7 @@ export default {
         await registerFormRef.value.validate()
         loading.value = true
         const response = await api.post('/user/register', {
+              nickname: registerForm.nickname,
               email: registerForm.email,
               captcha: registerForm.captcha,
               password: registerForm.password

@@ -27,15 +27,15 @@ func NewAIHelperManager() *AIHelperManager {
 // 如果会话已存在且模型类型相同，直接返回现有AIHelper
 // 如果会话已存在但模型类型不同，更新模型后返回
 // 如果会话不存在，创建新的AIHelper
-func (m *AIHelperManager) GetOrCreateAIHelper(userName string, sessionID string, modelType string, config map[string]interface{}) (*AIHelper, error) {
+func (m *AIHelperManager) GetOrCreateAIHelper(uid string, sessionID string, modelType string, config map[string]interface{}) (*AIHelper, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// 检查用户是否存在，不存在就创建
-	userHelpers, exists := m.helpers[userName]
+	userHelpers, exists := m.helpers[uid]
 	if !exists {
 		userHelpers = make(map[string]*AIHelper)
-		m.helpers[userName] = userHelpers
+		m.helpers[uid] = userHelpers
 	}
 
 	// 检查会话是否已存在
@@ -52,7 +52,7 @@ func (m *AIHelperManager) GetOrCreateAIHelper(userName string, sessionID string,
 				return nil, err
 			}
 			helper.ChangeModelType(newModel)
-			log.Printf("ChangeModelType: username %s sessionID %s old model %s new model %s", userName, sessionID, helper.model.GetModelType(), modelType)
+			log.Printf("ChangeModelType: uid %s sessionID %s old model %s new model %s", uid, sessionID, helper.model.GetModelType(), modelType)
 			return helper, nil
 		}
 	}
@@ -62,7 +62,7 @@ func (m *AIHelperManager) GetOrCreateAIHelper(userName string, sessionID string,
 	helper, err := factory.CreateAIHelper(ctx, modelType, sessionID, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AI helper for user %s, session %s, model %s: %w",
-			userName, sessionID, modelType, err)
+			uid, sessionID, modelType, err)
 	}
 
 	userHelpers[sessionID] = helper
@@ -70,11 +70,11 @@ func (m *AIHelperManager) GetOrCreateAIHelper(userName string, sessionID string,
 }
 
 // 获取指定用户的指定会话的AIHelper
-func (m *AIHelperManager) GetAIHelper(userName string, sessionID string) (*AIHelper, bool) {
+func (m *AIHelperManager) GetAIHelper(uid string, sessionID string) (*AIHelper, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	userHelpers, exists := m.helpers[userName]
+	userHelpers, exists := m.helpers[uid]
 	if !exists {
 		return nil, false
 	}
@@ -84,11 +84,11 @@ func (m *AIHelperManager) GetAIHelper(userName string, sessionID string) (*AIHel
 }
 
 // 移除指定用户的指定会话的AIHelper
-func (m *AIHelperManager) RemoveAIHelper(userName string, sessionID string) {
+func (m *AIHelperManager) RemoveAIHelper(uid string, sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	userHelpers, exists := m.helpers[userName]
+	userHelpers, exists := m.helpers[uid]
 	if !exists {
 		return
 	}
@@ -97,16 +97,16 @@ func (m *AIHelperManager) RemoveAIHelper(userName string, sessionID string) {
 
 	// 如果用户没有会话了，清理用户映射
 	if len(userHelpers) == 0 {
-		delete(m.helpers, userName)
+		delete(m.helpers, uid)
 	}
 }
 
 // 获取指定用户的所有会话ID
-func (m *AIHelperManager) GetUserSessions(userName string) []string {
+func (m *AIHelperManager) GetUserSessions(uid string) []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	userHelpers, exists := m.helpers[userName]
+	userHelpers, exists := m.helpers[uid]
 	if !exists {
 		return []string{}
 	}

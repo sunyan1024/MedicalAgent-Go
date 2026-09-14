@@ -4,6 +4,7 @@ import (
 	"GoAI/common/mysql"
 	"GoAI/model"
 	"GoAI/utils"
+	"strings"
 )
 
 // 全局的空上下文
@@ -15,10 +16,10 @@ func InsertUser(user *model.User) (*model.User, error) {
 	return user, err
 }
 
-// 根据username查询用户
-func GetUserByUsername(username string) (*model.User, error) {
+// 根据uid查询用户
+func GetUserByUID(uid string) (*model.User, error) {
 	user := new(model.User)
-	err := mysql.DB.Where("username = ?", username).First(user).Error // 根据用户名查询用户
+	err := mysql.DB.Where("uid = ?", uid).First(user).Error // 根据用户 UID查询用户
 	return user, err
 }
 
@@ -37,8 +38,8 @@ func IsExistUser(identifier string) (bool, *model.User) {
 		return true, user
 	}
 
-	// 如果email不存在，再尝试通过username查找
-	user, err = GetUserByUsername(identifier)
+	// 如果email不存在，再尝试通过uid查找
+	user, err = GetUserByUID(identifier)
 	if err == nil {
 		return true, user
 	}
@@ -46,23 +47,28 @@ func IsExistUser(identifier string) (bool, *model.User) {
 	return false, nil
 }
 
-// 添加一个更明确的函数名，以支持用户名或邮箱登录
-func IsExistUserByUsernameOrEmail(identifier string) (bool, *model.User) {
+// 添加一个更明确的函数名，以支持用户 UID或邮箱登录
+func IsExistUserByUIDOrEmail(identifier string) (bool, *model.User) {
 	return IsExistUser(identifier)
 }
 
 // 处理用户注册 使用bcrypt加密密码
-func Register(username, email, password string) (*model.User, bool) {
+func Register(uid, email, password, nickname string) (*model.User, bool) {
 	hashedPassword, err := utils.GenerateFromPassword(password) // 使用bcrypt加密密码
 	if err != nil {
 		return nil, false
 	}
 
+	nickname = strings.TrimSpace(nickname)
+	if nickname == "" {
+		nickname = uid
+	}
+
 	if user, err := InsertUser(&model.User{
 		Role:     model.RoleUser,
 		Email:    email,
-		Name:     username,
-		Username: username,
+		Nickname: nickname,
+		UID:      uid,
 		Password: string(hashedPassword), // 存储bcrypt哈希值
 	}); err != nil {
 		return nil, false

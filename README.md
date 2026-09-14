@@ -19,7 +19,7 @@
 
 ```toml
 [adminConfig]
-username = "your-admin-name"
+uid = "your-admin-uid"
 email = "admin@example.com"
 password = "<your-password>"
 ```
@@ -85,3 +85,5 @@ npm run build
 **全栈体验（Go 后端 + Vue3 前端**）
 
 从 API → 前端 UI 全链路开发：登录注册、验证码、会话管理、图片上传、AI 对话，都有对应前端界面。
+
+用户字段：`uid` 为字符串主键（登录及数据归属标识），`nickname` 为可重复的自定义昵称；不再使用用户表的 `id`、`name`、`username`。登录支持 UID 或邮箱，注册可填写昵称。此版本面向已清空数据的数据库，旧 JWT 需重新登录获取。

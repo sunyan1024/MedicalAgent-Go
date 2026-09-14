@@ -12,10 +12,10 @@
         :rules="loginRules"
         label-width="100px"
       >
-        <el-form-item label="用户名/邮箱" prop="identifier">
+        <el-form-item label="UID/邮箱" prop="identifier">
           <el-input
             v-model="loginForm.identifier"
-            placeholder="请输入用户名或邮箱"
+            placeholder="请输入UID或邮箱"
           />
         </el-form-item>
         <el-form-item label="密码" prop="password">
@@ -69,7 +69,7 @@ export default {
 
     const loginRules = {
       identifier: [
-        { required: true, message: '请输入用户名或邮箱', trigger: 'blur' },
+        { required: true, message: '请输入UID或邮箱', trigger: 'blur' },
         { 
           validator: (_, value, callback) => {
             if (!value) {
@@ -123,7 +123,7 @@ export default {
           ElMessage.success('登录成功')
           router.push('/menu')
         } else {
-          ElMessage.error(response.data.status_msg || '登录失败，请检查用户名和密码')
+          ElMessage.error(response.data.status_msg || '登录失败，请检查UID和密码')
         }
       } catch (error) {
         console.error('Login error:', error)
@@ -133,7 +133,7 @@ export default {
           // 服务器返回的错误
           const status = error.response.status
           if (status === 401) {
-            ElMessage.error('用户名或密码错误')
+            ElMessage.error('UID或密码错误')
           } else if (status === 429) {
             ElMessage.error('请求过于频繁，请稍后再试')
           } else {

@@ -37,7 +37,7 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 	if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}); err != nil {
 		t.Fatal(err)
 	}
-	report := model.MedicalReport{ID: "report-a", UserName: "alice", Status: "ready", Indicators: "[]"}
+	report := model.MedicalReport{ID: "report-a", UID: "alice", Status: "ready", Indicators: "[]"}
 	if err := db.Create(&report).Error; err != nil {
 		t.Fatal(err)
 	}

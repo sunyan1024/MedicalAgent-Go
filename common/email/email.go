@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	CodeMsg     = "GoAI验证码如下（验证码仅限于5分钟有效）："
-	UserNameMsg = "GoAI的账号如下，请保留好，后续可以用账号/邮箱登录："
+	CodeMsg = "GoAI验证码如下（验证码仅限于5分钟有效）："
+	UIDMsg  = "GoAI的账号如下，请保留好，后续可以用账号/邮箱登录："
 )
 
 // 发送验证码或账号

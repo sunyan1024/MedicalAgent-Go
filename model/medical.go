@@ -5,7 +5,7 @@ import "time"
 // MedicalReport is private task data, never a shared knowledge document.
 type MedicalReport struct {
 	ID         string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	UserName   string    `gorm:"index;not null" json:"-"`
+	UID        string    `gorm:"index;not null" json:"-"`
 	SessionID  string    `gorm:"type:varchar(36);index" json:"sessionId"`
 	Name       string    `json:"name"`
 	Status     string    `gorm:"type:varchar(24);index" json:"status"`
@@ -18,7 +18,7 @@ type MedicalReport struct {
 
 type MedicalRun struct {
 	ID        string    `gorm:"primaryKey;type:varchar(36)" json:"runId"`
-	UserName  string    `gorm:"index;not null" json:"-"`
+	UID       string    `gorm:"index;not null" json:"-"`
 	SessionID string    `gorm:"type:varchar(36);index" json:"sessionId"`
 	ReportID  string    `gorm:"type:varchar(36)" json:"reportId,omitempty"`
 	Status    string    `gorm:"type:varchar(24)" json:"status"`

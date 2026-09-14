@@ -21,7 +21,7 @@ type KnowledgeFile struct {
 	ID           string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
 	Scope        string    `gorm:"type:varchar(16);not null;default:personal;uniqueIndex:idx_scope_owner_stored,priority:1" json:"scope"`
 	OwnerKey     string    `gorm:"type:varchar(50);not null;default:'';uniqueIndex:idx_scope_owner_stored,priority:2" json:"-"`
-	UserName     string    `gorm:"index;not null" json:"username"`
+	UID          string    `gorm:"index;not null" json:"uid"`
 	OriginalName string    `gorm:"type:varchar(255);not null" json:"original_name"`
 	StoredName   string    `gorm:"type:varchar(255);uniqueIndex:idx_scope_owner_stored,priority:3;not null" json:"stored_name"`
 	StoredFileID string    `gorm:"type:varchar(36);index;not null" json:"stored_file_id"`
@@ -49,15 +49,15 @@ type StoredFile struct {
 
 // KnowledgeOwner is constructed by the server, never bound from request data.
 type KnowledgeOwner struct {
-	Scope    string
-	Key      string
-	UserName string
+	Scope string
+	Key   string
+	UID   string
 }
 
-func PersonalKnowledgeOwner(username string) KnowledgeOwner {
-	return KnowledgeOwner{Scope: KnowledgeScopePersonal, Key: username, UserName: username}
+func PersonalKnowledgeOwner(uid string) KnowledgeOwner {
+	return KnowledgeOwner{Scope: KnowledgeScopePersonal, Key: uid, UID: uid}
 }
 
-func EnterpriseKnowledgeOwner(username string) KnowledgeOwner {
-	return KnowledgeOwner{Scope: KnowledgeScopeEnterprise, Key: EnterpriseOwnerKey, UserName: username}
+func EnterpriseKnowledgeOwner(uid string) KnowledgeOwner {
+	return KnowledgeOwner{Scope: KnowledgeScopeEnterprise, Key: EnterpriseOwnerKey, UID: uid}
 }

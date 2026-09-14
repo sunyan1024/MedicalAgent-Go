@@ -52,9 +52,9 @@ type RAGQuery struct {
 	options        retrieveOptions
 }
 
-func BuildFileIndexKey(username string, storedName string) string {
-	if strings.TrimSpace(username) != "" {
-		return fmt.Sprintf("%s:%s", username, storedName)
+func BuildFileIndexKey(uid string, storedName string) string {
+	if strings.TrimSpace(uid) != "" {
+		return fmt.Sprintf("%s:%s", uid, storedName)
 	}
 	return storedName
 }
@@ -1172,8 +1172,8 @@ func convertKnowledgeVectorDocument(doc redis.Document, knowledgeFile model.Know
 }
 
 // NewRAGQuery 创建 RAG 查询器（用于向量检索和问答）
-func NewRAGQuery(ctx context.Context, username string) (*RAGQuery, error) {
-	return newScopedRAGQuery(ctx, username, false)
+func NewRAGQuery(ctx context.Context, uid string) (*RAGQuery, error) {
+	return newScopedRAGQuery(ctx, uid, false)
 }
 
 // NewMedicalRAGQuery only searches administrator-managed public knowledge.
@@ -1181,9 +1181,9 @@ func NewMedicalRAGQuery(ctx context.Context) (*RAGQuery, error) {
 	return newScopedRAGQuery(ctx, "", true)
 }
 
-func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool) (*RAGQuery, error) {
+func newScopedRAGQuery(ctx context.Context, uid string, enterpriseOnly bool) (*RAGQuery, error) {
 	start := time.Now()
-	log.Printf("[RAG][Query] init start username=%s", username)
+	log.Printf("[RAG][Query] init start uid=%s", uid)
 
 	conf := config.GetConfig()
 	apiKey := conf.RagModelConfig.RagApiKey
@@ -1197,7 +1197,7 @@ func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool
 	}
 	embedder, err := embeddingArk.NewEmbedder(ctx, embedConfig)
 	if err != nil {
-		log.Printf("[RAG][Query] create embedder failed username=%s err=%v", username, err)
+		log.Printf("[RAG][Query] create embedder failed uid=%s err=%v", uid, err)
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
@@ -1205,17 +1205,17 @@ func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool
 	if enterpriseOnly {
 		knowledgeFiles, err = fileDao.GetKnowledgeFiles(model.EnterpriseKnowledgeOwner(""))
 	} else {
-		knowledgeFiles, err = fileDao.GetAccessibleKnowledgeFiles(username)
+		knowledgeFiles, err = fileDao.GetAccessibleKnowledgeFiles(uid)
 	}
 	if err != nil {
-		log.Printf("[RAG][Query] load knowledge files failed username=%s err=%v", username, err)
+		log.Printf("[RAG][Query] load knowledge files failed uid=%s err=%v", uid, err)
 		return nil, err
 	}
 	if len(knowledgeFiles) == 0 {
-		log.Printf("[RAG][Query] no uploaded files username=%s", username)
-		return nil, fmt.Errorf("no uploaded file found for user %s", username)
+		log.Printf("[RAG][Query] no uploaded files uid=%s", uid)
+		return nil, fmt.Errorf("no uploaded file found for user %s", uid)
 	}
-	log.Printf("[RAG][Query] knowledge files loaded username=%s files=%d", username, len(knowledgeFiles))
+	log.Printf("[RAG][Query] knowledge files loaded uid=%s files=%d", uid, len(knowledgeFiles))
 
 	rdb := redisPkg.Rdb
 	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
@@ -1255,7 +1255,7 @@ func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool
 
 		rtr, err := redisRetriever.NewRetriever(ctx, retrieverConfig)
 		if err != nil {
-			log.Printf("[RAG][Query] create retriever failed username=%s file=%s index=%s err=%v", username, filename, indexName, err)
+			log.Printf("[RAG][Query] create retriever failed uid=%s file=%s index=%s err=%v", uid, filename, indexName, err)
 			continue
 		}
 		retrievers = append(retrievers, rtr)
@@ -1265,25 +1265,25 @@ func newScopedRAGQuery(ctx context.Context, username string, enterpriseOnly bool
 			originalName: originalName,
 			scope:        scope,
 		})
-		log.Printf("[RAG][Query] retriever ready username=%s file=%s original_name=%s index=%s", username, filename, originalName, indexName)
+		log.Printf("[RAG][Query] retriever ready uid=%s file=%s original_name=%s index=%s", uid, filename, originalName, indexName)
 	}
 
 	if len(retrievers) == 0 {
-		log.Printf("[RAG][Query] no valid retriever username=%s elapsed=%s", username, time.Since(start))
-		return nil, fmt.Errorf("no valid file index found for user %s", username)
+		log.Printf("[RAG][Query] no valid retriever uid=%s elapsed=%s", uid, time.Since(start))
+		return nil, fmt.Errorf("no valid file index found for user %s", uid)
 	}
 
 	var reranker documentReranker
 	if retrieveOpts.rerankEnabled {
 		reranker, err = newDashScopeReranker(retrieveOpts.rerankBaseURL, apiKey, retrieveOpts.rerankModel, retrieveOpts.rerankTimeout)
 		if err != nil {
-			log.Printf("[RAG][Query] init reranker failed username=%s fallback=vector_sort err=%v", username, err)
+			log.Printf("[RAG][Query] init reranker failed uid=%s fallback=vector_sort err=%v", uid, err)
 		} else {
-			log.Printf("[RAG][Query] reranker ready username=%s model=%s rerank_candidate_top_k=%d rerank_top_k=%d", username, retrieveOpts.rerankModel, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK)
+			log.Printf("[RAG][Query] reranker ready uid=%s model=%s rerank_candidate_top_k=%d rerank_top_k=%d", uid, retrieveOpts.rerankModel, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK)
 		}
 	}
 
-	log.Printf("[RAG][Query] init success username=%s retrievers=%d vector_top_k=%d keyword_top_k=%d hybrid_enabled=%v rerank_enabled=%v rerank_candidate_top_k=%d rerank_top_k=%d elapsed=%s", username, len(retrievers), retrieveOpts.vectorTopK, retrieveOpts.keywordTopK, retrieveOpts.hybridEnabled, reranker != nil, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK, time.Since(start))
+	log.Printf("[RAG][Query] init success uid=%s retrievers=%d vector_top_k=%d keyword_top_k=%d hybrid_enabled=%v rerank_enabled=%v rerank_candidate_top_k=%d rerank_top_k=%d elapsed=%s", uid, len(retrievers), retrieveOpts.vectorTopK, retrieveOpts.keywordTopK, retrieveOpts.hybridEnabled, reranker != nil, retrieveOpts.rerankCandidateTopK, retrieveOpts.rerankTopK, time.Since(start))
 	return &RAGQuery{
 		embedding:      embedder,
 		retrievers:     retrievers,

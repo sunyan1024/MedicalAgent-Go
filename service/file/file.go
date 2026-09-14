@@ -285,7 +285,7 @@ func createKnowledgeFileFromStoredFile(owner model.KnowledgeOwner, originalName 
 
 	knowledgeFile := &model.KnowledgeFile{
 		ID:           utils.GenerateUUID(),
-		UserName:     owner.UserName,
+		UID:          owner.UID,
 		Scope:        owner.Scope,
 		OwnerKey:     owner.Key,
 		OriginalName: originalName,

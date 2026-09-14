@@ -10,23 +10,20 @@ import (
 
 // Claims 结构体定义JWT的声明
 type Claims struct {
-	ID                   int64  `json:"id"`       // 用户ID
-	Username             string `json:"username"` // 用户名
+	UID                  string `json:"uid"` // 用户 UID
 	jwt.RegisteredClaims        // 包括过期时间 (exp)、发行者 (iss)、主题 (sub)、发行时间 (iat)
 }
 
 // GenerateToken 生成JWT token
 // 参数:
-//   - id: 用户ID
-//   - username: 用户名
+//   - uid: 用户 UID
 //
 // 返回值:
 //   - token: JWT token字符串
 //   - err: 错误信息
-func GenerateToken(id int64, username string) (string, error) {
+func GenerateToken(uid string) (string, error) {
 	claims := Claims{
-		ID:       id,
-		Username: username,
+		UID: uid,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(config.GetConfig().ExpireDuration) * time.Hour)),
 			Issuer:    config.GetConfig().JwtConfig.Issuer,
@@ -47,7 +44,7 @@ func GenerateToken(id int64, username string) (string, error) {
 //   - token: JWT token字符串
 //
 // 返回值:
-//   - 解析出的用户名
+//   - 解析出的用户 UID
 //   - 是否错误
 func ParseToken(tokenStr string) (string, bool) {
 	// 初始化claims
@@ -61,9 +58,9 @@ func ParseToken(tokenStr string) (string, bool) {
 		}
 		return []byte(config.GetConfig().JwtConfig.SecretKey), nil
 	})
-	if err != nil || !token.Valid || claims.Username == "" {
+	if err != nil || !token.Valid || claims.UID == "" {
 		return "", false
 	}
 
-	return claims.Username, true
+	return claims.UID, true
 }

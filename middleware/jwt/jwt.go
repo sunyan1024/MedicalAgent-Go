@@ -18,7 +18,7 @@ import (
 // Auth 返回一个 Gin 中间件函数，用于验证请求的 JWT Token
 //
 // 从 Authorization 头部或 URL 查询参数中获取 Token，验证其有效性
-// 验证成功后将用户名存入 Gin 上下文供后续处理使用
+// 验证成功后将用户 UID存入 Gin 上下文供后续处理使用
 //
 // 验证失败时返回无效 Token 错误并终止请求处理
 func Auth() gin.HandlerFunc {
@@ -47,7 +47,7 @@ func Auth() gin.HandlerFunc {
 		log.Println("[Auth] token is", maskToken(token))
 
 		// 解析并验证token
-		userName, ok := myjwt.ParseToken(token)
+		uid, ok := myjwt.ParseToken(token)
 		if !ok {
 			log.Printf("[Auth] invalid token ip=%s path=%s", c.ClientIP(), c.Request.URL.Path)
 			c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
@@ -55,7 +55,7 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
-		account, err := userDao.GetUserByUsername(userName)
+		account, err := userDao.GetUserByUID(uid)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, res.CodeOf(code.CodeInvalidToken))
@@ -65,8 +65,8 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 		c.Set("currentUser", account)
-		// 验证成功，将用户名存入Gin上下文
-		c.Set("userName", userName)
+		// 验证成功，将用户 UID存入Gin上下文
+		c.Set("uid", uid)
 		c.Next()
 	}
 }

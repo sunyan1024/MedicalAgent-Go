@@ -24,7 +24,7 @@ func RAGEvaluate(c *gin.Context) {
 		return
 	}
 
-	result, err := rageval.Evaluate(c.Request.Context(), c.GetString("userName"), *req)
+	result, err := rageval.Evaluate(c.Request.Context(), c.GetString("uid"), *req)
 	if err != nil {
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidParams))
 		return

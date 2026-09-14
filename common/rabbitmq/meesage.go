@@ -13,16 +13,16 @@ import (
 type MessageMQParam struct {
 	SessionID string `json:"session_id"`
 	Content   string `json:"content"`
-	UserName  string `json:"user_name"`
+	UID       string `json:"uid"`
 	IsUser    bool   `json:"is_user"`
 }
 
 // 将消息参数序列化为 JSON 字节数组
-func GenerateMessageMQParam(sessionID string, content string, userName string, IsUser bool) []byte {
+func GenerateMessageMQParam(sessionID string, content string, uid string, IsUser bool) []byte {
 	param := MessageMQParam{
 		SessionID: sessionID,
 		Content:   content,
-		UserName:  userName,
+		UID:       uid,
 		IsUser:    IsUser,
 	}
 	data, _ := json.Marshal(param) // 将 MessageMQParam 结构体 序列化为 JSON 字节数组
@@ -41,7 +41,7 @@ func MQMessage(msg *amqp.Delivery) error {
 	newMsg := &model.Message{
 		SessionID: param.SessionID,
 		Content:   param.Content,
-		UserName:  param.UserName,
+		UID:       param.UID,
 		IsUser:    param.IsUser,
 	}
 	//消费者异步插入到数据库中

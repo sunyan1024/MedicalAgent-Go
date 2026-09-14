@@ -18,21 +18,21 @@ func TestAccessibleFilesAndScopedDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, owner := range []model.KnowledgeOwner{model.PersonalKnowledgeOwner("alice"), model.PersonalKnowledgeOwner("bob"), model.EnterpriseKnowledgeOwner("admin")} {
-		file := model.KnowledgeFile{ID: owner.Key, Scope: owner.Scope, OwnerKey: owner.Key, UserName: owner.UserName, StoredName: "same.txt", StoredFileID: "same", OriginalName: owner.Key}
+		file := model.KnowledgeFile{ID: owner.Key, Scope: owner.Scope, OwnerKey: owner.Key, UID: owner.UID, StoredName: "same.txt", StoredFileID: "same", OriginalName: owner.Key}
 		if err := db.Create(&file).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, tc := range []struct {
-		username string
-		count    int
+		uid   string
+		count int
 	}{{"alice", 2}, {"new-user", 1}} {
-		files, err := GetAccessibleKnowledgeFiles(tc.username)
+		files, err := GetAccessibleKnowledgeFiles(tc.uid)
 		if err != nil || len(files) != tc.count {
-			t.Fatalf("%s: files=%+v err=%v", tc.username, files, err)
+			t.Fatalf("%s: files=%+v err=%v", tc.uid, files, err)
 		}
 		for _, file := range files {
-			if file.Scope == "personal" && file.OwnerKey != tc.username {
+			if file.Scope == "personal" && file.OwnerKey != tc.uid {
 				t.Fatal("other user's file accessible")
 			}
 		}

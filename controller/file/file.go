@@ -43,9 +43,9 @@ type (
 func PrecheckRagFile(c *gin.Context) {
 	res := new(PrecheckResponse)
 
-	username := c.GetString("userName")
-	if username == "" {
-		log.Println("[PrecheckRagFile] Username not found in context")
+	uid := c.GetString("uid")
+	if uid == "" {
+		log.Println("[PrecheckRagFile] UID not found in context")
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
 		return
 	}
@@ -84,10 +84,10 @@ func UploadRagFile(c *gin.Context) {
 		return
 	}
 
-	// 从上下文中获取用户名
-	username := c.GetString("userName")
-	if username == "" {
-		log.Println("[UploadRagFile] Username not found in context")
+	// 从上下文中获取用户 UID
+	uid := c.GetString("uid")
+	if uid == "" {
+		log.Println("[UploadRagFile] UID not found in context")
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
 		return
 	}
@@ -122,9 +122,9 @@ func UploadRagFile(c *gin.Context) {
 func ListKnowledgeFiles(c *gin.Context) {
 	res := new(ListFileResponse)
 
-	username := c.GetString("userName")
-	if username == "" {
-		log.Println("[ListKnowledgeFiles] Username not found in context")
+	uid := c.GetString("uid")
+	if uid == "" {
+		log.Println("[ListKnowledgeFiles] UID not found in context")
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
 		return
 	}
@@ -146,9 +146,9 @@ func ListKnowledgeFiles(c *gin.Context) {
 func DeleteKnowledgeFile(c *gin.Context) {
 	res := new(controller.Response)
 
-	username := c.GetString("userName")
-	if username == "" {
-		log.Println("[DeleteKnowledgeFile] Username not found in context")
+	uid := c.GetString("uid")
+	if uid == "" {
+		log.Println("[DeleteKnowledgeFile] UID not found in context")
 		c.JSON(http.StatusOK, res.CodeOf(code.CodeInvalidToken))
 		return
 	}
@@ -173,7 +173,7 @@ func DeleteKnowledgeFile(c *gin.Context) {
 
 func knowledgeOwner(c *gin.Context) model.KnowledgeOwner {
 	if c.GetBool("enterpriseKnowledge") {
-		return model.EnterpriseKnowledgeOwner(c.GetString("userName"))
+		return model.EnterpriseKnowledgeOwner(c.GetString("uid"))
 	}
-	return model.PersonalKnowledgeOwner(c.GetString("userName"))
+	return model.PersonalKnowledgeOwner(c.GetString("uid"))
 }

@@ -267,7 +267,7 @@ func (o *OllamaModel) GetModelType() string { return "ollama" }
 type AliRAGModel struct {
 	llm                 model.ToolCallingChatModel
 	rewriteLLM          model.ToolCallingChatModel
-	username            string // 用于获取用户的文档
+	uid                 string // 用于获取用户的文档
 	queryRewriteEnabled bool
 	queryRewriteTimeout time.Duration
 	ragGenerateWorkflow compose.Runnable[[]*schema.Message, *schema.Message]
@@ -277,9 +277,9 @@ type AliRAGModel struct {
 
 // NewAliRAGModel 创建并返回一个新的AliRAGModel实例
 // ctx: 上下文对象，用于控制请求的生命周期
-// username: 用户名，将与模型关联
+// uid: 用户 UID，将与模型关联
 // 返回: *AliRAGModel实例和可能的错误信息
-func NewAliRAGModel(ctx context.Context, username string) (*AliRAGModel, error) {
+func NewAliRAGModel(ctx context.Context, uid string) (*AliRAGModel, error) {
 	conf := config.GetConfig()
 	apiKey := conf.RagModelConfig.RagApiKey
 	modelName := conf.RagModelConfig.RagChatModelName
@@ -318,14 +318,14 @@ func NewAliRAGModel(ctx context.Context, username string) (*AliRAGModel, error) 
 		}
 		rewriteLLM, err = qwen.NewChatModel(ctx, rewriteConfig)
 		if err != nil {
-			log.Printf("[RAG][Rewrite] init failed username=%s model=%s fallback=original_query err=%v", username, rewriteModelName, err)
+			log.Printf("[RAG][Rewrite] init failed uid=%s model=%s fallback=original_query err=%v", uid, rewriteModelName, err)
 			queryRewriteEnabled = false
 		}
 	}
 	ragModel := &AliRAGModel{
 		llm:                 llm,
 		rewriteLLM:          rewriteLLM,
-		username:            username,
+		uid:                 uid,
 		queryRewriteEnabled: queryRewriteEnabled,
 		queryRewriteTimeout: rewriteTimeout,
 		newRAGQuery:         defaultRAGNewQuery,
@@ -351,7 +351,7 @@ func (o *AliRAGModel) rewriteRAGQuery(ctx context.Context, messages []*schema.Me
 		{Role: schema.User, Content: prompt},
 	})
 	if err != nil {
-		log.Printf("[RAG][Rewrite] failed username=%s fallback=original_query err=%v elapsed=%s", o.username, err, time.Since(rewriteStart))
+		log.Printf("[RAG][Rewrite] failed uid=%s fallback=original_query err=%v elapsed=%s", o.uid, err, time.Since(rewriteStart))
 		return originalQuery
 	}
 	rewritten := ""
@@ -359,10 +359,10 @@ func (o *AliRAGModel) rewriteRAGQuery(ctx context.Context, messages []*schema.Me
 		rewritten = sanitizeRewrittenQuery(resp.Content)
 	}
 	if rewritten == "" {
-		log.Printf("[RAG][Rewrite] empty username=%s fallback=original_query elapsed=%s", o.username, time.Since(rewriteStart))
+		log.Printf("[RAG][Rewrite] empty uid=%s fallback=original_query elapsed=%s", o.uid, time.Since(rewriteStart))
 		return originalQuery
 	}
-	log.Printf("[RAG][Rewrite] success username=%s original_len=%d rewritten_len=%d elapsed=%s rewritten_preview=%q", o.username, len(originalQuery), len(rewritten), time.Since(rewriteStart), previewRAGQueryForLog(rewritten))
+	log.Printf("[RAG][Rewrite] success uid=%s original_len=%d rewritten_len=%d elapsed=%s rewritten_preview=%q", o.uid, len(originalQuery), len(rewritten), time.Since(rewriteStart), previewRAGQueryForLog(rewritten))
 	return rewritten
 }
 
@@ -444,18 +444,18 @@ func sanitizeRewrittenQuery(text string) string {
 //	error: 错误信息，生成失败时返回
 func (o *AliRAGModel) GenerateResponse(ctx context.Context, messages []*schema.Message) (*schema.Message, error) {
 	start := time.Now()
-	log.Printf("[RAG][Generate] start username=%s messages=%d workflow=true", o.username, len(messages))
+	log.Printf("[RAG][Generate] start uid=%s messages=%d workflow=true", o.uid, len(messages))
 
 	resp, err := o.ragGenerateWorkflow.Invoke(ctx, messages)
 	if err != nil {
-		log.Printf("[RAG][Generate] workflow failed username=%s err=%v elapsed=%s", o.username, err, time.Since(start))
+		log.Printf("[RAG][Generate] workflow failed uid=%s err=%v elapsed=%s", o.uid, err, time.Since(start))
 		return nil, fmt.Errorf("ali rag generate failed: %v", err)
 	}
 	respLen := 0
 	if resp != nil {
 		respLen = len(resp.Content)
 	}
-	log.Printf("[RAG][Generate] success username=%s response_len=%d total_elapsed=%s", o.username, respLen, time.Since(start))
+	log.Printf("[RAG][Generate] success uid=%s response_len=%d total_elapsed=%s", o.uid, respLen, time.Since(start))
 	return resp, nil
 }
 
@@ -472,11 +472,11 @@ func (o *AliRAGModel) GenerateResponse(ctx context.Context, messages []*schema.M
 //	error: 错误信息
 func (o *AliRAGModel) llmStream(ctx context.Context, messages []*schema.Message, cb StreamCallback) (string, error) {
 	start := time.Now()
-	log.Printf("[RAG][Stream][LLM] start username=%s messages=%d", o.username, len(messages))
+	log.Printf("[RAG][Stream][LLM] start uid=%s messages=%d", o.uid, len(messages))
 
 	stream, err := o.llm.Stream(ctx, messages)
 	if err != nil {
-		log.Printf("[RAG][Stream][LLM] start failed username=%s err=%v", o.username, err)
+		log.Printf("[RAG][Stream][LLM] start failed uid=%s err=%v", o.uid, err)
 		return "", fmt.Errorf("ali rag stream failed: %v", err)
 	}
 	defer stream.Close()
@@ -489,7 +489,7 @@ func (o *AliRAGModel) llmStream(ctx context.Context, messages []*schema.Message,
 			break
 		}
 		if err != nil {
-			log.Printf("[RAG][Stream][LLM] recv failed username=%s err=%v elapsed=%s", o.username, err, time.Since(start))
+			log.Printf("[RAG][Stream][LLM] recv failed uid=%s err=%v elapsed=%s", o.uid, err, time.Since(start))
 			return "", fmt.Errorf("ali rag stream recv failed: %v", err)
 		}
 		if len(msg.Content) > 0 {
@@ -499,7 +499,7 @@ func (o *AliRAGModel) llmStream(ctx context.Context, messages []*schema.Message,
 	}
 
 	result := fullResp.String()
-	log.Printf("[RAG][Stream][LLM] success username=%s response_len=%d elapsed=%s", o.username, len(result), time.Since(start))
+	log.Printf("[RAG][Stream][LLM] success uid=%s response_len=%d elapsed=%s", o.uid, len(result), time.Since(start))
 	return result, nil
 }
 
@@ -528,11 +528,11 @@ func (o *AliRAGModel) llmStream(ctx context.Context, messages []*schema.Message,
 //   - 回调函数cb会实时接收流式响应片段
 func (o *AliRAGModel) StreamResponse(ctx context.Context, messages []*schema.Message, cb StreamCallback) (string, error) {
 	start := time.Now()
-	log.Printf("[RAG][Stream] start username=%s messages=%d workflow=true", o.username, len(messages))
+	log.Printf("[RAG][Stream] start uid=%s messages=%d workflow=true", o.uid, len(messages))
 
 	state, err := o.ragPrepareWorkflow.Invoke(ctx, messages)
 	if err != nil {
-		log.Printf("[RAG][Stream] workflow prepare failed username=%s err=%v elapsed=%s", o.username, err, time.Since(start))
+		log.Printf("[RAG][Stream] workflow prepare failed uid=%s err=%v elapsed=%s", o.uid, err, time.Since(start))
 		return "", err
 	}
 	ragMessages := state.MessagesForLLM
@@ -540,7 +540,7 @@ func (o *AliRAGModel) StreamResponse(ctx context.Context, messages []*schema.Mes
 		ragMessages = messages
 	}
 	content, streamErr := o.llmStream(ctx, ragMessages, cb)
-	log.Printf("[RAG][Stream] finished username=%s docs=%d fallback=%v response_len=%d err=%v total_elapsed=%s", o.username, len(state.Docs), state.Fallback, len(content), streamErr, time.Since(start))
+	log.Printf("[RAG][Stream] finished uid=%s docs=%d fallback=%v response_len=%d err=%v total_elapsed=%s", o.uid, len(state.Docs), state.Fallback, len(content), streamErr, time.Since(start))
 	return content, streamErr
 }
 

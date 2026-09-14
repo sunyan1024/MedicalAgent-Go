@@ -99,7 +99,7 @@ func CreateReport(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"status_msg": "报告解析繁忙，请稍后重试"})
 		return
 	}
-	report := &model.MedicalReport{ID: uuid.NewString(), UserName: c.GetString("userName"), Name: name, Status: "parsing", Text: text, Indicators: "[]"}
+	report := &model.MedicalReport{ID: uuid.NewString(), UID: c.GetString("uid"), Name: name, Status: "parsing", Text: text, Indicators: "[]"}
 	if err := mysql.DB.WithContext(c.Request.Context()).Create(report).Error; err != nil {
 		<-parsingSlots
 		if path != "" {
@@ -161,7 +161,7 @@ func parseReport(id, path, text string) {
 }
 
 func GetReport(c *gin.Context) {
-	r, err := medicalservice.GetReport(c.Request.Context(), c.GetString("userName"), c.Param("id"))
+	r, err := medicalservice.GetReport(c.Request.Context(), c.GetString("uid"), c.Param("id"))
 	if err != nil {
 		fail(c, err)
 		return
@@ -177,7 +177,7 @@ func ConfirmReport(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	r, err := medicalservice.ConfirmReport(c.Request.Context(), c.GetString("userName"), c.Param("id"), req.Indicators)
+	r, err := medicalservice.ConfirmReport(c.Request.Context(), c.GetString("uid"), c.Param("id"), req.Indicators)
 	if err != nil {
 		fail(c, err)
 		return
@@ -185,7 +185,7 @@ func ConfirmReport(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status_code": 1000, "report": r})
 }
 func Runs(c *gin.Context) {
-	runs, err := medicalservice.Runs(c.Request.Context(), c.GetString("userName"), c.Query("sessionId"))
+	runs, err := medicalservice.Runs(c.Request.Context(), c.GetString("uid"), c.Query("sessionId"))
 	if err != nil {
 		fail(c, err)
 		return
@@ -214,7 +214,7 @@ func Chat(c *gin.Context, question, session, report string, stream bool) {
 			c.Writer.Flush()
 		}
 	}
-	run, err := medicalservice.Run(ctx, c.GetString("userName"), medicalservice.ChatRequest{Question: question, SessionID: session, ReportID: report}, emit)
+	run, err := medicalservice.Run(ctx, c.GetString("uid"), medicalservice.ChatRequest{Question: question, SessionID: session, ReportID: report}, emit)
 	if err != nil {
 		if started {
 			emit(core.Event{Type: "error", Summary: err.Error(), Status: "failed"})

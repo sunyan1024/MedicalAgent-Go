@@ -35,7 +35,7 @@ func TestSessionModelPersistence(t *testing.T) {
 	if status := SaveSessionModel("alice", first, "unknown"); status != code.CodeInvalidParams {
 		t.Fatal(status)
 	}
-	sessions, err := GetUserSessionsByUserName("alice")
+	sessions, err := GetUserSessionsByUID("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestSessionModelPersistence(t *testing.T) {
 	if got[first] != "mcp" || got[second] != "qwen" {
 		t.Fatalf("saved models: %v", got)
 	}
-	if err := db.Create(&model.Session{ID: "legacy", UserName: "legacy"}).Error; err != nil {
+	if err := db.Create(&model.Session{ID: "legacy", UID: "legacy"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	var legacy model.Session

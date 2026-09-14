@@ -23,7 +23,7 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	if err := db.AutoMigrate(&model.MedicalRun{}, &model.MedicalRunEvent{}); err != nil {
 		t.Fatal(err)
 	}
-	run := model.MedicalRun{ID: "run", UserName: "alice", SessionID: "session", Status: "running"}
+	run := model.MedicalRun{ID: "run", UID: "alice", SessionID: "session", Status: "running"}
 	if err := db.Create(&run).Error; err != nil {
 		t.Fatal(err)
 	}

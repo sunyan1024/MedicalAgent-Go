@@ -46,14 +46,14 @@ func readDataFromDB() error {
 		modelType := "qwen"
 		config := make(map[string]interface{})
 		// 创建或获取对应的 AIHelper 实例
-		helper, err := manager.GetOrCreateAIHelper(m.UserName, m.SessionID, modelType, config)
+		helper, err := manager.GetOrCreateAIHelper(m.UID, m.SessionID, modelType, config)
 		if err != nil {
-			log.Printf("[readDataFromDB] failed to create helper for user=%s session=%s: %v", m.UserName, m.SessionID, err)
+			log.Printf("[readDataFromDB] failed to create helper for user=%s session=%s: %v", m.UID, m.SessionID, err)
 			continue
 		}
 		log.Println("[readDataFromDB] init: ", helper.SessionID)
 		// 添加消息到内存中(不开启存储功能)
-		helper.AddMessage(m.Content, m.UserName, m.IsUser, false)
+		helper.AddMessage(m.Content, m.UID, m.IsUser, false)
 	}
 
 	log.Println("[AIHelperManager] init success ")

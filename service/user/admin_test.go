@@ -12,8 +12,8 @@ import (
 
 func TestReadAdminCredentials(t *testing.T) {
 	for _, tc := range []struct {
-		name, username, email, password string
-		wantErr                         bool
+		name, uid, email, password string
+		wantErr                    bool
 	}{
 		{"unset", "", "", "", false},
 		{"partial", "admin", "", "", true},
@@ -23,7 +23,7 @@ func TestReadAdminCredentials(t *testing.T) {
 		{"long password", "admin", "admin@example.com", strings.Repeat("a", 73), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := readAdminCredentials(config.AdminConfig{Username: tc.username, Email: tc.email, Password: tc.password})
+			_, err := readAdminCredentials(config.AdminConfig{UID: tc.uid, Email: tc.email, Password: tc.password})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v", err)
 			}
@@ -45,7 +45,7 @@ func TestBootstrapAdminIsIdempotentAndRejectsConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	var account model.User
-	if err := db.Where("username = ?", c.username).First(&account).Error; err != nil {
+	if err := db.Where("uid = ?", c.uid).First(&account).Error; err != nil {
 		t.Fatal(err)
 	}
 	if account.Role != model.RoleAdmin || utils.CompareHashAndPassword(account.Password, "original-password") != nil {

@@ -13,7 +13,7 @@ import (
 func AIRouter(r *gin.RouterGroup) {
 	// 聊天相关接口
 	{
-		r.GET("/chat/sessions", session.GetUserSessionsByUserName)
+		r.GET("/chat/sessions", session.GetUserSessionsByUID)
 
 		r.POST("/chat/send-new-session", session.CreateSessionAndSendMessage)
 		r.POST("/chat/send-stream-new-session", session.CreateStreamSessionAndSendMessage)

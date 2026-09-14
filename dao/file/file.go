@@ -47,10 +47,10 @@ func DeleteKnowledgeFile(tx *gorm.DB, owner model.KnowledgeOwner, fileID string)
 }
 
 // The same authorized set feeds both vector and keyword retrieval.
-func GetAccessibleKnowledgeFiles(username string) ([]model.KnowledgeFile, error) {
+func GetAccessibleKnowledgeFiles(uid string) ([]model.KnowledgeFile, error) {
 	files := make([]model.KnowledgeFile, 0)
 	err := mysql.DB.Where("(scope = ? AND owner_key = ?) OR (scope = ? AND owner_key = ?)",
-		model.KnowledgeScopePersonal, username, model.KnowledgeScopeEnterprise, model.EnterpriseOwnerKey).
+		model.KnowledgeScopePersonal, uid, model.KnowledgeScopeEnterprise, model.EnterpriseOwnerKey).
 		Order("created_at desc").Find(&files).Error
 	return files, err
 }

@@ -5,12 +5,12 @@ import (
 	"GoAI/model"
 )
 
-// 根据用户名查询所有相关会话
-// func GetSessionsByUserName(UserName int64) ([]model.Session, error) {
-func GetSessionsByUserName(UserName string) ([]model.Session, error) {
+// 根据用户 UID查询所有相关会话
+// func GetSessionsByUID(UID int64) ([]model.Session, error) {
+func GetSessionsByUID(UID string) ([]model.Session, error) {
 	var sessions []model.Session
 	// 简单的查询用where
-	err := mysql.DB.Where("user_name = ?", UserName).Find(&sessions).Error
+	err := mysql.DB.Where("uid = ?", UID).Find(&sessions).Error
 	return sessions, err
 }
 

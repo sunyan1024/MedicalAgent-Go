@@ -41,9 +41,9 @@ var msg = map[Code]string{
 	CodeSuccess: "success",
 
 	CodeInvalidParams:    "请求参数错误",
-	CodeUserExist:        "用户名已存在",
+	CodeUserExist:        "UID 或邮箱已存在",
 	CodeUserNotExist:     "用户不存在",
-	CodeInvalidPassword:  "用户名或密码错误",
+	CodeInvalidPassword:  "UID、邮箱或密码错误",
 	CodeNotMatchPassword: "两次密码不一致",
 	CodeInvalidToken:     "无效的Token",
 	CodeNotLogin:         "用户未登录",

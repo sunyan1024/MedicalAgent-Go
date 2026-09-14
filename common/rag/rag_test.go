@@ -475,7 +475,7 @@ func TestBuildFileIndexKey(t *testing.T) {
 		t.Fatalf("scoped key: got %q", got)
 	}
 	if got := BuildFileIndexKey("", "fallback.pdf"); got != "fallback.pdf" {
-		t.Fatalf("empty username key: got %q", got)
+		t.Fatalf("empty uid key: got %q", got)
 	}
 }
 

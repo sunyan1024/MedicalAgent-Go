@@ -22,14 +22,14 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	if err := db.AutoMigrate(&model.User{}, &model.KnowledgeFile{}); err != nil {
 		t.Fatal(err)
 	}
-	users := []model.User{{Username: "alice", Role: model.RoleUser}, {Username: "bob", Role: model.RoleUser}, {Username: "admin", Role: model.RoleAdmin}}
+	users := []model.User{{UID: "alice", Email: "alice@example.com", Role: model.RoleUser}, {UID: "bob", Email: "bob@example.com", Role: model.RoleUser}, {UID: "admin", Email: "admin@example.com", Role: model.RoleAdmin}}
 	if err := db.Create(&users).Error; err != nil {
 		t.Fatal(err)
 	}
 	files := []model.KnowledgeFile{
-		{ID: "alice-file", UserName: "alice", Scope: "personal", OwnerKey: "alice", StoredName: "alice.txt", OriginalName: "Alice.txt", StoredFileID: "a"},
-		{ID: "bob-file", UserName: "bob", Scope: "personal", OwnerKey: "bob", StoredName: "bob.txt", OriginalName: "Bob.txt", StoredFileID: "b"},
-		{ID: "enterprise-file", UserName: "admin", Scope: "enterprise", OwnerKey: model.EnterpriseOwnerKey, StoredName: "shared.txt", OriginalName: "Shared.txt", StoredFileID: "e"},
+		{ID: "alice-file", UID: "alice", Scope: "personal", OwnerKey: "alice", StoredName: "alice.txt", OriginalName: "Alice.txt", StoredFileID: "a"},
+		{ID: "bob-file", UID: "bob", Scope: "personal", OwnerKey: "bob", StoredName: "bob.txt", OriginalName: "Bob.txt", StoredFileID: "b"},
+		{ID: "enterprise-file", UID: "admin", Scope: "enterprise", OwnerKey: model.EnterpriseOwnerKey, StoredName: "shared.txt", OriginalName: "Shared.txt", StoredFileID: "e"},
 	}
 	if err := db.Create(&files).Error; err != nil {
 		t.Fatal(err)
@@ -38,17 +38,17 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	r := InitRouter()
 	tokens := map[string]string{}
 	for _, user := range users {
-		token, err := myjwt.GenerateToken(user.ID, user.Username)
+		token, err := myjwt.GenerateToken(user.UID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tokens[user.Username] = token
+		tokens[user.UID] = token
 	}
-	request := func(username, method, path, body string) *httptest.ResponseRecorder {
+	request := func(uid, method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, "/api/v3"+path, strings.NewReader(body))
-		if username != "" {
-			req.Header.Set("Authorization", "Bearer "+tokens[username])
+		if uid != "" {
+			req.Header.Set("Authorization", "Bearer "+tokens[uid])
 		}
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 		t.Fatal("administrator did not reach upload validation", w.Body.String())
 	}
 	// Same token must lose enterprise access immediately after role is changed in the DB.
-	if err := db.Model(&model.User{}).Where("username = ?", "admin").Update("role", model.RoleUser).Error; err != nil {
+	if err := db.Model(&model.User{}).Where("uid = ?", "admin").Update("role", model.RoleUser).Error; err != nil {
 		t.Fatal(err)
 	}
 	if w := request("admin", "POST", "/enterprise/file/precheck", `{}`); w.Code != http.StatusForbidden {

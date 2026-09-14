@@ -24,7 +24,7 @@ var newRuntime = aihelper.NewMedicalRuntime
 
 func ownedReport(ctx context.Context, user, id string) (*model.MedicalReport, error) {
 	var report model.MedicalReport
-	if err := mysql.DB.WithContext(ctx).Where("id = ? AND user_name = ?", id, user).First(&report).Error; err != nil {
+	if err := mysql.DB.WithContext(ctx).Where("id = ? AND uid = ?", id, user).First(&report).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -70,12 +70,12 @@ func Runs(ctx context.Context, user, session string) ([]RunResponse, error) {
 	// An active run has a 120s deadline plus bounded persistence. Older running
 	// records indicate a process interruption, not an indefinitely active task.
 	if err := mysql.DB.WithContext(ctx).Model(&model.MedicalRun{}).
-		Where("user_name = ? AND session_id = ? AND status = ? AND created_at < ?", user, session, "running", time.Now().Add(-3*time.Minute)).
+		Where("uid = ? AND session_id = ? AND status = ? AND created_at < ?", user, session, "running", time.Now().Add(-3*time.Minute)).
 		Update("status", "interrupted").Error; err != nil {
 		return nil, err
 	}
 	var runs []model.MedicalRun
-	err := mysql.DB.WithContext(ctx).Where("user_name = ? AND session_id = ?", user, session).Order("created_at desc").Limit(30).Find(&runs).Error
+	err := mysql.DB.WithContext(ctx).Where("uid = ? AND session_id = ?", user, session).Order("created_at desc").Limit(30).Find(&runs).Error
 	if err != nil {
 		return nil, err
 	}
@@ -114,19 +114,19 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		if len(title) > 30 {
 			title = title[:30]
 		}
-		if err = mysql.DB.WithContext(ctx).Create(&model.Session{ID: req.SessionID, UserName: user, Title: string(title), ModelType: "medical_agent"}).Error; err != nil {
+		if err = mysql.DB.WithContext(ctx).Create(&model.Session{ID: req.SessionID, UID: user, Title: string(title), ModelType: "medical_agent"}).Error; err != nil {
 			return nil, err
 		}
 	} else {
 		var s model.Session
-		if err = mysql.DB.WithContext(ctx).Where("id = ? AND user_name = ?", req.SessionID, user).First(&s).Error; err != nil {
+		if err = mysql.DB.WithContext(ctx).Where("id = ? AND uid = ?", req.SessionID, user).First(&s).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, ErrNotFound
 			}
 			return nil, err
 		}
 	}
-	if err = mysql.DB.WithContext(ctx).Model(&model.Session{}).Where("id = ? AND user_name = ?", req.SessionID, user).Update("model_type", "medical_agent").Error; err != nil {
+	if err = mysql.DB.WithContext(ctx).Model(&model.Session{}).Where("id = ? AND uid = ?", req.SessionID, user).Update("model_type", "medical_agent").Error; err != nil {
 		return nil, err
 	}
 	lock, _ := sessions.LoadOrStore(req.SessionID, &sync.Mutex{})
@@ -136,7 +136,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	}
 	defer mu.Unlock()
 	if report != nil {
-		res := mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("id = ? AND user_name = ? AND (session_id = '' OR session_id = ?)", report.ID, user, req.SessionID).Update("session_id", req.SessionID)
+		res := mysql.DB.WithContext(ctx).Model(&model.MedicalReport{}).Where("id = ? AND uid = ? AND (session_id = '' OR session_id = ?)", report.ID, user, req.SessionID).Update("session_id", req.SessionID)
 		if res.Error != nil {
 			return nil, res.Error
 		}
@@ -145,7 +145,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		}
 	} else {
 		var latest model.MedicalReport
-		err = mysql.DB.WithContext(ctx).Where("user_name = ? AND session_id = ? AND status = ?", user, req.SessionID, "confirmed").Order("updated_at desc").First(&latest).Error
+		err = mysql.DB.WithContext(ctx).Where("uid = ? AND session_id = ? AND status = ?", user, req.SessionID, "confirmed").Order("updated_at desc").First(&latest).Error
 		if err == nil {
 			report = &latest
 			req.ReportID = latest.ID
@@ -166,7 +166,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 			return append([]core.Indicator(nil), snapshot...), nil
 		}
 	}
-	run := &model.MedicalRun{ID: uuid.NewString(), UserName: user, SessionID: req.SessionID, ReportID: req.ReportID, Status: "running", Question: req.Question}
+	run := &model.MedicalRun{ID: uuid.NewString(), UID: user, SessionID: req.SessionID, ReportID: req.ReportID, Status: "running", Question: req.Question}
 	if err = mysql.DB.WithContext(ctx).Create(run).Error; err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	runtime, err := newRuntime(ctx, run.ID, read, callback)
 	var history []model.Message
 	if err == nil {
-		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND user_name = ?", req.SessionID, user).Order("id desc").Limit(20).Find(&history).Error
+		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).Order("id desc").Limit(20).Find(&history).Error
 	}
 	if err != nil {
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
@@ -213,11 +213,11 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		if e := tx.Save(run).Error; e != nil {
 			return e
 		}
-		messages := []model.Message{{SessionID: req.SessionID, UserName: user, Content: req.Question, IsUser: true}, {SessionID: req.SessionID, UserName: user, Content: run.Answer, IsUser: false}}
+		messages := []model.Message{{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, {SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false}}
 		if e := tx.Create(&messages).Error; e != nil {
 			return e
 		}
-		return tx.Model(&model.Session{}).Where("id = ? AND user_name = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
+		return tx.Model(&model.Session{}).Where("id = ? AND uid = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
 	})
 	if persistErr != nil {
 		return nil, fmt.Errorf("结果持久化失败: %w", errors.Join(persistErr, eventErr))

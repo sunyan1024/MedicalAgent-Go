@@ -52,11 +52,11 @@ func (f *AIModelFactory) registerCreators() {
 
 	// 阿里百炼 RAG 模型
 	f.creators["rag"] = func(ctx context.Context, config map[string]interface{}) (AIModel, error) {
-		username, ok := config["username"].(string)
+		uid, ok := config["uid"].(string)
 		if !ok {
-			return nil, fmt.Errorf("RAG model requires username")
+			return nil, fmt.Errorf("RAG model requires uid")
 		}
-		return NewAliRAGModel(ctx, username)
+		return NewAliRAGModel(ctx, uid)
 	}
 
 	// 阿里百炼 MCP 模型（集成MCP服务）

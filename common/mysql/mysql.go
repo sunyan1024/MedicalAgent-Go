@@ -76,6 +76,9 @@ func InitMysql() error {
 
 // 自动数据迁移
 func migration() error {
+	if err := prepareUIDSchema(); err != nil {
+		return err
+	}
 	if err := prepareKnowledgeFileMigration(); err != nil {
 		return err
 	}
@@ -151,7 +154,7 @@ func prepareKnowledgeOwnershipMigration() error {
 	}
 	return DB.Model(&model.KnowledgeFile{}).
 		Where("owner_key = '' OR owner_key IS NULL").
-		Updates(map[string]interface{}{"scope": model.KnowledgeScopePersonal, "owner_key": gorm.Expr("user_name")}).Error
+		Updates(map[string]interface{}{"scope": model.KnowledgeScopePersonal, "owner_key": gorm.Expr("uid")}).Error
 }
 
 func removeMedicalEventsColumn() error {

@@ -12,7 +12,7 @@
 
 ```sql
 SET @run_id = '替换运行 ID';
-SET @user_name = '替换用户名';
+SET @uid = '替换用户 UID';
 SET @from_utc = '2026-09-14 00:00:00';
 SET @until_utc = '2026-09-15 00:00:00';
 
@@ -20,7 +20,7 @@ SET @until_utc = '2026-09-15 00:00:00';
 SELECT e.*
 FROM medical_run_events e
 JOIN medical_runs r ON r.id = e.run_id
-WHERE e.run_id = @run_id AND r.user_name = @user_name
+WHERE e.run_id = @run_id AND r.uid = @uid
 ORDER BY e.sequence;
 
 -- 将一次调用的输入与输出、错误合并展示。
@@ -31,7 +31,7 @@ JOIN medical_runs r ON r.id = s.run_id
 LEFT JOIN medical_run_events f
   ON f.run_id = s.run_id AND f.parent_id = s.id
  AND f.type IN ('tool_end', 'subagent_end')
-WHERE s.run_id = @run_id AND r.user_name = @user_name
+WHERE s.run_id = @run_id AND r.uid = @uid
   AND s.type IN ('tool_start', 'subagent_start')
 ORDER BY s.sequence;
 
@@ -40,7 +40,7 @@ SELECT e.run_id, e.sequence, e.agent, e.tool, e.type,
        e.status, e.error, e.occurred_at
 FROM medical_run_events e
 JOIN medical_runs r ON r.id = e.run_id
-WHERE r.user_name = @user_name AND e.status IN ('failed', 'rejected')
+WHERE r.uid = @uid AND e.status IN ('failed', 'rejected')
   AND e.occurred_at >= @from_utc AND e.occurred_at < @until_utc
 ORDER BY e.occurred_at, e.run_id, e.sequence;
 
@@ -51,7 +51,7 @@ SELECT e.agent, e.tool, COUNT(*) AS finished_calls,
        ROUND(AVG(e.duration_ms), 2) AS average_duration_ms
 FROM medical_run_events e
 JOIN medical_runs r ON r.id = e.run_id
-WHERE r.user_name = @user_name AND e.type = 'tool_end'
+WHERE r.uid = @uid AND e.type = 'tool_end'
   AND e.occurred_at >= @from_utc AND e.occurred_at < @until_utc
 GROUP BY e.agent, e.tool;
 
@@ -59,7 +59,7 @@ GROUP BY e.agent, e.tool;
 SELECT s.run_id, s.id, s.agent, s.tool, r.status AS run_status
 FROM medical_run_events s
 JOIN medical_runs r ON r.id = s.run_id
-WHERE r.user_name = @user_name
+WHERE r.uid = @uid
   AND s.type IN ('tool_start', 'subagent_start')
   AND s.occurred_at >= @from_utc AND s.occurred_at < @until_utc
   AND NOT EXISTS (

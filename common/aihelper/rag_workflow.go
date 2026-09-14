@@ -36,8 +36,8 @@ type RAGWorkflowPrepared struct {
 	FallbackReason     string
 }
 
-func defaultRAGNewQuery(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
-	query, err := rag.NewRAGQuery(ctx, username)
+func defaultRAGNewQuery(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
+	query, err := rag.NewRAGQuery(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (o *AliRAGModel) compileRAGWorkflows(ctx context.Context) error {
 
 	o.ragGenerateWorkflow = generateRunner
 	o.ragPrepareWorkflow = prepareRunner
-	log.Printf("[RAG][Workflow] compile success username=%s elapsed=%s", o.username, time.Since(start))
+	log.Printf("[RAG][Workflow] compile success uid=%s elapsed=%s", o.uid, time.Since(start))
 	return nil
 }
 
@@ -91,7 +91,7 @@ func (o *AliRAGModel) prepareRAGWorkflowQuery(ctx context.Context, messages []*s
 		return nil, fmt.Errorf("last message is nil")
 	}
 	query := lastMessage.Content
-	log.Printf("[RAG][Workflow] query input username=%s query_len=%d query_preview=%q", o.username, len(query), previewRAGQueryForLog(query))
+	log.Printf("[RAG][Workflow] query input uid=%s query_len=%d query_preview=%q", o.uid, len(query), previewRAGQueryForLog(query))
 	return &ragWorkflowState{
 		Messages:       copySchemaMessages(messages),
 		OriginalQuery:  query,
@@ -104,7 +104,7 @@ func (o *AliRAGModel) rewriteRAGWorkflowQuery(ctx context.Context, state *ragWor
 		return nil, fmt.Errorf("rag workflow state is nil")
 	}
 	state.RetrievalQuery = o.rewriteRAGQuery(ctx, state.Messages, state.OriginalQuery)
-	log.Printf("[RAG][Workflow] query prepared username=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.username, len(state.OriginalQuery), len(state.RetrievalQuery), previewRAGQueryForLog(state.OriginalQuery), previewRAGQueryForLog(state.RetrievalQuery))
+	log.Printf("[RAG][Workflow] query prepared uid=%s query_len=%d retrieval_query_len=%d query_preview=%q retrieval_query_preview=%q", o.uid, len(state.OriginalQuery), len(state.RetrievalQuery), previewRAGQueryForLog(state.OriginalQuery), previewRAGQueryForLog(state.RetrievalQuery))
 	return state, nil
 }
 
@@ -118,11 +118,11 @@ func (o *AliRAGModel) retrieveRAGWorkflowDocs(ctx context.Context, state *ragWor
 	}
 
 	queryStart := time.Now()
-	retrieveDocuments, err := newQuery(ctx, o.username)
+	retrieveDocuments, err := newQuery(ctx, o.uid)
 	if err != nil {
 		state.Fallback = true
 		state.FallbackReason = "query_init_failed"
-		log.Printf("[RAG][Workflow] query init failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(queryStart))
+		log.Printf("[RAG][Workflow] query init failed uid=%s fallback=llm err=%v elapsed=%s", o.uid, err, time.Since(queryStart))
 		return state, nil
 	}
 
@@ -132,11 +132,11 @@ func (o *AliRAGModel) retrieveRAGWorkflowDocs(ctx context.Context, state *ragWor
 	if err != nil {
 		state.Fallback = true
 		state.FallbackReason = "retrieve_failed"
-		log.Printf("[RAG][Workflow] retrieve failed username=%s fallback=llm err=%v elapsed=%s", o.username, err, time.Since(retrieveStart))
+		log.Printf("[RAG][Workflow] retrieve failed uid=%s fallback=llm err=%v elapsed=%s", o.uid, err, time.Since(retrieveStart))
 		return state, nil
 	}
 	state.Docs = docs
-	log.Printf("[RAG][Workflow] retrieve success username=%s docs=%d elapsed=%s", o.username, len(docs), time.Since(retrieveStart))
+	log.Printf("[RAG][Workflow] retrieve success uid=%s docs=%d elapsed=%s", o.uid, len(docs), time.Since(retrieveStart))
 	return state, nil
 }
 
@@ -146,13 +146,13 @@ func (o *AliRAGModel) buildRAGWorkflowPrompt(ctx context.Context, state *ragWork
 	}
 	if state.Fallback || len(state.Docs) == 0 {
 		state.MessagesForLLM = copySchemaMessages(state.Messages)
-		log.Printf("[RAG][Workflow] prompt skipped username=%s fallback=%v reason=%s docs=%d", o.username, state.Fallback, state.FallbackReason, len(state.Docs))
+		log.Printf("[RAG][Workflow] prompt skipped uid=%s fallback=%v reason=%s docs=%d", o.uid, state.Fallback, state.FallbackReason, len(state.Docs))
 		return state, nil
 	}
 
 	ragPrompt := rag.BuildRAGPromptWithRetrievalQuery(state.OriginalQuery, state.RetrievalQuery, state.Docs)
 	state.MessagesForLLM = replaceLastMessageContent(state.Messages, ragPrompt)
-	log.Printf("[RAG][Workflow] prompt built username=%s prompt_len=%d docs=%d", o.username, len(ragPrompt), len(state.Docs))
+	log.Printf("[RAG][Workflow] prompt built uid=%s prompt_len=%d docs=%d", o.uid, len(ragPrompt), len(state.Docs))
 	return state, nil
 }
 

@@ -13,7 +13,7 @@ type MainConfig struct {
 }
 
 type AdminConfig struct {
-	Username string `toml:"username"`
+	UID      string `toml:"uid"`
 	Email    string `toml:"email"`
 	Password string `toml:"password"`
 }

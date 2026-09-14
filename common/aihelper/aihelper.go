@@ -27,7 +27,7 @@ func NewAIHelper(model_ AIModel, SessionID string) *AIHelper {
 		//异步推送到消息队列中
 		saveFunc: func(msg *model.Message) (*model.Message, error) {
 			// 将消息参数序列化为 JSON 字节数组
-			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UserName, msg.IsUser)
+			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser)
 			// 异步推送到消息队列中
 			err := rabbitmq.RMQMessage.Publish(data)
 			return msg, err
@@ -37,11 +37,11 @@ func NewAIHelper(model_ AIModel, SessionID string) *AIHelper {
 }
 
 // addMessage 添加消息到内存中并调用自定义存储函数
-func (a *AIHelper) AddMessage(Content string, UserName string, IsUser bool, Save bool) {
+func (a *AIHelper) AddMessage(Content string, UID string, IsUser bool, Save bool) {
 	userMsg := model.Message{
 		SessionID: a.SessionID,
 		Content:   Content,
-		UserName:  UserName,
+		UID:       UID,
 		IsUser:    IsUser,
 	}
 	a.mu.Lock()
@@ -72,10 +72,10 @@ func (a *AIHelper) GetMessages() []*model.Message {
 }
 
 // 同步生成
-func (a *AIHelper) GenerateResponse(userName string, ctx context.Context, userQuestion string) (*model.Message, error) {
+func (a *AIHelper) GenerateResponse(uid string, ctx context.Context, userQuestion string) (*model.Message, error) {
 	//调用存储函数
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
-	a.AddMessage(userQuestion, userName, true, true)
+	a.AddMessage(userQuestion, uid, true, true)
 
 	a.mu.RLock()
 	//将model.Message转化成schema.Message
@@ -89,19 +89,19 @@ func (a *AIHelper) GenerateResponse(userName string, ctx context.Context, userQu
 	}
 
 	//将schema.Message转化成model.Message
-	modelMsg := utils.ConvertToModelMessage(a.SessionID, userName, schemaMsg)
+	modelMsg := utils.ConvertToModelMessage(a.SessionID, uid, schemaMsg)
 
 	//添加到内存，并调用存储函数
-	a.AddMessage(modelMsg.Content, userName, false, true)
+	a.AddMessage(modelMsg.Content, uid, false, true)
 
 	return modelMsg, nil
 }
 
 // 流式生成
-func (a *AIHelper) StreamResponse(userName string, ctx context.Context, cb StreamCallback, userQuestion string) (*model.Message, error) {
+func (a *AIHelper) StreamResponse(uid string, ctx context.Context, cb StreamCallback, userQuestion string) (*model.Message, error) {
 	//调用存储函数
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
-	a.AddMessage(userQuestion, userName, true, true)
+	a.AddMessage(userQuestion, uid, true, true)
 
 	a.mu.RLock()
 	// 将model.Message转化成schema.Message
@@ -117,14 +117,14 @@ func (a *AIHelper) StreamResponse(userName string, ctx context.Context, cb Strea
 	//转化成model.Message
 	modelMsg := &model.Message{
 		SessionID: a.SessionID,
-		UserName:  userName,
+		UID:       uid,
 		Content:   content,
 		IsUser:    false,
 	}
 
 	// 添加到内存，并调用存储函数
 	// 这里的modelMsg是模型生成的消息，需要保存到数据库中
-	a.AddMessage(modelMsg.Content, userName, false, true)
+	a.AddMessage(modelMsg.Content, uid, false, true)
 
 	return modelMsg, nil
 }

@@ -47,10 +47,10 @@ func GenerateUUID() string {
 }
 
 // 将 schema 消息转换为数据库可存储的格式
-func ConvertToModelMessage(sessionID string, userName string, msg *schema.Message) *model.Message {
+func ConvertToModelMessage(sessionID string, uid string, msg *schema.Message) *model.Message {
 	return &model.Message{
 		SessionID: sessionID,
-		UserName:  userName,
+		UID:       uid,
 		Content:   msg.Content,
 	}
 }

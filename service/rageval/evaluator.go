@@ -94,12 +94,12 @@ type answerCheck struct {
 	ValidationErrors []string
 }
 
-func Evaluate(ctx context.Context, username string, req EvalRequest) (*EvalResponse, error) {
+func Evaluate(ctx context.Context, uid string, req EvalRequest) (*EvalResponse, error) {
 	if err := validateRequest(req); err != nil {
 		return nil, err
 	}
 
-	ragModel, ragModelErr := aihelper.NewAliRAGModel(ctx, username)
+	ragModel, ragModelErr := aihelper.NewAliRAGModel(ctx, uid)
 	judgeEnabled := req.JudgeEnabled == nil || *req.JudgeEnabled
 	var judge judgeModel
 	var judgeErr error

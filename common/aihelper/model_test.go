@@ -52,7 +52,7 @@ func TestRAGWorkflowPrepareRejectsEmptyMessages(t *testing.T) {
 
 func TestRAGWorkflowBuildsRAGPromptWhenDocsRetrieved(t *testing.T) {
 	chatModel := &testChatModel{response: "answer"}
-	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
+	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
 			if query != "2023毕业人数是多少" {
 				t.Fatalf("retrieval query: got %q", query)
@@ -90,7 +90,7 @@ func TestRAGWorkflowBuildsRAGPromptWhenDocsRetrieved(t *testing.T) {
 
 func TestRAGWorkflowFallsBackToOriginalMessagesWhenQueryInitFails(t *testing.T) {
 	chatModel := &testChatModel{response: "answer"}
-	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
+	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
 		return nil, fmt.Errorf("no files")
 	})
 	messages := []*schema.Message{{Role: schema.User, Content: "普通问题"}}
@@ -109,7 +109,7 @@ func TestRAGWorkflowFallsBackToOriginalMessagesWhenQueryInitFails(t *testing.T) 
 
 func TestRAGWorkflowFallsBackToOriginalMessagesWhenRetrieveFails(t *testing.T) {
 	chatModel := &testChatModel{response: "answer"}
-	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
+	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
 			return nil, fmt.Errorf("redis search failed")
 		}, nil
@@ -130,7 +130,7 @@ func TestRAGWorkflowFallsBackToOriginalMessagesWhenRetrieveFails(t *testing.T) {
 
 func TestRAGGenerateResponseUsesWorkflow(t *testing.T) {
 	chatModel := &testChatModel{response: "workflow answer"}
-	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
+	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
 			return []*schema.Document{{Content: "上下文内容", MetaData: map[string]any{"knowledge_scope": "personal"}}}, nil
 		}, nil
@@ -152,7 +152,7 @@ func TestRAGGenerateResponseUsesWorkflow(t *testing.T) {
 
 func TestRAGStreamResponseUsesPreparedWorkflowMessages(t *testing.T) {
 	chatModel := &testChatModel{streamChunks: []string{"chunk1", "chunk2"}}
-	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, username string) (ragRetrieveDocumentsFunc, error) {
+	model := newTestAliRAGModel(t, chatModel, func(ctx context.Context, uid string) (ragRetrieveDocumentsFunc, error) {
 		return func(ctx context.Context, query string) ([]*schema.Document, error) {
 			return []*schema.Document{{Content: "流式上下文", MetaData: map[string]any{"knowledge_scope": "personal"}}}, nil
 		}, nil
@@ -179,7 +179,7 @@ func newTestAliRAGModel(t *testing.T, chatModel *testChatModel, newQuery ragNewQ
 	t.Helper()
 	model := &AliRAGModel{
 		llm:                 chatModel,
-		username:            "tester",
+		uid:                 "tester",
 		queryRewriteEnabled: false,
 		newRAGQuery:         newQuery,
 	}

@@ -188,7 +188,7 @@ func TestCitationAndParameterValidation(t *testing.T) {
 	if got := r.validateCitations("[med_abc] [med_bad]"); got != "[med_abc] [来源未验证]" {
 		t.Fatal(got)
 	}
-	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","username":"victim"}`} {
+	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","uid":"victim"}`} {
 		if _, err := argument(raw, "query"); err == nil {
 			t.Fatal(raw)
 		}
