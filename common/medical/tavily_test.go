@@ -37,12 +37,6 @@ func TestTavilyRequestAndSources(t *testing.T) {
 	if sources[0].Kind != "web" || sources[0].URL != "https://example.org/a" || !strings.HasPrefix(sources[0].ID, "web_") || sources[1].Title != "example.org" {
 		t.Fatal(sources)
 	}
-	r := NewRuntime("test", Dependencies{})
-	r.sources[sources[0].ID] = sources[0]
-	valid := "[" + sources[0].ID + "]"
-	if got := r.validateCitations(valid + " [web_fake]"); got != valid+" [来源未验证]" {
-		t.Fatal(got)
-	}
 	// The same public JSON shape is stored in the event sources column.
 	var restored []Source
 	if err = json.Unmarshal([]byte(JSON(sources)), &restored); err != nil || restored[0] != sources[0] {
@@ -165,8 +159,21 @@ func TestWebAgentScenarios(t *testing.T) {
 			if mode != "budget" && err != nil {
 				t.Fatal(err)
 			}
-			if mode == "success" && (webCalls != 1 || !strings.Contains(answer, "[web_"+strings.Repeat("a", 64)+"]") || strings.Contains(answer, "[web_invalid]")) {
+			if mode == "success" && (webCalls != 1 || strings.Contains(answer, "web_") || strings.TrimSpace(answer) != "已检索") {
 				t.Fatal(answer, webCalls)
+			}
+			if mode == "success" {
+				var delta string
+				var sources []Source
+				for _, event := range r.Events {
+					if event.Type == "answer_delta" {
+						delta += event.Delta
+					}
+					sources = append(sources, event.Sources...)
+				}
+				if delta != answer || len(sources) != 1 || sources[0].ID != "web_"+strings.Repeat("a", 64) || sources[0].URL != "https://example.org" || sources[0].Content != "证据" {
+					t.Fatalf("answer/trace mismatch: %q %q %+v", answer, delta, sources)
+				}
 			}
 			if mode == "failure" && (webCalls != 1 || localCalls != 1) {
 				t.Fatal(webCalls, localCalls)

@@ -88,11 +88,12 @@ def main():
             events = [event for turn in turns for event in json.loads(turn['eventsJson'])]
             answer = '\n'.join(turn['answer'] for turn in turns)
             evidence = {source['id']: source for event in events for source in event.get('sources', [])}
-            cited = re.findall(r'\[(med_[A-Za-z0-9_-]+)\]', answer)
+            markers = re.findall(r'\[[ \t]*(?:来源[ \t]*ID[ \t]*[:：][ \t]*)?(?:web|knowledge)_[A-Za-z0-9_-]+[ \t]*\](?![(:])', answer)
             row['agent'] = {'latency_ms': round((time.monotonic() - start) * 1000),
                             'turns': turns, 'tool_calls': sum(e['type'] in ('tool_start', 'subagent_start') for e in events),
                             'keyword_pass': all(k in answer for k in case['keywords']),
-                            'citation_id_valid': bool(cited) and all(c in evidence for c in cited),
+                            'answer_source_marker_free': not markers,
+                            'trace_source_count': len(evidence),
                             'expected_source_hit': source_hit(case['expected_sources'], [s['title'] for s in evidence.values()])}
             # Baseline receives the same report text and all user-provided facts.
             question = '\n'.join([case['question']] + case['followups'])
@@ -108,7 +109,7 @@ def main():
         output = ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps({'judge_enabled': False, 'clinical_accuracy': 'not_evaluated',
-                                      'note': 'Use an account with no personal knowledge files for a public-corpus comparison. Keyword/citation checks are not clinical validation.',
+                                      'note': 'Use an account with no personal knowledge files for a public-corpus comparison. Keyword/source checks are not clinical validation.',
                                       'results': results}, ensure_ascii=False, indent=2) + '\n')
 
 

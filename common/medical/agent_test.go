@@ -167,7 +167,7 @@ func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]") {
+	if answer != "已完成，资料见 。" {
 		t.Fatalf("answer: %s", answer)
 	}
 	if len(queries) != 2 || queries[0] == queries[1] {
@@ -252,12 +252,7 @@ func TestCompareDoesNotInventRanges(t *testing.T) {
 	}
 }
 
-func TestCitationAndParameterValidation(t *testing.T) {
-	r := NewRuntime("", Dependencies{})
-	r.sources["knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"] = Source{ID: "knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Kind: "knowledge"}
-	if got := r.validateCitations("[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [knowledge_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_1]"); got != "[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [来源未验证]" {
-		t.Fatal(got)
-	}
+func TestParameterValidation(t *testing.T) {
 	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","uid":"victim"}`} {
 		if _, err := argument(raw, "query"); err == nil {
 			t.Fatal(raw)
@@ -337,7 +332,7 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 				return []Source{{ID: id, Title: expected.Title, Content: expected.Content}}, nil
 			}})
 			answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("读取检索资料")})
-			if err != nil || !strings.Contains(answer, "["+expected.ID+"]") {
+			if err != nil || answer != "已完成，资料见 。" {
 				t.Fatalf("answer=%s err=%v", answer, err)
 			}
 			if len(r.sources) != 1 || r.sources[expected.ID] != expected {
