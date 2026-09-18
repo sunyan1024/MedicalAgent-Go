@@ -34,6 +34,8 @@ export const taskName = (event) =>
     read_report: '读取已确认报告',
     compare_reference_ranges: '核对报告参考范围',
     search_medical_knowledge: '检索医学知识',
+    search_web: '联网搜索',
+    read_medical_source: '读取证据片段',
   }[event.tool] ||
   { run_start: '主 Agent 处理问题', run_end: '本次运行结束', error: '运行异常' }[event.type] ||
   event.tool ||
@@ -122,3 +124,12 @@ export const traceSources = (events) => [
       .map((s) => [s.id, s])
   ).values(),
 ]
+
+export function safeSourceURL(value) {
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''
+  } catch {
+    return ''
+  }
+}

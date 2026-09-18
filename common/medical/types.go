@@ -67,6 +67,8 @@ func ValidateIndicators(items []Indicator) error {
 }
 
 type Source struct {
+	Kind    string `json:"kind,omitempty"`
+	URL     string `json:"url,omitempty"`
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Content string `json:"content"`

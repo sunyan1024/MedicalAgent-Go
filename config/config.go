@@ -109,7 +109,14 @@ type MCPConfig struct {
 	MCPBaseUrl string `toml:"baseUrl"`
 }
 
+type TavilyConfig struct {
+	Enabled        bool   `toml:"enabled"`
+	APIKey         string `toml:"apiKey"`
+	TimeoutSeconds int    `toml:"timeoutSeconds"`
+}
+
 type Config struct {
+	TavilyConfig   TavilyConfig `toml:"tavilyConfig"`
 	AdminConfig    `toml:"adminConfig"`
 	EmailConfig    `toml:"emailConfig"`
 	RedisConfig    `toml:"redisConfig"`

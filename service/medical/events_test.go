@@ -30,6 +30,7 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	w := newEventWriter(db)
 	secret := strings.Repeat("完整原始内容", 1000)
 	e := core.Event{ID: "event", RunID: run.ID, Sequence: 1, Type: "tool_start", Tool: "search", Input: secret, Summary: "摘要", OccurredAt: time.Now().UTC()}
+	e.Sources = []core.Source{{ID: "web_test", Kind: "web", URL: "https://example.org/evidence", Title: "网页", Content: "证据"}, {ID: "legacy", Title: "旧资料"}}
 	// Already-canceled browser context must not affect the independent writer.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -47,6 +48,10 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	rows, err := Runs(context.Background(), "alice", "session")
 	if err != nil || len(rows) != 1 {
 		t.Fatal(rows, err)
+	}
+	var restored []core.Event
+	if err := json.Unmarshal([]byte(rows[0].Events), &restored); err != nil || len(restored) != 1 || len(restored[0].Sources) != 2 || restored[0].Sources[0] != e.Sources[0] || restored[0].Sources[1] != e.Sources[1] {
+		t.Fatal("source history mismatch", err)
 	}
 	body, _ := json.Marshal(rows)
 	if strings.Contains(string(body), secret) || !strings.Contains(rows[0].Events, "摘要") {
