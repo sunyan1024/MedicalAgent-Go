@@ -16,12 +16,13 @@ import (
 )
 
 type scenarioModel struct {
-	mu         sync.Mutex
-	calls      map[string]int
-	readSource bool
-	withReport bool
-	loop       bool
-	childInput []*schema.Message
+	mu          sync.Mutex
+	calls       map[string]int
+	readSource  bool
+	withReport  bool
+	loop        bool
+	childInput  []*schema.Message
+	childOutput *string
 }
 
 func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ ...model.Option) (*schema.Message, error) {
@@ -58,6 +59,9 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 		return schema.AssistantMessage("已完成，资料见 [knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]。", nil), nil
 	}
 	if role == "report" {
+		if m.childOutput != nil {
+			return schema.AssistantMessage(*m.childOutput, nil), nil
+		}
 		if n == 0 {
 			return call("read_report", `{}`), nil
 		}
@@ -68,6 +72,9 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 	}
 	if n == 0 {
 		m.childInput = append([]*schema.Message(nil), msgs...)
+	}
+	if m.childOutput != nil {
+		return schema.AssistantMessage(*m.childOutput, nil), nil
 	}
 	if n%3 == 0 {
 		return call("search_medical_knowledge", `{"query":"第一次查询"}`), nil
@@ -86,6 +93,62 @@ func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts
 		return nil, err
 	}
 	return schema.StreamReaderFromArray([]*schema.Message{out}), nil
+}
+
+func TestAgentDelegationJSONFormats(t *testing.T) {
+	valid := "{\"findings\":[\"保留 ``` 和 ' 正文\"],\"evidence\":[],\"missing\":[]}"
+	fence := func(s string) string { return "```json\n" + s + "\n```" }
+	for _, tc := range []struct {
+		name, output, wantError string
+	}{
+		{name: "plain", output: valid},
+		{name: "whitespace", output: " \n" + valid + "\t\n"},
+		{name: "json fence", output: fence(valid)},
+		{name: "bare fence", output: "```\n" + valid + "\n```"},
+		{name: "fence whitespace CRLF", output: " \n```json\r\n" + valid + "\r\n```\t\n"},
+		{name: "unclosed fence", output: "```json\n" + valid, wantError: "请按约定JSON格式返回"},
+		{name: "prose before", output: "结果如下\n" + fence(valid), wantError: "请按约定JSON格式返回"},
+		{name: "prose after", output: fence(valid) + "\n结束", wantError: "请按约定JSON格式返回"},
+		{name: "invalid JSON", output: fence(`{"findings":`), wantError: "unexpected end of JSON input"},
+		{name: "wrong type", output: fence(`{"findings":[{}],"evidence":[],"missing":[]}`), wantError: "cannot unmarshal object"},
+		{name: "missing array", output: fence(`{"findings":[],"evidence":[]}`), wantError: "缺少 findings"},
+		{name: "null array", output: fence(`{"findings":[],"evidence":[],"missing":null}`), wantError: "缺少 findings"},
+		{name: "unknown source", output: fence(`{"findings":[],"evidence":["knowledge_unknown"],"missing":[]}`), wantError: "本次未检索到的来源"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := NewRuntime("json-formats", Dependencies{Model: &scenarioModel{withReport: true, childOutput: &tc.output}})
+			if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("解读报告并查询证据")}); err != nil {
+				t.Fatal(err)
+			}
+			ends := 0
+			for _, e := range r.Events {
+				if e.Type != "subagent_end" {
+					continue
+				}
+				ends++
+				wantError := tc.wantError
+				// Report evidence is a report location, not a retrieved source ID.
+				if tc.name == "unknown source" && ends == 1 {
+					wantError = ""
+				}
+				if wantError != "" {
+					if e.Status != "failed" || !strings.Contains(e.Error, wantError) || e.Output != tc.output {
+						t.Fatalf("unexpected failure event: %+v", e)
+					}
+					continue
+				}
+				if e.Status != "completed" || e.Error != "" || !json.Valid([]byte(e.Output)) {
+					t.Fatalf("unexpected success event: %+v", e)
+				}
+				if tc.wantError == "" && e.Output != valid {
+					t.Fatalf("JSON content changed: %s", e.Output)
+				}
+			}
+			if ends != 2 || r.used != 2 {
+				t.Fatalf("want exactly two delegations without retries: ends=%d used=%d", ends, r.used)
+			}
+		})
+	}
 }
 
 func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
