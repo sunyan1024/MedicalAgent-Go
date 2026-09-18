@@ -2,7 +2,6 @@ package medical
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -42,8 +41,11 @@ func PublicSearch(ctx context.Context, query string) ([]Source, error) {
 		if title == "" {
 			title = "医学知识资料"
 		}
-		h := sha256.Sum256([]byte(title + "\n" + d.Content))
-		sources = append(sources, Source{ID: fmt.Sprintf("med_%x", h[:8]), Title: title, Content: d.Content})
+		id, err := rag.DocumentSourceID(d)
+		if err != nil {
+			return nil, fmt.Errorf("医学知识来源无效: %w", err)
+		}
+		sources = append(sources, Source{ID: id, Title: title, Content: d.Content})
 	}
 	return sources, nil
 }

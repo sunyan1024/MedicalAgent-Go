@@ -399,7 +399,7 @@ func (r *Runtime) partial(err error) string {
 	return out + "\n请核对报告，补充信息后重试；已获取的资料可在来源卡片查看。"
 }
 
-var citationPattern = regexp.MustCompile(`\[(med_[A-Za-z0-9_-]+)\]`)
+var citationPattern = regexp.MustCompile(`\[([a-f0-9]{64}_[0-9]+)\]`)
 
 func (r *Runtime) validateCitations(answer string) string {
 	r.mu.Lock()

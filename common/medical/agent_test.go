@@ -53,7 +53,7 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 		if m.withReport && n == 1 {
 			return call("medical_researcher", `{"request":"查询报告指标相关资料"}`), nil
 		}
-		return schema.AssistantMessage("已完成，资料见 [med_abc123]。", nil), nil
+		return schema.AssistantMessage("已完成，资料见 [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]。", nil), nil
 	}
 	if role == "report" {
 		if n == 0 {
@@ -73,7 +73,7 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 	if n%3 == 1 {
 		return call("search_medical_knowledge", `{"query":"改写后的查询"}`), nil
 	}
-	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["med_abc123"],"missing":[]}`, nil), nil
+	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"],"missing":[]}`, nil), nil
 }
 func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	out, err := m.Generate(ctx, msgs, opts...)
@@ -93,13 +93,13 @@ func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
 		if len(queries) == 1 {
 			return nil, nil
 		}
-		return []Source{{ID: "med_abc123", Title: "测试资料", Content: "测试证据"}}, nil
+		return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "测试资料", Content: "测试证据"}}, nil
 	}})
 	answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("仅主Agent可见的历史"), schema.UserMessage("请解释报告")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "[med_abc123]") {
+	if !strings.Contains(answer, "[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]") {
 		t.Fatalf("answer: %s", answer)
 	}
 	if len(queries) != 2 || queries[0] == queries[1] {
@@ -128,7 +128,9 @@ func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
 }
 
 func TestKnowledgeOnlyDoesNotReadReport(t *testing.T) {
-	r := NewRuntime("test", Dependencies{Model: &scenarioModel{}, ReadReport: func(context.Context) ([]Indicator, error) { t.Fatal("knowledge question read report"); return nil, nil }, Search: func(context.Context, string) ([]Source, error) { return []Source{{ID: "med_abc123"}}, nil }})
+	r := NewRuntime("test", Dependencies{Model: &scenarioModel{}, ReadReport: func(context.Context) ([]Indicator, error) { t.Fatal("knowledge question read report"); return nil, nil }, Search: func(context.Context, string) ([]Source, error) {
+		return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"}}, nil
+	}})
 	if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("什么是血常规")}); err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +186,8 @@ func TestCompareDoesNotInventRanges(t *testing.T) {
 
 func TestCitationAndParameterValidation(t *testing.T) {
 	r := NewRuntime("", Dependencies{})
-	r.sources["med_abc"] = Source{ID: "med_abc"}
-	if got := r.validateCitations("[med_abc] [med_bad]"); got != "[med_abc] [来源未验证]" {
+	r.sources["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"] = Source{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"}
+	if got := r.validateCitations("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_1]"); got != "[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [来源未验证]" {
 		t.Fatal(got)
 	}
 	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","uid":"victim"}`} {
@@ -200,7 +202,7 @@ func TestMCPTransportUsesRealToolResult(t *testing.T) {
 		if q != "测试查询" {
 			t.Fatal(q)
 		}
-		return []Source{{ID: "med_abc", Title: "测试", Content: "证据"}}, nil
+		return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "测试", Content: "证据"}}, nil
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -350,7 +350,7 @@ func ensureStoredFileIndexed(storedFile *model.StoredFile) error {
 		fileDao.UpdateStoredFileIndexFailed(latest.ID, err.Error())
 		return normalizeRAGIndexError(err)
 	}
-	if err := indexer.IndexFile(ctx, latest.FilePath); err != nil {
+	if err := indexer.IndexFile(ctx, latest.FilePath, latest.FileSHA256); err != nil {
 		rag.DeleteIndex(ctx, indexKey)
 		fileDao.UpdateStoredFileIndexFailed(latest.ID, err.Error())
 		return normalizeRAGIndexError(err)

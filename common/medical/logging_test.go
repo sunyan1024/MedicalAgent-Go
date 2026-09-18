@@ -35,7 +35,7 @@ func TestRuntimeLogsDelegationWithoutCallback(t *testing.T) {
 	r := NewRuntime("logged-run", Dependencies{
 		Model: &scenarioModel{},
 		Search: func(context.Context, string) ([]Source, error) {
-			return []Source{{ID: "med_abc123", Title: "测试", Content: "证据"}}, nil
+			return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "测试", Content: "证据"}}, nil
 		},
 	})
 	if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("什么是血常规")}); err != nil {

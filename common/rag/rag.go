@@ -1033,31 +1033,7 @@ func NewRAGIndexer(filename string) (*RAGIndexer, error) {
 		BatchSize: 10,                                         // 批量处理文档，提高写入效率
 
 		// 定义：一段文档（Document）在 Redis 中该如何存储
-		DocumentToHashes: func(ctx context.Context, doc *schema.Document) (*redisIndexer.Hashes, error) {
-
-			// 从文档的元数据中取出来源信息（例如文件名、URL）
-			source := ""
-			if s, ok := doc.MetaData["source"].(string); ok {
-				source = s
-			}
-
-			// 构造 Redis 中实际存储的数据结构（Hash）
-			return &redisIndexer.Hashes{
-				// Redis Key 会由 KeyPrefix + doc.ID 组成。
-				Key: doc.ID,
-
-				// Redis Hash 中的字段
-				Field2Value: map[string]redisIndexer.FieldValue{
-					// content：原始文本内容
-					// EmbedKey 表示：该字段需要先做向量化，
-					// 生成的向量会存入名为 "vector" 的字段中
-					"content": {Value: doc.Content, EmbedKey: "vector"},
-
-					// metadata：一些辅助信息，不参与向量计算
-					"metadata": {Value: source},
-				},
-			}, nil
-		},
+		DocumentToHashes: documentToHashes,
 	}
 
 	// 将“向量生成器”交给索引器
@@ -1085,7 +1061,10 @@ func NewRAGIndexer(filename string) (*RAGIndexer, error) {
 }
 
 // IndexFile 读取文件内容并创建向量索引
-func (r *RAGIndexer) IndexFile(ctx context.Context, filePath string) error {
+func (r *RAGIndexer) IndexFile(ctx context.Context, filePath string, fileSHA256 string) error {
+	if !fileSHA256Pattern.MatchString(fileSHA256) {
+		return fmt.Errorf("invalid file_sha256: expected 64 lowercase hexadecimal characters")
+	}
 	start := time.Now()
 	log.Printf("[RAG][IndexFile] start file=%s", filePath)
 
@@ -1110,7 +1089,9 @@ func (r *RAGIndexer) IndexFile(ctx context.Context, filePath string) error {
 			ID:      fmt.Sprintf("doc_%d", i+1),
 			Content: chunk,
 			MetaData: map[string]any{
-				"source": filePath,
+				"source":      filePath,
+				"file_sha256": fileSHA256,
+				"chunk_idx":   strconv.Itoa(i + 1),
 			},
 		})
 	}
@@ -1242,7 +1223,7 @@ func newScopedRAGQuery(ctx context.Context, uid string, enterpriseOnly bool) (*R
 			Client:       rdb,
 			Index:        indexName,
 			Dialect:      2,
-			ReturnFields: []string{"content", "metadata", "distance"},
+			ReturnFields: []string{"content", "metadata", "distance", "file_sha256", "chunk_idx"},
 			TopK:         retrieveOpts.vectorTopK,
 			VectorField:  "vector",
 			// 由于 Redis 存储的文档格式和 Eino 框架内部定义的 schema.Document 格式不同
@@ -1446,7 +1427,7 @@ func (r *RAGQuery) retrieveKeywordDocuments(ctx context.Context, query string) (
 		result, err := r.rdb.Do(ctx,
 			"FT.SEARCH", target.indexName, searchQuery,
 			"LANGUAGE", "chinese",
-			"RETURN", "2", "content", "metadata",
+			"RETURN", "4", "content", "metadata", "file_sha256", "chunk_idx",
 			"LIMIT", "0", topK,
 		).Result()
 		if err != nil {
@@ -1594,6 +1575,8 @@ func parseKeywordSearchResult(result any, target keywordSearchTarget) []*schema.
 			Content: fields["content"],
 			MetaData: map[string]any{
 				"filename":          target.filename,
+				"file_sha256":       fields["file_sha256"],
+				"chunk_idx":         fields["chunk_idx"],
 				"keyword_retrieved": true,
 				"keyword_rank":      (i + 1) / 2,
 				"knowledge_scope":   target.scope,
