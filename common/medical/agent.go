@@ -239,8 +239,12 @@ func (r *Runtime) child(ctx context.Context, name, parent string) (adk.Agent, er
 			return "", err
 		}
 		r.mu.Lock()
-		for _, s := range sources {
-			r.sources[s.ID] = s
+		for i := range sources {
+			sources[i].Kind = "knowledge"
+			if !strings.HasPrefix(sources[i].ID, "knowledge_") {
+				sources[i].ID = "knowledge_" + sources[i].ID
+			}
+			r.sources[sources[i].ID] = sources[i]
 		}
 		r.mu.Unlock()
 		r.emit(Event{ParentID: id, Type: "sources", Agent: name, Sources: sources})
@@ -427,7 +431,7 @@ func (r *Runtime) partial(err error) string {
 	return out + "\n请核对报告，补充信息后重试；已获取的资料可在来源卡片查看。"
 }
 
-var citationPattern = regexp.MustCompile(`\[(web_[A-Za-z0-9_-]+|[a-f0-9]{64}_[0-9]+)\]`)
+var citationPattern = regexp.MustCompile(`\[((?:web|knowledge)_[A-Za-z0-9_-]+)\]`)
 
 func (r *Runtime) validateCitations(answer string) string {
 	r.mu.Lock()

@@ -30,7 +30,7 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	w := newEventWriter(db)
 	secret := strings.Repeat("完整原始内容", 1000)
 	e := core.Event{ID: "event", RunID: run.ID, Sequence: 1, Type: "tool_start", Tool: "search", Input: secret, Summary: "摘要", OccurredAt: time.Now().UTC()}
-	e.Sources = []core.Source{{ID: "web_test", Kind: "web", URL: "https://example.org/evidence", Title: "网页", Content: "证据"}, {ID: "legacy", Title: "旧资料"}}
+	e.Sources = []core.Source{{ID: "web_test", Kind: "web", URL: "https://example.org/evidence", Title: "网页", Content: "证据"}, {ID: "knowledge_" + strings.Repeat("a", 64) + "_1", Kind: "knowledge", Title: "知识库资料"}}
 	// Already-canceled browser context must not affect the independent writer.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -177,5 +177,18 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 				t.Fatal("terminal transaction did not roll back", run.Status)
 			}
 		})
+	}
+}
+
+func TestSourceEventRecordFormat(t *testing.T) {
+	sources := []core.Source{
+		{Kind: "knowledge", ID: "knowledge_" + strings.Repeat("a", 64) + "_1", Title: "知识库", Content: "证据"},
+		{Kind: "web", ID: "web_" + strings.Repeat("b", 64), URL: "https://example.org", Title: "网页", Content: "证据"},
+	}
+	output := core.JSON(sources)
+	e := core.Event{Type: "tool_end", Sources: sources, Output: output, Summary: output}
+	row := eventRecord(e)
+	if row.Sources != output || row.Output != output || row.Summary != output {
+		t.Fatalf("source fields differ: %+v", row)
 	}
 }

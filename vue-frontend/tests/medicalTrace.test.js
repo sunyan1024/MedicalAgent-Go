@@ -177,11 +177,11 @@ test('新会话绑定真实 ID 保持抽屉打开，失败可重试', async () =
   panel.unmount()
 })
 
-test('联网来源保留链接，旧来源兼容且危险链接不可打开', () => {
+test('检索来源保留类型和前缀，危险链接不可打开', () => {
   const source = { id: 'web_test', kind: 'web', url: 'https://example.org/evidence', title: '资料', content: '片段' }
-  const stored = JSON.stringify([{ type: 'sources', sources: [source, { id: 'old', title: '旧资料' }] }])
+  const stored = JSON.stringify([{ type: 'sources', sources: [source, { id: 'knowledge_' + 'a'.repeat(64) + '_1', kind: 'knowledge', title: '知识库资料' }] }])
   const restored = traceSources(parseEvents(stored).events)
-  assert.deepEqual(restored, [source, { id: 'old', title: '旧资料' }])
+  assert.deepEqual(restored, [source, { id: 'knowledge_' + 'a'.repeat(64) + '_1', kind: 'knowledge', title: '知识库资料' }])
   assert.equal(trace.safeSourceURL(source.url), source.url)
   for (const url of [undefined, 'javascript:alert(1)', 'data:text/html,test', 'https://user:pass@example.org', '/relative']) {
     assert.equal(trace.safeSourceURL(url), '')

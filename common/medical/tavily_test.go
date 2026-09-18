@@ -48,10 +48,7 @@ func TestTavilyRequestAndSources(t *testing.T) {
 	if err = json.Unmarshal([]byte(JSON(sources)), &restored); err != nil || restored[0] != sources[0] {
 		t.Fatal(restored, err)
 	}
-	var legacy Source
-	if err = json.Unmarshal([]byte(`{"id":"old","title":"旧资料","content":"旧片段"}`), &legacy); err != nil || legacy.Kind != "" {
-		t.Fatal(legacy, err)
-	}
+
 }
 
 func TestTavilyFailures(t *testing.T) {

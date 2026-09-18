@@ -73,7 +73,7 @@
             </h4>
             <details v-for="source in sources" :key="source.id">
               <summary>
-                {{ source.kind === 'web' ? '网络来源' : '知识库' }} · {{ source.title || '参考资料' }} <span>[{{ source.id }}]</span>
+                {{ { web: '网络来源', knowledge: '知识库' }[source.kind] || '未知来源' }} · {{ source.title || '参考资料' }} <span>[{{ source.id }}]</span>
               </summary>
               <a v-if="safeSourceURL(source.url)" :href="safeSourceURL(source.url)" target="_blank" rel="noopener noreferrer">查看原网页</a>
               <pre>{{ source.content }}</pre>

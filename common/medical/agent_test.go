@@ -2,6 +2,7 @@ package medical
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +18,7 @@ import (
 type scenarioModel struct {
 	mu         sync.Mutex
 	calls      map[string]int
+	readSource bool
 	withReport bool
 	loop       bool
 	childInput []*schema.Message
@@ -53,7 +55,7 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 		if m.withReport && n == 1 {
 			return call("medical_researcher", `{"request":"查询报告指标相关资料"}`), nil
 		}
-		return schema.AssistantMessage("已完成，资料见 [aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]。", nil), nil
+		return schema.AssistantMessage("已完成，资料见 [knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]。", nil), nil
 	}
 	if role == "report" {
 		if n == 0 {
@@ -70,10 +72,13 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 	if n%3 == 0 {
 		return call("search_medical_knowledge", `{"query":"第一次查询"}`), nil
 	}
+	if n%3 == 1 && m.readSource {
+		return call("read_medical_source", `{"sourceId":"knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"}`), nil
+	}
 	if n%3 == 1 {
 		return call("search_medical_knowledge", `{"query":"改写后的查询"}`), nil
 	}
-	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"],"missing":[]}`, nil), nil
+	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"],"missing":[]}`, nil), nil
 }
 func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	out, err := m.Generate(ctx, msgs, opts...)
@@ -99,7 +104,7 @@ func TestAgentDelegationRequeryAndContextIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer, "[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]") {
+	if !strings.Contains(answer, "[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1]") {
 		t.Fatalf("answer: %s", answer)
 	}
 	if len(queries) != 2 || queries[0] == queries[1] {
@@ -186,8 +191,8 @@ func TestCompareDoesNotInventRanges(t *testing.T) {
 
 func TestCitationAndParameterValidation(t *testing.T) {
 	r := NewRuntime("", Dependencies{})
-	r.sources["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"] = Source{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"}
-	if got := r.validateCitations("[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_1]"); got != "[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [来源未验证]" {
+	r.sources["knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"] = Source{ID: "knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Kind: "knowledge"}
+	if got := r.validateCitations("[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [knowledge_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_1]"); got != "[knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1] [来源未验证]" {
 		t.Fatal(got)
 	}
 	for _, raw := range []string{`null`, `{}`, `{"query":1}`, `{"query":"ok","uid":"victim"}`} {
@@ -257,5 +262,59 @@ func TestBudgetModelDisablesToolsForFinalSummary(t *testing.T) {
 	_, opts = m.prepare(input, nil)
 	if model.GetCommonOptions(nil, opts...).ToolChoice == nil {
 		t.Fatal("shared budget did not disable tools")
+	}
+}
+
+func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
+	rawID := strings.Repeat("a", 64) + "_1"
+	for _, id := range []string{rawID, "knowledge_" + rawID} {
+		t.Run(id, func(t *testing.T) {
+			expected := Source{ID: "knowledge_" + rawID, Kind: "knowledge", Title: "资料", Content: "证据"}
+			r := NewRuntime("sources", Dependencies{Model: &scenarioModel{readSource: true}, Search: func(context.Context, string) ([]Source, error) {
+				return []Source{{ID: id, Title: expected.Title, Content: expected.Content}}, nil
+			}})
+			answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("读取检索资料")})
+			if err != nil || !strings.Contains(answer, "["+expected.ID+"]") {
+				t.Fatalf("answer=%s err=%v", answer, err)
+			}
+			if len(r.sources) != 1 || r.sources[expected.ID] != expected {
+				t.Fatalf("cache: %+v", r.sources)
+			}
+			sourceEvents, searchResults, readResults := 0, 0, 0
+			for _, e := range r.Events {
+				if e.Type == "sources" {
+					sourceEvents++
+					if len(e.Sources) != 1 || e.Sources[0] != expected {
+						t.Fatalf("sources: %+v", e.Sources)
+					}
+				}
+				if e.Type != "tool_end" {
+					continue
+				}
+				if e.Status != "completed" {
+					t.Fatalf("tool failed: %+v", e)
+				}
+				switch e.Tool {
+				case "search_medical_knowledge":
+					searchResults++
+					var got []Source
+					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || len(got) != 1 || got[0] != expected {
+						t.Fatalf("search output: %s (%v)", e.Output, err)
+					}
+				case "read_medical_source":
+					readResults++
+					var got Source
+					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || got != expected {
+						t.Fatalf("read output: %s (%v)", e.Output, err)
+					}
+				}
+				if e.Summary != e.Output {
+					t.Fatalf("short output and summary differ: %+v", e)
+				}
+			}
+			if sourceEvents != 1 || searchResults != 1 || readResults != 1 {
+				t.Fatalf("events=%d search=%d read=%d", sourceEvents, searchResults, readResults)
+			}
+		})
 	}
 }
