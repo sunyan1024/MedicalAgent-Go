@@ -75,10 +75,24 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 			t.Fatal("deleted another user's personal file")
 		}
 	}
-	for _, methodPath := range [][2]string{{"GET", "/enterprise/file/list"}, {"POST", "/enterprise/file/precheck"}, {"POST", "/enterprise/file/upload"}, {"DELETE", "/enterprise/file/enterprise-file"}} {
+	for _, route := range r.Routes() {
+		if !strings.HasPrefix(route.Path, "/api/v3/enterprise/file/") {
+			continue
+		}
+		path := strings.ReplaceAll(strings.TrimPrefix(route.Path, "/api/v3"), ":id", "enterprise-file")
+		path = strings.ReplaceAll(path, ":chunk_id", "doc_1")
+		methodPath := [2]string{route.Method, path}
 		w := request("alice", methodPath[0], methodPath[1], `{"role":"admin"}`)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("enterprise access accepted: %s %s: %s", methodPath[0], methodPath[1], w.Body.String())
+		}
+		if anonymous := request("", methodPath[0], methodPath[1], `{}`); strings.Contains(anonymous.Body.String(), `"status_code":1000`) {
+			t.Fatal("anonymous enterprise access accepted", methodPath)
+		}
+	}
+	for _, path := range []string{"/enterprise/file/alice-file/chunks", "/enterprise/file/bob-file/chunks/doc_1"} {
+		if w := request("admin", "GET", path, ""); w.Code != http.StatusNotFound {
+			t.Fatalf("admin chunk endpoint exposed personal file: %s", w.Body.String())
 		}
 	}
 	// Every ordinary-user business route must reject administrators before invoking handlers.

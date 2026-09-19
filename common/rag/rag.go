@@ -1126,6 +1126,11 @@ func DeleteIndex(ctx context.Context, filename string) error {
 		log.Printf("[RAG][DeleteIndex] failed filename=%s err=%v", filename, err)
 		return fmt.Errorf("failed to delete redis index: %w", err)
 	}
+	for _, prefix := range []string{DisabledChunkPrefix(filename), ChunkMetaPrefix(filename)} {
+		if err := redisPkg.DeleteRedisDataByPrefix(ctx, prefix); err != nil {
+			return err
+		}
+	}
 	log.Printf("[RAG][DeleteIndex] success filename=%s elapsed=%s", filename, time.Since(start))
 	return nil
 }

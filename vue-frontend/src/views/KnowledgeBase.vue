@@ -47,17 +47,20 @@
       <el-table-column label="上传时间" width="190">
         <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column v-if="canManage" label="操作" width="100" align="right">
+      <el-table-column v-if="canManage" label="操作" :width="isEnterprise ? 210 : 100" align="right">
         <template #default="{ row }">
+          <el-button v-if="isEnterprise" @click="openChunks(row)">切片管理</el-button>
           <el-button type="danger" :icon="Delete" circle plain @click="deleteFile(row)" />
         </template>
       </el-table-column>
     </el-table>
+    <ChunkManager v-if="isEnterprise && canManage" v-model="chunksOpen" :file="chunkFile" />
   </div>
 </template>
 
 <script>
 import { computed, watch, ref } from 'vue'
+import ChunkManager from '../components/ChunkManager.vue'
 import { useRouter } from 'vue-router'
 import { currentUser, clearUser } from '../utils/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -69,6 +72,7 @@ export default {
   name: 'KnowledgeBase',
   props: { scope: { type: String, default: 'personal' } },
   components: {
+    ChunkManager,
     ArrowLeft,
     Document,
     Refresh,
@@ -94,6 +98,9 @@ export default {
     const isEnterprise = computed(() => props.scope === 'enterprise')
     const canManage = computed(() => !isEnterprise.value || currentUser.value?.role === 'admin')
     const endpoint = computed(() => isEnterprise.value ? '/enterprise/file' : '/file')
+    const chunksOpen = ref(false)
+    const chunkFile = ref(null)
+    const openChunks = row => { chunkFile.value = row; chunksOpen.value = true }
     const files = ref([])
     const loading = ref(false)
     const uploading = ref(false)
@@ -216,6 +223,9 @@ export default {
     watch(() => props.scope, () => { files.value = []; loadFiles() }, { immediate: true })
 
     return {
+      chunksOpen,
+      chunkFile,
+      openChunks,
       handleLogout,
       isEnterprise,
       canManage,
