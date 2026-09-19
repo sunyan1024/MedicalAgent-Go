@@ -23,7 +23,7 @@ func InitRouter() *gin.Engine {
 
 	r := gin.New()
 	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		Output: os.Stdout,
+		Output: logging.NewOutputWriter(os.Stdout),
 		Formatter: func(param gin.LogFormatterParams) string {
 			return fmt.Sprintf("%s [GIN] |%s %3d %s| %13v | %15s |%-7s %#v\n%s",
 				logging.ColoredDateTime(param.TimeStamp),

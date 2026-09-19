@@ -62,6 +62,16 @@ func readDataFromDB() error {
 
 func main() {
 	logging.InitColoredStdLogger()
+	closeLogs, err := logging.InitDailyFile("logs")
+	if err != nil {
+		log.Printf("[logging] initialize daily log failed: %v", err)
+		return
+	}
+	defer func() {
+		if err := closeLogs(); err != nil {
+			log.Printf("[logging] close daily log failed: %v", err)
+		}
+	}()
 
 	// 初始化 config
 	conf := config.GetConfig()
@@ -102,7 +112,7 @@ func main() {
 	log.Println("[RabbitMQ] init success ")
 
 	// 启动 HTTP 服务
-	err := StartServer(host, port)
+	err = StartServer(host, port)
 	if err != nil {
 		panic(err)
 	}

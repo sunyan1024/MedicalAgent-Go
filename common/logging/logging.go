@@ -29,15 +29,15 @@ func (w coloredTimeWriter) Write(p []byte) (int, error) {
 
 func InitColoredStdLogger() {
 	log.SetFlags(0)
-	log.SetOutput(coloredTimeWriter{out: os.Stderr})
+	log.SetOutput(coloredTimeWriter{out: NewOutputWriter(os.Stderr)})
 }
 
 func NewColoredLogger() *log.Logger {
-	return log.New(coloredTimeWriter{out: os.Stderr}, "", 0)
+	return log.New(coloredTimeWriter{out: NewOutputWriter(os.Stderr)}, "", 0)
 }
 
 func NewColoredTimeWriter(out io.Writer) io.Writer {
-	return coloredTimeWriter{out: out}
+	return coloredTimeWriter{out: NewOutputWriter(out)}
 }
 
 func ColoredDateTime(t time.Time) string {
