@@ -18,6 +18,7 @@
     <div class="chat-section">
       <div class="top-bar">
         <button class="back-btn" @click="$router.push('/menu')">← 返回</button>
+        <button class="back-btn" @click="$router.push('/memory')">长期记忆</button>
         <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
         <label for="modelType">选择模型：</label>
         <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">

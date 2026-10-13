@@ -34,7 +34,7 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 	previous := mysql.DB
 	mysql.DB = db
 	t.Cleanup(func() { mysql.DB = previous })
-	if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}); err != nil {
+	if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}, &model.UserMemory{}); err != nil {
 		t.Fatal(err)
 	}
 	report := model.MedicalReport{ID: "report-a", UID: "alice", Status: "ready", Indicators: "[]"}

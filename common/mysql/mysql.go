@@ -92,6 +92,7 @@ func migration() error {
 
 	if err := DB.AutoMigrate( // 自动迁移以下模型
 		new(model.User),
+		new(model.UserMemory),
 		new(model.Session),
 		new(model.Message),
 		new(model.StoredFile),

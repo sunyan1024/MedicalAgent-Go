@@ -22,6 +22,9 @@ func TestMedicalEventMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if !db.Migrator().HasTable(&model.UserMemory{}) {
+		t.Fatal("user memory table missing")
+	}
 	if db.Migrator().HasColumn(&model.MedicalRun{}, "events") {
 		t.Fatal("legacy column remains")
 	}

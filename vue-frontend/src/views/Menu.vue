@@ -6,6 +6,9 @@
     </el-header>
     <el-main class="main">
       <div class="menu-grid">
+        <el-card class="menu-item" @click="$router.push('/memory')">
+          <div class="card-content"><el-icon size="48" color="#8b5cf6"><Document /></el-icon><h3>长期记忆</h3><p>查看和编辑 Agent 记住的偏好与健康背景</p></div>
+        </el-card>
         <el-card class="menu-item" @click="$router.push('/ai-chat')">
           <div class="card-content">
             <el-icon size="48" color="#409eff"><ChatDotRound /></el-icon>

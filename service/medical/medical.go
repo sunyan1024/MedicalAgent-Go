@@ -12,6 +12,7 @@ import (
 	core "GoAI/common/medical"
 	"GoAI/common/mysql"
 	"GoAI/model"
+	memoryservice "GoAI/service/memory"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -179,6 +180,15 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		}
 	}
 	runtime, err := newRuntime(ctx, run.ID, read, callback)
+	if err == nil {
+		store := memoryservice.New(mysql.DB)
+		runtime.SetMemory(&core.MemoryAccess{
+			Read: func(ctx context.Context) (core.MemoryDocument, error) { return store.Read(ctx, user) },
+			Update: func(ctx context.Context, content string, version int64) (core.MemoryDocument, error) {
+				return store.Update(ctx, user, content, version)
+			},
+		})
+	}
 	var history []model.Message
 	if err == nil {
 		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).Order("message_id desc").Limit(20).Find(&history).Error

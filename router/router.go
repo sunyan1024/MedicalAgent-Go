@@ -3,6 +3,7 @@ package router
 import (
 	"GoAI/common/logging"
 	medical "GoAI/controller/medical"
+	memory "GoAI/controller/memory"
 	"GoAI/middleware/jwt"
 	"fmt"
 	"os"
@@ -65,6 +66,10 @@ func InitRouter() *gin.Engine {
 		FileGroup.Use(jwt.Auth(), jwt.RequireUser())
 		FileRouter(FileGroup)
 	}
+
+	memoryGroup := enterRouter.Group("/memory", jwt.Auth(), jwt.RequireUser())
+	memoryGroup.GET("", memory.Read)
+	memoryGroup.PUT("", memory.Update)
 
 	medicalGroup := enterRouter.Group("/medical", jwt.Auth(), jwt.RequireUser())
 	medicalGroup.POST("/reports", medical.CreateReport)

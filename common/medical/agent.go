@@ -30,16 +30,18 @@ type Dependencies struct {
 	Search     func(context.Context, string) ([]Source, error)
 	WebSearch  func(context.Context, string) ([]Source, error)
 	Emit       func(Event)
+	Memory     *MemoryAccess
 }
 
 type Runtime struct {
-	deps     Dependencies
-	RunID    string
-	mu       sync.Mutex
-	used     int
-	sources  map[string]Source
-	findings []Finding
-	Events   []Event
+	deps       Dependencies
+	RunID      string
+	mu         sync.Mutex
+	used       int
+	memoryUsed int
+	sources    map[string]Source
+	findings   []Finding
+	Events     []Event
 }
 
 func NewRuntime(id string, deps Dependencies) *Runtime {
@@ -102,8 +104,9 @@ func toolInfo(name, desc, param string) *schema.ToolInfo {
 // Every invocation, including delegation and invalid arguments, consumes budget.
 func (r *Runtime) bounded(agent, parent string, local *int, info *schema.ToolInfo, fn func(context.Context, string, string) (string, error)) tool.BaseTool {
 	return &callable{info: info, run: func(ctx context.Context, args string) (string, error) {
+		memoryTool := isMemoryTool(info.Name)
 		kind := "tool"
-		if agent == MainAgent {
+		if agent == MainAgent && !memoryTool {
 			kind = "subagent"
 		}
 		rejected := func(err error) {
@@ -114,16 +117,20 @@ func (r *Runtime) bounded(agent, parent string, local *int, info *schema.ToolInf
 			return "", err
 		}
 		r.mu.Lock()
-		if r.used >= 9 || *local >= 3 {
+		if (!memoryTool && (r.used >= 9 || *local >= 3)) || (memoryTool && r.memoryUsed >= 3) {
 			r.mu.Unlock()
 			rejected(ErrBudget)
 			return "", ErrBudget
 		}
-		r.used++
-		*local++
+		if memoryTool {
+			r.memoryUsed++
+		} else {
+			r.used++
+			*local++
+		}
 		r.mu.Unlock()
 		id := uuid.NewString()
-		r.emit(Event{ID: id, ParentID: parent, Type: kind + "_start", Agent: agent, Tool: info.Name, Status: "running", Summary: preview(args, 300), Input: args})
+		r.emit(Event{ID: id, ParentID: parent, Type: kind + "_start", Agent: agent, Tool: info.Name, Status: "running", Summary: toolSummary(info.Name, "running", args, 300), Input: args})
 		start := time.Now()
 		out, err := fn(ctx, args, id)
 		status := "completed"
@@ -136,7 +143,7 @@ func (r *Runtime) bounded(agent, parent string, local *int, info *schema.ToolInf
 		if err != nil {
 			errorText = err.Error()
 		}
-		r.emit(Event{Output: out, Error: errorText, ParentID: id, Type: kind + "_end", Agent: agent, Tool: info.Name, Summary: summary, Status: status, DurationMS: time.Since(start).Milliseconds()})
+		r.emit(Event{Output: out, Error: errorText, ParentID: id, Type: kind + "_end", Agent: agent, Tool: info.Name, Summary: toolSummary(info.Name, status, summary, 400), Status: status, DurationMS: time.Since(start).Milliseconds()})
 		if errors.Is(err, ErrBudget) || ctx.Err() != nil {
 			return "", err
 		}
@@ -187,8 +194,20 @@ func noArgs(raw string) error {
 }
 
 func (r *Runtime) agent(ctx context.Context, name, instruction string, ts []tool.BaseTool, local *int) (adk.Agent, error) {
+	var infos []*schema.ToolInfo
+	for _, t := range ts {
+		info, err := t.Info(ctx)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+	iterations := 4
+	if name == MainAgent && r.deps.Memory != nil {
+		iterations = 7
+	}
 	return adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name: name, Description: instruction, Instruction: instruction, Model: &budgetModel{base: r.deps.Model, runtime: r, local: local}, MaxIterations: 4,
+		Name: name, Description: instruction, Instruction: instruction, Model: &budgetModel{base: r.deps.Model, runtime: r, local: local, main: name == MainAgent, tools: infos}, MaxIterations: iterations,
 		ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: compose.ToolsNodeConfig{Tools: ts, ExecuteSequentially: true}},
 	})
 }
@@ -352,7 +371,11 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 			return JSON(result), nil
 		}))
 	}
+	ts = append(ts, r.memoryTools(&local)...)
 	instruction := mainInstruction
+	if r.deps.Memory != nil {
+		instruction += memoryInstruction + r.memoryContext(ctx)
+	}
 	if r.deps.WebSearch == nil {
 		instruction += "\n当前联网搜索不可用，仅可委派检索本地资料。"
 	}

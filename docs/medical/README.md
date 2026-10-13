@@ -5,7 +5,7 @@
 ## 启动与资料准备
 
 1. 使用项目现有 `config/config.toml` 配置 MySQL、Redis Stack、RabbitMQ、Qwen 和 RAG embedding/rerank。Qwen 必须支持原生工具调用。图片和扫描 PDF 需要 `ragModelConfig.ocrAccessToken`；文本 PDF 优先原生提取。
-2. 在项目根目录运行 `go run .`。启动迁移创建 `medical_reports`、`medical_runs` 和 `medical_run_events` 表，并删除已废弃的 `medical_runs.events` 列；不搬迁已有知识库文件。
+2. 在项目根目录运行 `go run .`。启动迁移创建 `medical_reports`、`medical_runs`、`medical_run_events` 和 `user_memories` 表，并删除已废弃的 `medical_runs.events` 列；不搬迁已有知识库文件。
 3. 管理员登录后，在“医学知识库”上传本目录 `knowledge/` 中的三份 Markdown 摘要，等待索引完成。它们是带来源的演示科普资料，不是完整医疗知识库。不要上传个人报告到公共库。医学模式只检索管理员维护的公共资料；原 RAG 模式仍保留原有联合检索行为。
 4. `cd vue-frontend` 后运行 `npm run serve`，普通用户登录，进入医疗 Agent。
 5. 点击“合成报告样例”，提交文字，待识别后核对并确认。也可上传 PDF/JPG/PNG/TXT，单个文件不超过10MB、抽取文字不超过60000字节。
@@ -29,12 +29,13 @@ flowchart TD
     MA --> SOURCE[read_medical_source]
     SEARCH --> MCP[回环 HTTP MCP]
     MCP --> RAG[公共知识库混合检索与重排]
+    MAIN <-->|自动注入和读写工具| MEMORY[(MySQL 用户 Markdown 记忆)]
     MAIN --> TRACE[运行事件与结果]
     TRACE --> UI
     TRACE --> RUNS[(MySQL 运行记录)]
 ```
 
-主 Agent 和两个子 Agent 都使用 Eino `ChatModelAgent`。工具调用与 ToolMessage 回填由框架处理；子 Agent 使用 `NewAgentTool`，只收到主 Agent 委派的任务。一次主请求最多3次委派，每次子任务最多3次工具调用，合计最多9次（委派本身也计数）。每个 Agent 最多4次模型生成，工具顺序执行。每次生成前注入剩余预算，预算耗尽后通过模型工具选项禁用继续调用，要求根据已有观察收尾；工具执行端仍独立校验，不能仅靠提示词限制。
+主 Agent 和两个子 Agent 都使用 Eino `ChatModelAgent`。工具调用与 ToolMessage 回填由框架处理；子 Agent 使用 `NewAgentTool`，只收到主 Agent 委派的任务。一次主请求最多3次委派，每次子任务最多3次工具调用，合计最多9次（委派本身也计数）。记忆工具另有每轮3次额度；接入记忆的主 Agent 最多7次模型生成（最多6次调用后总结），子 Agent 仍最多4次，工具顺序执行。每次生成前注入剩余预算，预算耗尽后通过模型工具选项禁用继续调用，要求根据已有观察收尾；工具执行端仍独立校验，不能仅靠提示词限制。
 
 `read_medical_source` 返回本次检索得到的片段，不是任意 URL 下载器。重复查询可以拓展本次证据集合。子 Agent 的 evidence 校验验证来源ID存在，不等同于验证医学结论正确；这种语义正确性仍需人工评测。
 
@@ -127,3 +128,7 @@ timeoutSeconds = 15
 验证：配置有效 Key 后，提问“请联网查找最新的医学检验资料，并引用来源”，检查 `search_web` 调用、回答正文不含内部来源标记、执行轨迹中的来源 ID、网页来源卡片及刷新后历史恢复。无 Key 的自动化测试使用模拟服务，不代表真实联网验收通过。
 
 医疗 Agent 新生成的回答不要求输出来源 ID，后端在发送和保存前清理残留的内部来源标记。子 Agent 的 `evidence` ID 校验及执行轨迹中的来源 ID、标题、链接、内容保留；已有历史正文不迁移。此处理仅作用于医疗 Agent，不改变 RAG 分支或共用 Markdown 渲染。评测字段 `answer_source_marker_free` 和 `trace_source_count` 替代原 `citation_id_valid`，不代表医学结论正确性。
+
+## 用户长期记忆
+
+医疗 Agent 每轮自动注入当前用户的 Markdown 记忆，并可通过工具自主维护。菜单和聊天页的“长期记忆”入口支持预览、编辑和清空，使用版本检查避免并发覆盖。存储、接口、预算与验证说明见 [MEMORY.md](MEMORY.md)。

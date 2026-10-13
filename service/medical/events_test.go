@@ -126,7 +126,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			oldDB, oldRuntime := mysql.DB, newRuntime
 			mysql.DB = db
 			t.Cleanup(func() { mysql.DB = oldDB; newRuntime = oldRuntime })
-			if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}); err != nil {
+			if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}, &model.UserMemory{}); err != nil {
 				t.Fatal(err)
 			}
 			newRuntime = func(_ context.Context, id string, _ func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
