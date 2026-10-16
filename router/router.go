@@ -16,7 +16,6 @@ import (
 // 返回配置好的 *gin.Engine 实例，包含以下路由组：
 // - /api/v3/user: 用户相关路由
 // - /api/v3/AI: 需要 JWT 认证的 AI 相关路由
-// - /api/v3/image: 需要 JWT 认证的图像相关路由
 // - /api/v3/file: 需要 JWT 认证的文件相关路由
 func InitRouter() *gin.Engine {
 	gin.DefaultWriter = logging.NewColoredTimeWriter(os.Stdout)
@@ -53,12 +52,6 @@ func InitRouter() *gin.Engine {
 		AIGroup := enterRouter.Group("/AI")
 		AIGroup.Use(jwt.Auth(), jwt.RequireUser())
 		AIRouter(AIGroup)
-	}
-
-	{
-		ImageGroup := enterRouter.Group("/image")
-		ImageGroup.Use(jwt.Auth(), jwt.RequireUser())
-		ImageRouter(ImageGroup)
 	}
 
 	{

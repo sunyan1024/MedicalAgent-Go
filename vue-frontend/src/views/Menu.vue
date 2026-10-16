@@ -16,13 +16,6 @@
             <p>报告解读、症状咨询与医学证据检索</p>
           </div>
         </el-card>
-        <el-card class="menu-item" @click="$router.push('/image-recognition')">
-          <div class="card-content">
-            <el-icon size="48" color="#67c23a"><Camera /></el-icon>
-            <h3>图像识别</h3>
-            <p>上传图片进行AI识别</p>
-          </div>
-        </el-card>
         <el-card class="menu-item" @click="$router.push('/knowledge-base')">
           <div class="card-content">
             <el-icon size="48" color="#e6a23c"><Document /></el-icon>
@@ -39,13 +32,12 @@
 import { useRouter } from 'vue-router'
 import { clearUser, currentUser } from '../utils/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Camera, Document } from '@element-plus/icons-vue'
+import { ChatDotRound, Document } from '@element-plus/icons-vue'
 
 export default {
   name: 'MenuView',
   components: {
     ChatDotRound,
-    Camera,
     Document
   },
   setup() {

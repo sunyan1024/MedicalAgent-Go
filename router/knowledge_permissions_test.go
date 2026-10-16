@@ -97,7 +97,7 @@ func TestKnowledgePermissionsAndLiveRole(t *testing.T) {
 	}
 	// Every ordinary-user business route must reject administrators before invoking handlers.
 	for _, route := range r.Routes() {
-		if route.Path != "/api/v3/memory" && !strings.HasPrefix(route.Path, "/api/v3/AI/") && !strings.HasPrefix(route.Path, "/api/v3/image/") && !strings.HasPrefix(route.Path, "/api/v3/file/") && !strings.HasPrefix(route.Path, "/api/v3/medical/") {
+		if route.Path != "/api/v3/memory" && !strings.HasPrefix(route.Path, "/api/v3/AI/") && !strings.HasPrefix(route.Path, "/api/v3/file/") && !strings.HasPrefix(route.Path, "/api/v3/medical/") {
 			continue
 		}
 		path := strings.ReplaceAll(strings.TrimPrefix(route.Path, "/api/v3"), ":id", "bob-file")

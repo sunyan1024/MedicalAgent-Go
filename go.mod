@@ -14,15 +14,14 @@ require (
 	github.com/cloudwego/eino-ext/components/model/qwen v0.1.9
 	github.com/cloudwego/eino-ext/components/retriever/redis v0.0.0-20260509111509-dbda66119839
 	github.com/gin-gonic/gin v1.11.0
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/heussd/pdftotext-go v0.0.0-20240804143356-fe57a0d73567
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/streadway/amqp v1.1.0
-	github.com/yalue/onnxruntime_go v1.22.0
 	golang.org/x/crypto v0.48.0
-	golang.org/x/image v0.36.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.1
@@ -49,7 +48,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.27.0 // indirect
-	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect

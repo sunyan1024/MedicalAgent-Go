@@ -4,7 +4,6 @@ import Register from '../views/Register.vue'
 import Menu from '../views/Menu.vue'
 import Memory from '../views/Memory.vue'
 import AIChat from '../views/AIChat.vue'
-import ImageRecognition from '../views/ImageRecognition.vue'
 import KnowledgeBase from '../views/KnowledgeBase.vue'
 import { loadCurrentUser, clearUser } from '../utils/auth'
 import { ElMessage } from 'element-plus'
@@ -35,12 +34,6 @@ const routes = [
     path: '/ai-chat',
     name: 'AIChat',
     component: AIChat,
-    meta: { requiresAuth: true, role: 'user' }
-  },
-  {
-    path: '/image-recognition',
-    name: 'ImageRecognition',
-    component: ImageRecognition,
     meta: { requiresAuth: true, role: 'user' }
   },
   {
