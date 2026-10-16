@@ -88,6 +88,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../utils/api'
+import { clearUser } from '../utils/auth'
 
 export default {
   name: 'RegisterView',
@@ -173,6 +174,7 @@ export default {
 
         if (response.data.status_code === 1000) {
           // 存储token和用户信息
+          clearUser()
           if (response.data.token) {
             localStorage.setItem('token', response.data.token)
           }
