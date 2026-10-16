@@ -13,21 +13,26 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisStack starts a disposable server on a free loopback port with persistence disabled.
+// RedisSearch starts a disposable server on a free loopback port with persistence disabled.
 // Tests never change the application Redis configuration or depend on its write health.
-func RedisStack(t *testing.T) *redis.Client {
+func RedisSearch(t *testing.T) *redis.Client {
 	t.Helper()
 	server := os.Getenv("GOPHERAI_TEST_REDIS_SERVER")
 	if server == "" {
-		server = "/opt/redis-stack/bin/redis-server"
+		server = "redis-server"
 	}
 	module := os.Getenv("GOPHERAI_TEST_REDISEARCH_MODULE")
 	if module == "" {
-		module = "/opt/redis-stack/lib/redisearch.so"
+		module = "/usr/lib/redis/modules/redisearch.so"
 	}
+	resolvedServer, err := exec.LookPath(server)
+	if err != nil {
+		t.Fatalf("Redis server unavailable: %v", err)
+	}
+	server = resolvedServer
 	for _, path := range []string{server, module} {
 		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("Redis Stack test dependency unavailable: %s; configure GOPHERAI_TEST_REDIS_SERVER and GOPHERAI_TEST_REDISEARCH_MODULE", path)
+			t.Fatalf("Redis 8.10.2 Search test dependency unavailable: %s; configure GOPHERAI_TEST_REDIS_SERVER and GOPHERAI_TEST_REDISEARCH_MODULE", path)
 		}
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -59,6 +64,6 @@ func RedisStack(t *testing.T) *redis.Client {
 		time.Sleep(50 * time.Millisecond)
 	}
 	logs, _ := os.ReadFile(logPath)
-	t.Fatalf("isolated Redis Stack did not start: %s", logs)
+	t.Fatalf("isolated Redis 8.10.2 Search did not start: %s", logs)
 	return nil
 }

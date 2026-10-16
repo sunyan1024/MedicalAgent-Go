@@ -2,6 +2,7 @@ uploads/
 dist/
 logs/*
 outputs/
+deploy/
 
 node_modules/
 

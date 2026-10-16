@@ -82,7 +82,7 @@ npm run lint -- --no-fix
 npm run build
 ```
 
-集成测试覆盖历史迁移及重复迁移、管理员初始化及冲突、个人文件隔离、企业读写权限、管理员业务访问限制及角色实时生效、跨库秒传、重复删除和共享索引清理。切片测试覆盖双路检索启停、正文与向量原子更新、版本/锁冲突、共享引用及删除清理；`npm run test:chunks` 验证抽屉异步状态与失败保留输入，不替代浏览器布局验收。Redis 集成测试默认使用 `/opt/redis-stack/bin/redis-server` 和 `/opt/redis-stack/lib/redisearch.so`，可通过 `GOPHERAI_TEST_REDIS_SERVER`、`GOPHERAI_TEST_REDISEARCH_MODULE` 指定安装路径。默认测试不调用真实模型。
+集成测试覆盖历史迁移及重复迁移、管理员初始化及冲突、个人文件隔离、企业读写权限、管理员业务访问限制及角色实时生效、跨库秒传、重复删除和共享索引清理。切片测试覆盖双路检索启停、正文与向量原子更新、版本/锁冲突、共享引用及删除清理；`npm run test:chunks` 验证抽屉异步状态与失败保留输入，不替代浏览器布局验收。项目直接使用 Redis 8.10.2 Search，不兼容旧 Redis Stack 的错误格式。Redis 集成测试默认使用 PATH 中的 `redis-server` 和新版模块 `/usr/lib/redis/modules/redisearch.so`，可通过 `GOPHERAI_TEST_REDIS_SERVER`、`GOPHERAI_TEST_REDISEARCH_MODULE` 指定安装路径。默认测试不调用真实模型。
 
 页面验收：分别登录两个普通账号和管理员；检查个人文件互不可见，普通账号没有企业知识库入口且不能直接打开企业页面，管理员直达企业管理页且无法访问普通用户业务页面。分别上传仅个人资料和仅企业资料，在 RAG 模式中提问验证两类资料均可检索，再验证流式和非流式响应；管理员删除企业文件后，新问答不再检索该文件。历史回答保留原内容。
 

@@ -18,7 +18,7 @@ import (
 
 func TestManagedChunksRetrievalAndAtomicChanges(t *testing.T) {
 	ctx := context.Background()
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	previous := redisPkg.Rdb
 	redisPkg.Rdb = client
 	t.Cleanup(func() { redisPkg.Rdb = previous })
@@ -172,7 +172,7 @@ func TestManagedChunksRetrievalAndAtomicChanges(t *testing.T) {
 
 func TestManagedChunkValidationAndLegacySequence(t *testing.T) {
 	ctx := context.Background()
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	store := &ChunkStore{Client: client, IndexKey: "stored:legacy"}
 	prefix := redisPkg.GenerateIndexNamePrefix(store.IndexKey)
 	if err := client.HSet(ctx, prefix+"doc_9", "content", "末尾切片").Err(); err != nil {

@@ -31,7 +31,7 @@ func (sourceTestEmbedder) EmbedStrings(_ context.Context, texts []string, _ ...e
 
 func TestSourceMetadataRedisRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	previous := redisPkg.Rdb
 	redisPkg.Rdb = client
 	t.Cleanup(func() { redisPkg.Rdb = previous })

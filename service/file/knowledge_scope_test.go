@@ -24,7 +24,7 @@ func TestSharedKnowledgeFileLifecycle(t *testing.T) {
 	db := testutil.MySQL(t)
 	previousDB, previousRedis := appmysql.DB, redisPkg.Rdb
 	appmysql.DB = db
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	redisPkg.Rdb = client
 	t.Cleanup(func() { appmysql.DB, redisPkg.Rdb = previousDB, previousRedis; client.Close() })
 	ctx := context.Background()

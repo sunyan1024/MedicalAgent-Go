@@ -9,7 +9,7 @@ import (
 )
 
 func TestChineseKeywordRecallExistingHashes(t *testing.T) {
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	ctx := context.Background()
 	file := "stored:lung-guideline"
 	prefix := redisPkg.GenerateIndexNamePrefix(file)

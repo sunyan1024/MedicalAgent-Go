@@ -18,7 +18,7 @@ import (
 
 func TestEnterpriseChunkManagementAPI(t *testing.T) {
 	db := testutil.MySQL(t)
-	client := testutil.RedisStack(t)
+	client := testutil.RedisSearch(t)
 	ctx := context.Background()
 	oldDB, oldRedis := appmysql.DB, redisPkg.Rdb
 	appmysql.DB, redisPkg.Rdb = db, client

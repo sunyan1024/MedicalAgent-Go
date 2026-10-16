@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -24,14 +23,14 @@ func EnsureChineseKeywordIndex(ctx context.Context, client *redis.Client, filena
 	name := ChineseKeywordIndexName(filename)
 	info, err := client.Do(ctx, "FT.INFO", name).Result()
 	if err != nil {
-		if !strings.Contains(err.Error(), "Unknown index name") {
+		if !isSearchIndexNotFound(err) {
 			return "", fmt.Errorf("inspect keyword index: %w", err)
 		}
 		err = client.Do(ctx, "FT.CREATE", name, "ON", "HASH",
 			"PREFIX", "1", GenerateIndexNamePrefix(filename),
 			"LANGUAGE", "chinese", "SCHEMA", "content", "TEXT").Err()
 		// Another concurrent request may have created the same index.
-		if err != nil && !strings.Contains(err.Error(), "Index already exists") {
+		if err != nil && !isSearchIndexExists(err) {
 			return "", fmt.Errorf("create keyword index: %w", err)
 		}
 		info, err = client.Do(ctx, "FT.INFO", name).Result()

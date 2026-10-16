@@ -373,7 +373,7 @@ func normalizeRAGIndexError(err error) error {
 		strings.Contains(msg, "redis index") ||
 		strings.Contains(msg, "FT.INFO") ||
 		strings.Contains(msg, "FT.CREATE"):
-		return fmt.Errorf("知识库索引服务不可用，请检查 Redis Stack/RediSearch: %w", err)
+		return fmt.Errorf("知识库索引服务不可用，请检查 Redis 8.10.2 Search: %w", err)
 	case strings.Contains(msg, "failed to extract pdf text") ||
 		strings.Contains(msg, "failed to open pdf file") ||
 		strings.Contains(msg, "failed to read pdf text") ||

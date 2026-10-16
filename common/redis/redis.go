@@ -18,10 +18,18 @@ func isRediSearchUnsupported(err error) bool {
 		return false
 	}
 
-	msg := err.Error()
-	return strings.Contains(msg, "unknown command `FT.INFO`") ||
-		strings.Contains(msg, "unknown command `FT.CREATE`") ||
-		strings.Contains(msg, "unknown command `FT.DROPINDEX`")
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unknown command") &&
+		(strings.Contains(msg, "ft.info") || strings.Contains(msg, "ft.create") || strings.Contains(msg, "ft.dropindex"))
+}
+
+// Redis 8.10.2 Search reports stable error codes as the first token.
+func isSearchIndexNotFound(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "SEARCH_INDEX_NOT_FOUND ")
+}
+
+func isSearchIndexExists(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "SEARCH_INDEX_EXISTS ")
 }
 
 // 全局变量
@@ -158,11 +166,11 @@ func InitRedisIndex(ctx context.Context, filename string, dimension int) error {
 	}
 
 	if isRediSearchUnsupported(err) {
-		return fmt.Errorf("当前 Redis 不支持 RediSearch/向量索引，请使用 Redis Stack 或启用 RediSearch 模块")
+		return fmt.Errorf("当前 Redis 未启用 Search/向量索引，请检查 Redis 8.10.2 的 Search 模块配置")
 	}
 
 	// 如果索引不存在，创建新索引
-	if !strings.Contains(err.Error(), "Unknown index name") {
+	if !isSearchIndexNotFound(err) {
 		return fmt.Errorf("检查索引失败: %w", err)
 	}
 
@@ -189,7 +197,7 @@ func InitRedisIndex(ctx context.Context, filename string, dimension int) error {
 	// 执行创建索引命令
 	if err := Rdb.Do(ctx, createArgs...).Err(); err != nil {
 		if isRediSearchUnsupported(err) {
-			return fmt.Errorf("当前 Redis 不支持 RediSearch/向量索引，请使用 Redis Stack 或启用 RediSearch 模块")
+			return fmt.Errorf("当前 Redis 未启用 Search/向量索引，请检查 Redis 8.10.2 的 Search 模块配置")
 		}
 		return fmt.Errorf("创建索引失败: %w", err)
 	}
@@ -202,17 +210,18 @@ func InitRedisIndex(ctx context.Context, filename string, dimension int) error {
 func DeleteRedisIndex(ctx context.Context, filename string) error {
 	indexName := GenerateIndexName(filename)
 	prefix := GenerateIndexNamePrefix(filename)
-	if err := Rdb.Do(ctx, "FT.DROPINDEX", ChineseKeywordIndexName(filename)).Err(); err != nil && !strings.Contains(err.Error(), "Unknown Index name") && !strings.Contains(err.Error(), "Unknown index name") {
+	if err := Rdb.Do(ctx, "FT.DROPINDEX", ChineseKeywordIndexName(filename)).Err(); err != nil && !isSearchIndexNotFound(err) {
 		return fmt.Errorf("删除关键词索引失败: %w", err)
 	}
 
 	// 1. 先删除索引
 	if err := Rdb.Do(ctx, "FT.DROPINDEX", indexName).Err(); err != nil {
 		if isRediSearchUnsupported(err) {
-			return fmt.Errorf("当前 Redis 不支持 RediSearch/向量索引，请使用 Redis Stack 或启用 RediSearch 模块")
+			return fmt.Errorf("当前 Redis 未启用 Search/向量索引，请检查 Redis 8.10.2 的 Search 模块配置")
 		}
-		// 索引不存在可能不是错误，继续执行
-		log.Printf("[DeleteRedisIndex] 删除索引失败或索引不存在: %v", err)
+		if !isSearchIndexNotFound(err) {
+			return fmt.Errorf("删除向量索引失败: %w", err)
+		}
 	} else {
 		log.Printf("[DeleteRedisIndex] 索引 %s 删除成功！\n", indexName)
 	}
