@@ -58,7 +58,10 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 	m := &followupModel{}
 	previousRuntime := newRuntime
 	t.Cleanup(func() { newRuntime = previousRuntime })
-	newRuntime = func(_ context.Context, id string, read func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
+	newRuntime = func(_ context.Context, id string, uid string, read func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
+		if uid != "alice" {
+			t.Fatalf("runtime received wrong user: %q", uid)
+		}
 		if read == nil {
 			t.Fatal("confirmed report lost")
 		}

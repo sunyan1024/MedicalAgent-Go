@@ -1169,7 +1169,11 @@ func NewMedicalRAGQuery(ctx context.Context) (*RAGQuery, error) {
 
 func newScopedRAGQuery(ctx context.Context, uid string, enterpriseOnly bool) (*RAGQuery, error) {
 	start := time.Now()
-	log.Printf("[RAG][Query] init start uid=%s", uid)
+	scopeLabel := "personal+enterprise"
+	if enterpriseOnly {
+		scopeLabel = "enterprise"
+	}
+	log.Printf("[RAG][Query] init start uid=%s scope=%s", uid, scopeLabel)
 
 	conf := config.GetConfig()
 	apiKey := conf.RagModelConfig.RagApiKey
@@ -1201,7 +1205,16 @@ func newScopedRAGQuery(ctx context.Context, uid string, enterpriseOnly bool) (*R
 		log.Printf("[RAG][Query] no uploaded files uid=%s", uid)
 		return nil, fmt.Errorf("no uploaded file found for user %s", uid)
 	}
-	log.Printf("[RAG][Query] knowledge files loaded uid=%s files=%d", uid, len(knowledgeFiles))
+	personalCount, enterpriseCount := 0, 0
+	for _, f := range knowledgeFiles {
+		switch f.Scope {
+		case model.KnowledgeScopePersonal:
+			personalCount++
+		case model.KnowledgeScopeEnterprise:
+			enterpriseCount++
+		}
+	}
+	log.Printf("[RAG][Query] knowledge files loaded uid=%s scope=%s files=%d personal_files=%d enterprise_files=%d", uid, scopeLabel, len(knowledgeFiles), personalCount, enterpriseCount)
 
 	rdb := redisPkg.Rdb
 	retrievers := make([]retriever.Retriever, 0, len(knowledgeFiles))
@@ -1251,7 +1264,7 @@ func newScopedRAGQuery(ctx context.Context, uid string, enterpriseOnly bool) (*R
 			originalName: originalName,
 			scope:        scope,
 		})
-		log.Printf("[RAG][Query] retriever ready uid=%s file=%s original_name=%s index=%s", uid, filename, originalName, indexName)
+		log.Printf("[RAG][Query] retriever ready uid=%s file=%s original_name=%s index=%s scope=%s", uid, filename, originalName, indexName, scope)
 	}
 
 	if len(retrievers) == 0 {
@@ -1396,7 +1409,7 @@ func (r *RAGQuery) RetrieveDocuments(ctx context.Context, query string) ([]*sche
 		if hasScore {
 			rerankScoreText = fmt.Sprintf("%.6f", score)
 		}
-		log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f rerank_score=%s content_len=%d", i+1, docID, filename, originalName, distance, rerankScoreText, contentLen)
+		log.Printf("[RAG][Retrieve] hit rank=%d id=%s filename=%s original_name=%s distance=%.6f rerank_score=%s content_len=%d scope=%v", i+1, docID, filename, originalName, distance, rerankScoreText, contentLen, doc.MetaData["knowledge_scope"])
 	}
 	log.Printf("[RAG][Retrieve] success docs=%d elapsed=%s", len(allDocs), time.Since(start))
 	return allDocs, nil

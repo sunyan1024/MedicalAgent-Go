@@ -22,6 +22,10 @@ func PublicSearch(ctx context.Context, query string) ([]Source, error) {
 	if err != nil {
 		return nil, err
 	}
+	return retrieveSources(ctx, q, query)
+}
+
+func retrieveSources(ctx context.Context, q *rag.RAGQuery, query string) ([]Source, error) {
 	docs, err := q.RetrieveDocuments(ctx, query)
 	if err != nil {
 		return nil, err
@@ -45,13 +49,31 @@ func PublicSearch(ctx context.Context, query string) ([]Source, error) {
 		if err != nil {
 			return nil, fmt.Errorf("医学知识来源无效: %w", err)
 		}
-		sources = append(sources, Source{ID: id, Title: title, Content: d.Content})
+		scope, _ := d.MetaData["knowledge_scope"].(string)
+		sources = append(sources, Source{ID: id, Title: title, Content: d.Content, KnowledgeScope: scope})
 	}
 	return sources, nil
 }
 
+// UserSearchMCP binds access to the authenticated user outside model arguments.
+// Each invocation creates a private MCP handler; user identity is never shared.
+func UserSearchMCP(uid string) func(context.Context, string) ([]Source, error) {
+	return func(ctx context.Context, query string) ([]Source, error) {
+		if uid == "" {
+			return nil, fmt.Errorf("用户知识库检索缺少用户身份")
+		}
+		return searchMCP(ctx, query, func(ctx context.Context, query string) ([]Source, error) {
+			q, err := rag.NewRAGQuery(ctx, uid)
+			if err != nil {
+				return nil, err
+			}
+			return retrieveSources(ctx, q, query)
+		})
+	}
+}
+
 // SearchMCP crosses a real Streamable HTTP MCP transport. The listener is private,
-// short-lived and authenticated; its handler only has public knowledge access.
+// short-lived and authenticated; its handler uses a server-bound knowledge access scope.
 // Keeping it in-process avoids importing the separate legacy weather Go module.
 func SearchMCP(ctx context.Context, query string) ([]Source, error) {
 	return searchMCP(ctx, query, PublicSearch)
@@ -61,7 +83,7 @@ func searchMCP(ctx context.Context, query string, search func(context.Context, s
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	s := server.NewMCPServer("medical-knowledge", "1.0.0", server.WithToolCapabilities(false))
-	s.AddTool(mcp.NewTool("search_medical_knowledge", mcp.WithDescription("查询公共医学知识库"), mcp.WithString("query", mcp.Required())), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(mcp.NewTool("search_medical_knowledge", mcp.WithDescription("查询已授权的个人知识库与公共医学知识库"), mcp.WithString("query", mcp.Required())), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		q, ok := req.GetArguments()["query"].(string)
 		if !ok || len(q) == 0 || len(q) > 12000 {
 			return mcp.NewToolResultError("invalid query"), nil
@@ -103,7 +125,7 @@ func searchMCP(ctx context.Context, query string, search func(context.Context, s
 		return nil, err
 	}
 	if result.IsError {
-		return nil, fmt.Errorf("医学知识检索失败，请检查公共资料索引与检索配置")
+		return nil, fmt.Errorf("医学知识检索失败，请检查已授权知识库索引与检索配置")
 	}
 	for _, content := range result.Content {
 		if txt, ok := content.(mcp.TextContent); ok {

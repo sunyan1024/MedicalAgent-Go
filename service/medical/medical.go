@@ -179,7 +179,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 			emit(e)
 		}
 	}
-	runtime, err := newRuntime(ctx, run.ID, read, callback)
+	runtime, err := newRuntime(ctx, run.ID, user, read, callback)
 	if err == nil {
 		store := memoryservice.New(mysql.DB)
 		runtime.SetMemory(&core.MemoryAccess{

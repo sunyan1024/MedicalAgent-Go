@@ -33,7 +33,7 @@ func TestMemoryAcrossMedicalSessionsAndClear(t *testing.T) {
 		t.Fatal(err)
 	}
 	probe := &memoryProbe{}
-	newRuntime = func(_ context.Context, id string, read func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
+	newRuntime = func(_ context.Context, id string, uid string, read func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
 		return core.NewRuntime(id, core.Dependencies{Model: probe, ReadReport: read, Emit: emit}), nil
 	}
 	ctx := context.Background()

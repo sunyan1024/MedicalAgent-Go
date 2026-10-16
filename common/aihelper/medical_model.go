@@ -39,12 +39,12 @@ func (m *MedicalModel) StreamResponse(ctx context.Context, msgs []*schema.Messag
 	return "", err
 }
 
-func NewMedicalRuntime(ctx context.Context, id string, read func(context.Context) ([]medical.Indicator, error), emit func(medical.Event)) (*medical.Runtime, error) {
+func NewMedicalRuntime(ctx context.Context, id string, uid string, read func(context.Context) ([]medical.Indicator, error), emit func(medical.Event)) (*medical.Runtime, error) {
 	m, err := NewQwenModel(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return medical.NewRuntime(id, medical.Dependencies{Model: m.llm, ReadReport: read, Search: medical.SearchMCP, WebSearch: medical.ConfiguredWebSearch(), Emit: emit}), nil
+	return medical.NewRuntime(id, medical.Dependencies{Model: m.llm, ReadReport: read, Search: medical.UserSearchMCP(uid), WebSearch: medical.ConfiguredWebSearch(), Emit: emit}), nil
 }
 
 // ExtractMedicalIndicators is separate from the reasoning agents: users review

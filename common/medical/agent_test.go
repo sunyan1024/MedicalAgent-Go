@@ -265,12 +265,12 @@ func TestMCPTransportUsesRealToolResult(t *testing.T) {
 		if q != "测试查询" {
 			t.Fatal(q)
 		}
-		return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "测试", Content: "证据"}}, nil
+		return []Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "测试", Content: "证据", KnowledgeScope: "personal"}}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sources) != 1 || sources[0].Content != "证据" {
+	if len(sources) != 1 || sources[0].Content != "证据" || sources[0].KnowledgeScope != "personal" {
 		t.Fatal(sources)
 	}
 }
@@ -327,9 +327,9 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 	rawID := strings.Repeat("a", 64) + "_1"
 	for _, id := range []string{rawID, "knowledge_" + rawID} {
 		t.Run(id, func(t *testing.T) {
-			expected := Source{ID: "knowledge_" + rawID, Kind: "knowledge", Title: "资料", Content: "证据"}
+			expected := Source{ID: "knowledge_" + rawID, Kind: "knowledge", Title: "资料", Content: "证据", KnowledgeScope: "personal"}
 			r := NewRuntime("sources", Dependencies{Model: &scenarioModel{readSource: true}, Search: func(context.Context, string) ([]Source, error) {
-				return []Source{{ID: id, Title: expected.Title, Content: expected.Content}}, nil
+				return []Source{{ID: id, Title: expected.Title, Content: expected.Content, KnowledgeScope: expected.KnowledgeScope}}, nil
 			}})
 			answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("读取检索资料")})
 			if err != nil || answer != "已完成，资料见 。" {
@@ -384,5 +384,12 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 				t.Fatalf("events=%d search=%d read=%d", sourceEvents, searchResults, readResults)
 			}
 		})
+	}
+}
+
+func TestUserSearchMCPRequiresIdentity(t *testing.T) {
+	_, err := UserSearchMCP("")(context.Background(), "医学资料")
+	if err == nil || !strings.Contains(err.Error(), "用户身份") {
+		t.Fatalf("missing user identity accepted: %v", err)
 	}
 }

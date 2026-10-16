@@ -30,7 +30,7 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	w := newEventWriter(db)
 	secret := strings.Repeat("完整原始内容", 1000)
 	e := core.Event{ID: "event", RunID: run.ID, Sequence: 1, Type: "tool_start", Tool: "search", Input: secret, Summary: "摘要", OccurredAt: time.Now().UTC()}
-	e.Sources = []core.Source{{ID: "web_test", Kind: "web", URL: "https://example.org/evidence", Title: "网页", Content: "证据"}, {ID: "knowledge_" + strings.Repeat("a", 64) + "_1", Kind: "knowledge", Title: "知识库资料"}}
+	e.Sources = []core.Source{{ID: "web_test", Kind: "web", URL: "https://example.org/evidence", Title: "网页", Content: "证据"}, {ID: "knowledge_" + strings.Repeat("a", 64) + "_1", Kind: "knowledge", Title: "知识库资料", KnowledgeScope: "personal"}}
 	// Already-canceled browser context must not affect the independent writer.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -129,7 +129,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			if err := db.AutoMigrate(&model.MedicalReport{}, &model.MedicalRun{}, &model.MedicalRunEvent{}, &model.Session{}, &model.Message{}, &model.UserMemory{}); err != nil {
 				t.Fatal(err)
 			}
-			newRuntime = func(_ context.Context, id string, _ func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
+			newRuntime = func(_ context.Context, id string, uid string, _ func(context.Context) ([]core.Indicator, error), emit func(core.Event)) (*core.Runtime, error) {
 				return core.NewRuntime(id, core.Dependencies{Model: &followupModel{}, Emit: emit}), nil
 			}
 			if terminalFailure {
