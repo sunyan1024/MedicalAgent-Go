@@ -260,8 +260,8 @@ func TestParameterValidation(t *testing.T) {
 	}
 }
 
-func TestMCPTransportUsesRealToolResult(t *testing.T) {
-	sources, err := searchMCP(context.Background(), "测试查询", func(_ context.Context, q string) ([]Source, error) {
+func TestDirectSearchPreservesSources(t *testing.T) {
+	sources, err := searchWithTimeout(context.Background(), "测试查询", func(_ context.Context, q string) ([]Source, error) {
 		if q != "测试查询" {
 			t.Fatal(q)
 		}
@@ -387,8 +387,8 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 	}
 }
 
-func TestUserSearchMCPRequiresIdentity(t *testing.T) {
-	_, err := UserSearchMCP("")(context.Background(), "医学资料")
+func TestUserSearchRequiresIdentity(t *testing.T) {
+	_, err := UserSearch("")(context.Background(), "医学资料")
 	if err == nil || !strings.Contains(err.Error(), "用户身份") {
 		t.Fatalf("missing user identity accepted: %v", err)
 	}
