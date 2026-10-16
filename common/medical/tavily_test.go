@@ -131,7 +131,7 @@ func (m *webScenario) Generate(_ context.Context, msgs []*schema.Message, _ ...m
 	if m.fail {
 		return schema.AssistantMessage(`{"findings":[],"evidence":[],"missing":["联网失败"]}`, nil), nil
 	}
-	return schema.AssistantMessage(`{"findings":["证据"],"evidence":["web_`+strings.Repeat("a", 64)+`"],"missing":[]}`, nil), nil
+	return schema.AssistantMessage(`{"findings":["证据"],"evidence":["S1"],"missing":[]}`, nil), nil
 }
 func (m *webScenario) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	v, e := m.Generate(ctx, msgs, opts...)

@@ -68,10 +68,10 @@ func ConfirmReport(ctx context.Context, user, id string, items []core.Indicator)
 }
 
 func Runs(ctx context.Context, user, session string) ([]RunResponse, error) {
-	// An active run has a 120s deadline plus bounded persistence. Older running
+	// Allow the run deadline plus a minute for startup and bounded persistence. Older running
 	// records indicate a process interruption, not an indefinitely active task.
 	if err := mysql.DB.WithContext(ctx).Model(&model.MedicalRun{}).
-		Where("uid = ? AND session_id = ? AND status = ? AND created_at < ?", user, session, "running", time.Now().Add(-3*time.Minute)).
+		Where("uid = ? AND session_id = ? AND status = ? AND created_at < ?", user, session, "running", time.Now().Add(-(core.RunTimeout+time.Minute))).
 		Update("status", "interrupted").Error; err != nil {
 		return nil, err
 	}

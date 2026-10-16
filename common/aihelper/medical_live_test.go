@@ -18,7 +18,7 @@ func TestMedicalLiveSmoke(t *testing.T) {
 		t.Skip("set GOPHERAI_MEDICAL_LIVE=1 to call configured Qwen provider")
 	}
 	_ = testutil.Config(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	m, err := NewQwenModel(ctx)
 	if err != nil {

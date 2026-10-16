@@ -80,12 +80,12 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 		return call("search_medical_knowledge", `{"query":"第一次查询"}`), nil
 	}
 	if n%3 == 1 && m.readSource {
-		return call("read_medical_source", `{"sourceId":"knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"}`), nil
+		return call("read_medical_source", `{"sourceId":"S1"}`), nil
 	}
 	if n%3 == 1 {
 		return call("search_medical_knowledge", `{"query":"改写后的查询"}`), nil
 	}
-	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["knowledge_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1"],"missing":[]}`, nil), nil
+	return schema.AssistantMessage(`{"findings":["检索到相关资料"],"evidence":["S1"],"missing":[]}`, nil), nil
 }
 func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	out, err := m.Generate(ctx, msgs, opts...)
@@ -338,8 +338,18 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 			if len(r.sources) != 1 || r.sources[expected.ID] != expected {
 				t.Fatalf("cache: %+v", r.sources)
 			}
+			modelSource := expected
+			modelSource.ID = "S1"
 			sourceEvents, searchResults, readResults := 0, 0, 0
 			for _, e := range r.Events {
+				if e.Type == "subagent_end" && e.Tool == "medical_researcher" {
+					var result struct {
+						Evidence []string `json:"evidence"`
+					}
+					if err := json.Unmarshal([]byte(e.Output), &result); err != nil || e.Status != "completed" || len(result.Evidence) != 1 || result.Evidence[0] != expected.ID {
+						t.Fatalf("delegation did not restore full source ID: %+v", e)
+					}
+				}
 				if e.Type == "sources" {
 					sourceEvents++
 					if len(e.Sources) != 1 || e.Sources[0] != expected {
@@ -356,13 +366,13 @@ func TestKnowledgeSourcesConsistentAcrossToolResultsAndEvents(t *testing.T) {
 				case "search_medical_knowledge":
 					searchResults++
 					var got []Source
-					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || len(got) != 1 || got[0] != expected {
+					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || len(got) != 1 || got[0] != modelSource {
 						t.Fatalf("search output: %s (%v)", e.Output, err)
 					}
 				case "read_medical_source":
 					readResults++
 					var got Source
-					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || got != expected {
+					if err := json.Unmarshal([]byte(e.Output), &got); err != nil || got != modelSource {
 						t.Fatalf("read output: %s (%v)", e.Output, err)
 					}
 				}
