@@ -23,7 +23,7 @@
     <el-drawer
       v-model="opened"
       title="Agent 运行详情"
-      size="min(560px, 100vw)"
+      size="min(680px, 100vw)"
       append-to-body
       class="medical-run-drawer"
     >
@@ -65,9 +65,15 @@
               }}
             </p>
           </div>
-          <ol v-else class="trace-tree">
-            <MedicalTraceNode v-for="node in nodes" :key="node.key" :node="node" />
-          </ol>
+          <template v-else>
+            <div class="trace-guide">
+              <strong>主 Agent <span>→</span> 子 Agent <span>→</span> 工具</strong>
+              <p>按调用归属分层展示，主 Agent 直接使用的工具列在主 Agent 下。点击节点可收起下级或查看执行详情。</p>
+            </div>
+            <ol class="trace-tree">
+              <MedicalTraceNode v-for="node in nodes" :key="node.key" :node="node" />
+            </ol>
+          </template>
           <div v-if="['stopped', 'unknown'].includes(displayStatus)" class="notice">
             {{
               displayStatus === 'stopped' ? '已停止接收本次回答。' : '连接已结束。'
@@ -492,6 +498,21 @@ h3 {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+.trace-guide {
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.trace-guide strong {
+  color: var(--app-text);
+}
+.trace-guide span {
+  padding: 0 6px;
+  color: var(--app-text-muted);
+}
+.trace-guide p {
+  margin: 6px 0 0;
+  color: var(--app-text-muted);
 }
 .history-banner {
   padding: 12px;

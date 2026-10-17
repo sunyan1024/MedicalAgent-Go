@@ -4,6 +4,7 @@ export const statusText = (status) =>
     completed: '已完成',
     partial: '部分完成',
     failed: '失败',
+    rejected: '未执行',
     interrupted: '已中断',
     stopped: '已停止接收',
     unknown: '结果待确认',
@@ -15,6 +16,7 @@ export const statusIcon = (status) =>
     completed: '✓',
     partial: '!',
     failed: '×',
+    rejected: '!',
     interrupted: '■',
     stopped: '■',
     idle: '○',
@@ -110,7 +112,9 @@ export function buildTrace(events, status) {
       seen.add(ancestor)
       ancestor = starts.get(ancestor.parentId)
     }
-    if (!parent && !node.parentId && node !== main && node.type === 'subagent_start') parent = main
+    // Top-level delegations and tools (for example personal-memory tools) are
+    // both owned by the main Agent. Never guess an owner for a broken parent ID.
+    if (!parent && !node.parentId && node !== main) parent = main
     if (parent) parent.children.push(node)
     else roots.push(node)
   }

@@ -38,6 +38,37 @@ test('未返回节点只在实时运行时显示运行中', () => {
   for (const status of ['stopped', 'failed', 'unknown', 'completed'])
     assert.equal(buildTrace(events.slice(0, 3), status)[0].children[0].status, 'unknown')
 })
+test('主 Agent 直接调用的工具与子 Agent 同属主节点，子 Agent 工具保持原归属', () => {
+  const input = [
+    { id: 'run', type: 'run_start', agent: 'medical_assistant' },
+    { id: 'memory', type: 'tool_start', agent: 'medical_assistant', tool: 'read_user_memory' },
+    { id: 'child', type: 'subagent_start', agent: 'medical_assistant', tool: 'medical_researcher' },
+    { id: 'search', parentId: 'child', type: 'tool_start', agent: 'medical_researcher', tool: 'search_medical_knowledge' },
+    { parentId: 'memory', type: 'tool_end', status: 'completed', summary: '已读取个人档案' },
+    { id: 'denied', type: 'tool_rejected', agent: 'medical_assistant', tool: 'update_user_memory', status: 'rejected' },
+    { id: 'failure', type: 'error', summary: '运行异常' },
+  ]
+  const tree = buildTrace(input, 'running')
+  assert.equal(tree.length, 1)
+  assert.deepEqual(tree[0].children.map((node) => node.id), ['memory', 'child', 'denied', 'failure'])
+  assert.equal(tree[0].children[0].summary, '已读取个人档案')
+  assert.equal(tree[0].children[1].children[0].id, 'search')
+  assert.equal(tree[0].children[2].status, 'rejected')
+  assert.equal(trace.statusText('rejected'), '未执行')
+})
+test('明确但无效的父节点不误归到其他 Agent，同名子 Agent 按调用 ID 区分', () => {
+  const tree = buildTrace([
+    { id: 'run', type: 'run_start' },
+    { id: 'child-a', type: 'subagent_start', tool: 'medical_researcher' },
+    { id: 'child-b', type: 'subagent_start', tool: 'medical_researcher' },
+    { id: 'search-b', parentId: 'child-b', type: 'tool_start' },
+    { id: 'orphan', parentId: 'missing', type: 'tool_start' },
+  ], 'completed')
+  assert.equal(tree.length, 2)
+  assert.equal(tree[1].id, 'orphan')
+  assert.equal(tree[0].children[0].children.length, 0)
+  assert.equal(tree[0].children[1].children[0].id, 'search-b')
+})
 test('缺失父节点、未知事件和循环关联不会丢失或无限递归', () => {
   const tree = buildTrace(
     [
