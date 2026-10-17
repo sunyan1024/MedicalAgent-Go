@@ -203,7 +203,7 @@ func Chat(c *gin.Context, question, session, report string, stream bool) {
 		emit = func(e core.Event) {
 			if !started {
 				c.Header("Content-Type", "text/event-stream")
-				c.Header("Cache-Control", "no-cache")
+				c.Header("Cache-Control", "no-cache, no-transform")
 				c.Header("X-Accel-Buffering", "no")
 				started = true
 			}

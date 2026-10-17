@@ -166,8 +166,8 @@ func TestWebAgentScenarios(t *testing.T) {
 				var delta string
 				var sources []Source
 				for _, event := range r.Events {
-					if event.Type == "answer_delta" {
-						delta += event.Delta
+					if event.Type == "answer_final" {
+						delta = event.Delta
 					}
 					sources = append(sources, event.Sources...)
 				}

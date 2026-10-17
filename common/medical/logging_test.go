@@ -139,7 +139,7 @@ func TestLogSummaryBoundsAndExcludedBodies(t *testing.T) {
 	r := NewRuntime("excluded", Dependencies{})
 	r.emit(Event{Type: "answer_delta", Delta: "answer secret"})
 	r.emit(Event{Type: "sources", Sources: []Source{{Content: "source secret"}}})
-	if buf.Len() != 0 || len(r.Events) != 2 {
-		t.Fatal("excluded events should only be retained")
+	if buf.Len() != 0 || len(r.Events) != 1 {
+		t.Fatal("sources should be retained without logging; answer fragments should be transient")
 	}
 }

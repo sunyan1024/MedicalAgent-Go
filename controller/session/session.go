@@ -142,10 +142,10 @@ func CreateStreamSessionAndSendMessage(c *gin.Context) {
 
 	// 设置SSE头
 	c.Header("Content-Type", "text/event-stream") // 设置为SSE流式传输
-	c.Header("Cache-Control", "no-cache")         // 禁止缓存
-	c.Header("Connection", "keep-alive")          // 保持连接
-	c.Header("Access-Control-Allow-Origin", "*")  // 允许跨域
-	c.Header("X-Accel-Buffering", "no")           // 禁止代理缓存
+	c.Header("Cache-Control", "no-cache, no-transform")
+	c.Header("Connection", "keep-alive")         // 保持连接
+	c.Header("Access-Control-Allow-Origin", "*") // 允许跨域
+	c.Header("X-Accel-Buffering", "no")          // 禁止代理缓存
 
 	// 先创建会话并立即把 sessionId 下发给前端，随后再开始流式输出
 	sessionID, code_ := session.CreateStreamSessionOnly(uid, req.UserQuestion, req.ModelType)
@@ -239,10 +239,10 @@ func ChatStreamSend(c *gin.Context) {
 
 	// 设置SSE头
 	c.Header("Content-Type", "text/event-stream") // 设置为SSE流式传输
-	c.Header("Cache-Control", "no-cache")         // 禁止缓存
-	c.Header("Connection", "keep-alive")          // 保持连接
-	c.Header("Access-Control-Allow-Origin", "*")  // 允许跨域
-	c.Header("X-Accel-Buffering", "no")           // 禁止代理缓存
+	c.Header("Cache-Control", "no-cache, no-transform")
+	c.Header("Connection", "keep-alive")         // 保持连接
+	c.Header("Access-Control-Allow-Origin", "*") // 允许跨域
+	c.Header("X-Accel-Buffering", "no")          // 禁止代理缓存
 
 	// 调用服务层处理流式消息
 	code_ := session.ChatStreamSend(uid, req.SessionID, req.UserQuestion, req.ModelType, http.ResponseWriter(c.Writer))

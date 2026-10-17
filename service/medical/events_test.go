@@ -72,6 +72,20 @@ func TestEventPersistenceAndPublicProjection(t *testing.T) {
 	}
 }
 
+func TestAnswerDeltasNeverEnterEventWriter(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		// A nil DB also proves fragments never attempt a database operation.
+		w := &eventWriter{failed: failed}
+		w.append(core.Event{Type: "answer_delta", Delta: "实时正文片段"})
+		if len(w.pending) != 0 || w.failed != failed {
+			t.Fatalf("fragment changed writer state: %+v", w)
+		}
+		if err := w.finish(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestEventWriteFailureAndRetry(t *testing.T) {
 	db := testutil.MySQL(t)
 	if err := db.AutoMigrate(&model.MedicalRunEvent{}); err != nil {
@@ -91,10 +105,11 @@ func TestEventWriteFailureAndRetry(t *testing.T) {
 	}
 	w := newEventWriter(db)
 	for i, id := range []string{"one", "two"} {
-		w.append(core.Event{ID: id, RunID: "run", Sequence: int64(i + 1), Type: "tool_start", OccurredAt: time.Now().UTC()})
+		w.append(core.Event{ID: id, RunID: "run", Sequence: int64(2*i + 1), Type: "tool_start", OccurredAt: time.Now().UTC()})
+		w.append(core.Event{ID: id + "-delta", RunID: "run", Sequence: int64(2*i + 2), Type: "answer_delta", Delta: "不应重试入库", OccurredAt: time.Now().UTC()})
 	}
-	if attempts != 1 {
-		t.Fatal("writes did not pause", attempts)
+	if attempts != 1 || len(w.pending) != 2 {
+		t.Fatal("writes did not pause or fragments entered retry queue", attempts, len(w.pending))
 	}
 	if err := w.finish(); err == nil || strings.Contains(err.Error(), "private") {
 		t.Fatal("missing or unsafe persistence error", err)
@@ -145,12 +160,21 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			defer cancel()
 			runID := ""
 			observed := 0
+			finalAnswer := ""
 			_, err := Run(ctx, "alice", ChatRequest{Question: "测试事件"}, func(e core.Event) {
 				runID = e.RunID
-				observed++
+				wantCount := int64(1)
+				if e.Type == "answer_delta" {
+					wantCount = 0
+				} else {
+					observed++
+				}
+				if e.Type == "answer_final" {
+					finalAnswer = e.Delta
+				}
 				var count int64
-				if queryErr := db.Model(&model.MedicalRunEvent{}).Where("event_id = ?", e.ID).Count(&count).Error; queryErr != nil || count != 1 {
-					t.Errorf("SSE preceded commit: %d %v", count, queryErr)
+				if queryErr := db.Model(&model.MedicalRunEvent{}).Where("event_id = ?", e.ID).Count(&count).Error; queryErr != nil || count != wantCount {
+					t.Errorf("unexpected persistence for %s: count=%d want=%d err=%v", e.Type, count, wantCount, queryErr)
 				}
 				if !terminalFailure && e.Type == "run_start" {
 					cancel()
@@ -169,12 +193,23 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			if len(rows) != observed || len(rows) < 2 || rows[len(rows)-1].Type != "run_end" {
 				t.Fatal("terminal events missing", len(rows), observed)
 			}
+			for _, row := range rows {
+				if row.Type == "answer_delta" {
+					t.Fatal("transient fragment persisted")
+				}
+			}
+			if finalAnswer == "" || rows[len(rows)-2].Type != "answer_final" || rows[len(rows)-2].Delta != finalAnswer {
+				t.Fatal("final answer event missing or changed")
+			}
 			var run model.MedicalRun
 			if err := db.First(&run, "run_id = ?", runID).Error; err != nil {
 				t.Fatal(err)
 			}
 			if terminalFailure && run.Status != "running" {
 				t.Fatal("terminal transaction did not roll back", run.Status)
+			}
+			if !terminalFailure && run.Answer != finalAnswer {
+				t.Fatal("final answer not saved after disconnect")
 			}
 		})
 	}

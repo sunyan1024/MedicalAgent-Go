@@ -39,7 +39,9 @@ flowchart TD
 
 `read_medical_source` 返回本次检索得到的片段，不是任意 URL 下载器。重复查询可以拓展本次证据集合。子 Agent 的 evidence 校验验证来源ID存在，不等同于验证医学结论正确；这种语义正确性仍需人工评测。
 
-流式模式实时传输状态、工具和子 Agent 事件；最终回答在聚合工具调用并清理正文内部来源标记后，通过 JSON `answer_delta` 事件下发，**当前不是逐 token 输出**。不展示模型思维链。断开连接会取消 Agent 与 MCP 请求；报告上传的解析是独立异步任务，不随轮询结束取消。
+流式模式复用现有 SSE 连接，实时传输状态、工具和子 Agent 事件；主 Agent 的正文分片通过 JSON `answer_delta` 事件立即追加显示，不做定时合并。正文分片仅用于实时传输，不加入运行事件列表、不占用持久化序号、不写入数据库，也不进入持久化重试队列。结束时通过 `answer_final` 的 `delta` 字段下发清理来源标记后的完整答案，前端替换正文，并整体保存最终答案与聊天消息；失败时同样替换为兜底答案，然后发送 `run_end`。最终答案事件及工具、子 Agent、来源、运行状态事件继续持久化，新运行的持久化事件从 1 连续编号；已有历史记录不清理、不重编号。
+
+SSE 响应使用 `Cache-Control: no-cache, no-transform` 并逐事件 Flush，保留 `X-Accel-Buffering: no`。`no-transform` 防止 Vue 8080 开发服务器的压缩中间件将小分片缓冲到结束；不需要关闭其他响应的压缩。工具执行期间展示运行轨迹与等待提示，正文在主 Agent 开始回答后逐步显示。不展示模型思维链、工具参数或子 Agent JSON。断开连接会取消 Agent 与检索请求；报告上传的解析是独立异步任务，不随轮询结束取消。修改后需重启后端，使 SSE 响应头生效。
 
 追问结束当前请求，下一轮从SQL加载最近20条聊天消息和最近确认的会话报告。报告确认后绑定会话，另一个会话需要重新上传。没有跨进程检查点恢复；进程重启前未完成的解析在查询时被标为超时，运行记录标记为中断。会话内串行限制适用于单个后端进程，Demo 使用单实例。
 
@@ -59,7 +61,7 @@ flowchart TD
 
 指标字段都是字符串：`name`、`value`、`unit`、`reference`、`source`。比较工具只接受同单位、双侧数值区间；缺失范围、未知单位、定性值、单侧范围等标记待核对，不做隐式换算。报告确认是人工检查点，OCR提取不应被当作事实。
 
-事件字段包含 `runId`、`sessionId`（实时事件）、`id`、`parentId`、`type`、`agent`、`tool`、`status`、`durationMs`、`summary`、`sources` 或 `delta`。当前事件类型包括 `run_start/run_end`、`subagent_start/subagent_end`、`tool_start/tool_end`、`sources`、`answer_delta` 和传输层 `error`。
+事件字段包含 `runId`、`sessionId`（实时事件）、`id`、`parentId`、`type`、`agent`、`tool`、`status`、`durationMs`、`summary`、`sources` 或 `delta`。当前事件类型包括 `run_start/run_end`、`subagent_start/subagent_end`、`tool_start/tool_end`、`sources`、`answer_delta`、`answer_final` 和传输层 `error`。
 
 ## 验证和评测
 

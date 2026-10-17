@@ -42,3 +42,36 @@ func TestCompleteEventBodiesAndOrdering(t *testing.T) {
 		}
 	}
 }
+
+func TestAnswerFragmentsDoNotConsumeEventSequence(t *testing.T) {
+	var received []Event
+	r := NewRuntime("run", Dependencies{Emit: func(e Event) { received = append(received, e) }})
+	r.emit(Event{Type: "run_start"})
+	for i := 0; i < 1000; i++ {
+		r.emit(Event{Type: "answer_delta", Delta: "片段"})
+		if i == 499 {
+			r.emit(Event{Type: "sources"})
+		}
+	}
+	r.emit(Event{Type: "answer_final", Delta: "完整答案"})
+	r.emit(Event{Type: "run_end"})
+	if len(received) != 1004 || len(r.Events) != 4 {
+		t.Fatalf("received=%d durable=%d", len(received), len(r.Events))
+	}
+	for i, e := range r.Events {
+		if e.Sequence != int64(i+1) || e.Type == "answer_delta" {
+			t.Fatalf("durable sequence inflated: %+v", e)
+		}
+	}
+	for _, e := range received {
+		if e.ID == "" || e.OccurredAt.IsZero() || e.RunID != r.RunID {
+			t.Fatalf("event metadata lost: %+v", e)
+		}
+		if e.Type == "answer_delta" && e.Sequence != 0 {
+			t.Fatalf("transient fragment consumed sequence: %+v", e)
+		}
+	}
+	if r.Events[2].Type != "answer_final" || r.Events[2].Sequence != 3 {
+		t.Fatal("unexpected final answer sequence", r.Events[2])
+	}
+}

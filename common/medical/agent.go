@@ -56,9 +56,11 @@ func (r *Runtime) emit(e Event) {
 		e.ID = uuid.NewString()
 	}
 	r.mu.Lock()
-	e.Sequence = int64(len(r.Events) + 1)
 	e.OccurredAt = time.Now().UTC()
-	r.Events = append(r.Events, e)
+	if e.Type != "answer_delta" {
+		e.Sequence = int64(len(r.Events) + 1)
+		r.Events = append(r.Events, e)
+	}
 	logEvent(e)
 	if r.deps.Emit != nil {
 		r.deps.Emit(e)
@@ -400,6 +402,7 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 		msg := v.Message
 		if v.IsStreaming {
 			var chunks []*schema.Message
+			answerStream := e.AgentName == MainAgent && v.Role == schema.Assistant
 			for {
 				m, readErr := v.MessageStream.Recv()
 				if readErr == io.EOF {
@@ -410,6 +413,13 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 					break
 				}
 				chunks = append(chunks, m)
+				if len(m.ToolCalls) > 0 {
+					answerStream = false
+				}
+				// Forward only assistant content, never reasoning or tool arguments.
+				if answerStream && m.Content != "" {
+					r.emit(Event{Type: "answer_delta", Agent: MainAgent, Delta: m.Content})
+				}
 			}
 			v.MessageStream.Close()
 			if err != nil {
@@ -424,6 +434,9 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 		}
 		if msg != nil && msg.Role == schema.Assistant && len(msg.ToolCalls) == 0 && e.AgentName == MainAgent {
 			answer = msg.Content
+			if !v.IsStreaming && answer != "" {
+				r.emit(Event{Type: "answer_delta", Agent: MainAgent, Delta: answer})
+			}
 		}
 	}
 	if err != nil {
@@ -445,8 +458,8 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 		answer = "本次未获得可用结果，请补充问题或重试。"
 		err = fmt.Errorf("empty agent result")
 	}
-	// Emit and return the same cleaned answer; source events retain their IDs.
-	r.emit(Event{Type: "answer_delta", Agent: MainAgent, Delta: answer})
+	// Replace provisional deltas with the exact cleaned/persisted answer.
+	r.emit(Event{Type: "answer_final", Agent: MainAgent, Delta: answer})
 	status := "completed"
 	if err != nil {
 		status = "partial"

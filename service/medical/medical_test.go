@@ -2,6 +2,7 @@ package medical
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -26,7 +27,15 @@ func (m *followupModel) Generate(_ context.Context, msgs []*schema.Message, _ ..
 }
 func (m *followupModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...einomodel.Option) (*schema.StreamReader[*schema.Message], error) {
 	v, e := m.Generate(ctx, msgs, opts...)
-	return schema.StreamReaderFromArray([]*schema.Message{v}), e
+	if e != nil {
+		return nil, e
+	}
+	text := []rune(v.Content)
+	middle := len(text) / 2
+	return schema.StreamReaderFromArray([]*schema.Message{
+		schema.AssistantMessage(string(text[:middle]), nil),
+		schema.AssistantMessage(string(text[middle:]), nil),
+	}), nil
 }
 
 func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
@@ -71,9 +80,68 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 		}
 		return core.NewRuntime(id, core.Dependencies{Model: m, ReadReport: read, Emit: emit}), nil
 	}
-	run, err := Run(ctx, "alice", ChatRequest{Question: "症状持续三天", ReportID: report.ID}, nil)
+	var liveEvents []core.Event
+	run, err := Run(ctx, "alice", ChatRequest{Question: "症状持续三天", ReportID: report.ID}, func(e core.Event) {
+		liveEvents = append(liveEvents, e)
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	var displayed string
+	var durableEvents []core.Event
+	deltas, finals := 0, 0
+	for _, e := range liveEvents {
+		if e.Type != "answer_delta" {
+			durableEvents = append(durableEvents, e)
+		}
+		switch e.Type {
+		case "answer_delta":
+			deltas++
+			displayed += e.Delta
+		case "answer_final":
+			finals++
+			displayed = e.Delta
+		}
+	}
+	if deltas != 2 || finals != 1 || displayed != run.Answer {
+		t.Fatalf("stream/result mismatch: deltas=%d finals=%d displayed=%q answer=%q", deltas, finals, displayed, run.Answer)
+	}
+	var savedDeltas int64
+	if err := db.Model(&model.MedicalRunEvent{}).Where("run_id = ? AND type = ?", run.ID, "answer_delta").Count(&savedDeltas).Error; err != nil || savedDeltas != 0 {
+		t.Fatalf("answer fragments persisted: %d %v", savedDeltas, err)
+	}
+	var savedRun model.MedicalRun
+	if err := db.First(&savedRun, "run_id = ?", run.ID).Error; err != nil || savedRun.Answer != displayed {
+		t.Fatalf("saved answer mismatch: %+v %v", savedRun, err)
+	}
+	var savedMessage model.Message
+	if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, false).First(&savedMessage).Error; err != nil || savedMessage.Content != displayed {
+		t.Fatalf("saved message mismatch: %+v %v", savedMessage, err)
+	}
+	restored, err := Runs(ctx, "alice", run.SessionID)
+	if err != nil || len(restored) != 1 {
+		t.Fatal(restored, err)
+	}
+	var restoredEvents []core.Event
+	if err := json.Unmarshal([]byte(restored[0].Events), &restoredEvents); err != nil {
+		t.Fatal(err)
+	}
+	if len(restoredEvents) != len(durableEvents) {
+		t.Fatal("durable events lost in history")
+	}
+	for i, e := range restoredEvents {
+		if e.Type != durableEvents[i].Type || e.Delta != durableEvents[i].Delta {
+			t.Fatalf("history event mismatch at %d", i)
+		}
+	}
+	var savedEvents []model.MedicalRunEvent
+	if err := db.Where("run_id = ?", run.ID).Order("sequence").Find(&savedEvents).Error; err != nil {
+		t.Fatal(err)
+	}
+	for i, e := range savedEvents {
+		if e.Sequence != int64(i+1) {
+			t.Fatalf("non-contiguous saved sequence: %+v", e)
+		}
 	}
 	if _, err = Run(ctx, "bob", ChatRequest{Question: "看看", SessionID: run.SessionID}, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatal("cross-user session accepted", err)

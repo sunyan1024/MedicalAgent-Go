@@ -56,6 +56,7 @@ test('损坏事件安全降级，来源去重且不显示回答片段为步骤',
   const input = [
     { type: 'sources', sources: [{ id: 's', title: '资料' }, null] },
     { type: 'answer_delta', sources: [{ id: 's', title: '更新资料' }] },
+    { type: 'answer_final', delta: '最终回答' },
   ]
   assert.equal(traceSources(input).length, 1)
   assert.equal(buildTrace(input, 'completed').length, 0)

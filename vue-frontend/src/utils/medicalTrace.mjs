@@ -58,7 +58,7 @@ export function parseEvents(value) {
 }
 export function buildTrace(events, status) {
   const visible = events.filter(
-    (e) => e && typeof e.type === 'string' && !['answer_delta', 'sources'].includes(e.type)
+    (e) => e && typeof e.type === 'string' && !['answer_delta', 'answer_final', 'sources'].includes(e.type)
   )
   const starts = new Map(),
     nodes = []

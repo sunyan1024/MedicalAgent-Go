@@ -623,6 +623,7 @@ export default {
         if (event.sessionId) bindSession(event.sessionId)
         medicalEvents.value.push(event)
         if (event.type === 'answer_delta') assistant.content += event.delta || ''
+        if (event.type === 'answer_final') assistant.content = event.delta || ''
         if (event.type === 'error') throw new Error(event.summary || '运行失败')
         if (event.type === 'run_end') assistant.meta.status = event.status
         currentMessages.value = [...currentMessages.value]

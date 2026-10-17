@@ -43,6 +43,10 @@ func eventRecord(e core.Event) model.MedicalRunEvent {
 }
 
 func (w *eventWriter) append(e core.Event) {
+	// Answer fragments are transient SSE data, never durable events or retries.
+	if e.Type == "answer_delta" {
+		return
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	row := eventRecord(e)
