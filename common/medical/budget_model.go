@@ -16,6 +16,7 @@ type budgetModel struct {
 	local   *int
 	main    bool
 	tools   []*schema.ToolInfo
+	refs    *sourceReferences
 }
 
 func (m *budgetModel) prepare(msgs []*schema.Message, opts []model.Option) ([]*schema.Message, []model.Option) {
@@ -28,6 +29,10 @@ func (m *budgetModel) prepare(msgs []*schema.Message, opts []model.Option) ([]*s
 	m.runtime.mu.Unlock()
 	out := append([]*schema.Message(nil), msgs...)
 	instruction := fmt.Sprintf("本Agent当前剩余工具预算：%d 次。已经得到充分结果时立即总结；不要重复调用相同工具和参数。每次模型回复最多调用一个工具。", remaining+memoryRemaining)
+	if m.refs != nil && m.refs.needsSearch() && remaining > 0 {
+		opts = append(append([]model.Option(nil), opts...), model.WithToolChoice(schema.ToolChoiceForced, "search_medical_knowledge"))
+		instruction += " 本次委派尚未检索，必须先调用 search_medical_knowledge；首次检索后自主决定是否继续检索。"
+	}
 	if m.main && m.runtime.deps.Memory != nil {
 		var available []*schema.ToolInfo
 		for _, info := range m.tools {

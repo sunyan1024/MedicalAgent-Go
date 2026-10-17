@@ -116,17 +116,17 @@ func (m *webScenario) Generate(_ context.Context, msgs []*schema.Message, _ ...m
 		}
 		return schema.AssistantMessage("已检索 [web_"+strings.Repeat("a", 64)+"] [web_invalid]", nil), nil
 	}
+	if n == 0 {
+		return call("search_medical_knowledge", `{"query":"本地医学资料"}`), nil
+	}
 	if m.disabled {
 		if !strings.Contains(msgs[0].Content, "当前联网搜索不可用") {
 			return nil, fmt.Errorf("missing unavailable instruction")
 		}
 		return schema.AssistantMessage(`{"findings":[],"evidence":[],"missing":["联网不可用"]}`, nil), nil
 	}
-	if n == 0 || m.loop {
+	if n == 1 || m.loop {
 		return call("search_web", `{"query":"医学资料"}`), nil
-	}
-	if m.fail && n == 1 {
-		return call("search_medical_knowledge", `{"query":"本地医学资料"}`), nil
 	}
 	if m.fail {
 		return schema.AssistantMessage(`{"findings":[],"evidence":[],"missing":["联网失败"]}`, nil), nil
@@ -156,7 +156,7 @@ func TestWebAgentScenarios(t *testing.T) {
 			}
 			r := NewRuntime(mode, deps)
 			answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("联网查询")})
-			if mode != "budget" && err != nil {
+			if (err != nil) != (mode != "success") {
 				t.Fatal(err)
 			}
 			if mode == "success" && (webCalls != 1 || strings.Contains(answer, "web_") || strings.TrimSpace(answer) != "已检索") {

@@ -15,7 +15,7 @@ func TestSearchWithTimeout(t *testing.T) {
 	_, err := searchWithTimeout(context.Background(), "医学资料", func(ctx context.Context, query string) ([]Source, error) {
 		searchCtx = ctx
 		deadline, ok := ctx.Deadline()
-		if !ok || deadline.Before(start.Add(29*time.Second)) || deadline.After(time.Now().Add(30*time.Second)) {
+		if !ok || deadline.Before(start.Add(59*time.Second)) || deadline.After(time.Now().Add(60*time.Second)) {
 			t.Fatalf("unexpected retrieval deadline: %v, present=%v", deadline, ok)
 		}
 		if query != "医学资料" {

@@ -74,6 +74,9 @@ func (m *scenarioModel) Generate(ctx context.Context, msgs []*schema.Message, _ 
 		m.childInput = append([]*schema.Message(nil), msgs...)
 	}
 	if m.childOutput != nil {
+		if n == 0 {
+			return call("search_medical_knowledge", `{"query":"格式测试证据"}`), nil
+		}
 		return schema.AssistantMessage(*m.childOutput, nil), nil
 	}
 	if n%3 == 0 {
@@ -96,7 +99,7 @@ func (m *scenarioModel) Stream(ctx context.Context, msgs []*schema.Message, opts
 }
 
 func TestAgentDelegationJSONFormats(t *testing.T) {
-	valid := "{\"findings\":[\"保留 ``` 和 ' 正文\"],\"evidence\":[],\"missing\":[]}"
+	valid := "{\"findings\":[\"保留 ``` 和 ' 正文\"],\"evidence\":[\"S1\"],\"missing\":[]}"
 	fence := func(s string) string { return "```json\n" + s + "\n```" }
 	for _, tc := range []struct {
 		name, output, wantError string
@@ -116,8 +119,10 @@ func TestAgentDelegationJSONFormats(t *testing.T) {
 		{name: "unknown source", output: fence(`{"findings":[],"evidence":["knowledge_unknown"],"missing":[]}`), wantError: "本次未检索到的来源"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := NewRuntime("json-formats", Dependencies{Model: &scenarioModel{withReport: true, childOutput: &tc.output}})
-			if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("解读报告并查询证据")}); err != nil {
+			r := NewRuntime("json-formats", Dependencies{Model: &scenarioModel{withReport: true, childOutput: &tc.output}, Search: func(context.Context, string) ([]Source, error) {
+				return []Source{{ID: "format", Content: "证据"}}, nil
+			}})
+			if _, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("解读报告并查询证据")}); (err != nil) != (tc.wantError != "") {
 				t.Fatal(err)
 			}
 			ends := 0
@@ -140,12 +145,12 @@ func TestAgentDelegationJSONFormats(t *testing.T) {
 				if e.Status != "completed" || e.Error != "" || !json.Valid([]byte(e.Output)) {
 					t.Fatalf("unexpected success event: %+v", e)
 				}
-				if tc.wantError == "" && e.Output != valid {
+				if tc.wantError == "" && ends == 1 && e.Output != valid {
 					t.Fatalf("JSON content changed: %s", e.Output)
 				}
 			}
-			if ends != 2 || r.used != 2 {
-				t.Fatalf("want exactly two delegations without retries: ends=%d used=%d", ends, r.used)
+			if ends != 2 || r.used != 3 {
+				t.Fatalf("want exactly two delegations and one search without retries: ends=%d used=%d", ends, r.used)
 			}
 		})
 	}
@@ -237,7 +242,7 @@ func TestBoundedToolsBudgetErrorsAndCancellation(t *testing.T) {
 func TestAgentLoopTerminates(t *testing.T) {
 	r := NewRuntime("loop", Dependencies{Model: &scenarioModel{loop: true}, Search: func(context.Context, string) ([]Source, error) { return nil, nil }})
 	answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("循环")})
-	if err == nil || r.used > 9 || !strings.Contains(answer, "未完成") {
+	if err == nil || r.used > 9 || !strings.Contains(answer, "证据不足") {
 		t.Fatalf("used=%d err=%v answer=%s", r.used, err, answer)
 	}
 }

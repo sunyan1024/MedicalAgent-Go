@@ -139,6 +139,9 @@ func TestAnswerFinalReplacesDeltasAndFallbacks(t *testing.T) {
 func TestAnswerStreamDoesNotExposeToolsOrChildJSON(t *testing.T) {
 	var deltas []string
 	r := NewRuntime("delegation-stream", Dependencies{
+		Search: func(context.Context, string) ([]Source, error) {
+			return []Source{{ID: "stream", Content: "证据"}}, nil
+		},
 		Model: &answerStreamModel{
 			delegate: true,
 			chunks:   []*schema.Message{schema.AssistantMessage("第一段", nil), schema.AssistantMessage("第二段", nil)},

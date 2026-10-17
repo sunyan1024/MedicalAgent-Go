@@ -88,7 +88,12 @@ type memoryScenario struct {
 
 func (m *memoryScenario) Generate(_ context.Context, msgs []*schema.Message, _ ...einomodel.Option) (*schema.Message, error) {
 	if strings.Contains(msgs[0].Content, "医学证据检索子 Agent") {
-		return schema.AssistantMessage(`{"findings":[],"evidence":[],"missing":[]}`, nil), nil
+		for _, msg := range msgs {
+			if msg.Role == schema.Tool {
+				return schema.AssistantMessage(supportedResult, nil), nil
+			}
+		}
+		return evidenceCall("search_medical_knowledge", m.step), nil
 	}
 	for _, msg := range msgs {
 		if strings.Contains(msg.Content, `"version":4`) && strings.Contains(msg.Content, "简洁中文") {
@@ -111,11 +116,13 @@ func (m *memoryScenario) Stream(ctx context.Context, msgs []*schema.Message, opt
 }
 func TestMemoryInjectionAndSixCallsThenAnswer(t *testing.T) {
 	m := &memoryScenario{}
-	r := NewRuntime("six", Dependencies{Model: m, Memory: &MemoryAccess{Read: func(context.Context) (MemoryDocument, error) {
+	r := NewRuntime("six", Dependencies{Model: m, Search: func(context.Context, string) ([]Source, error) {
+		return []Source{{ID: "memory-test", Content: "测试证据"}}, nil
+	}, Memory: &MemoryAccess{Read: func(context.Context) (MemoryDocument, error) {
 		return MemoryDocument{ContentMarkdown: "简洁中文", Version: 4}, nil
 	}}})
 	answer, err := r.Run(context.Background(), []*schema.Message{schema.UserMessage("查询")})
-	if err != nil || answer != "已完成" || !m.sawMemory || r.memoryUsed != 3 || r.used != 3 {
+	if err != nil || answer != "已完成" || !m.sawMemory || r.memoryUsed != 3 || r.used != 6 {
 		t.Fatal(answer, err, m, r.used, r.memoryUsed)
 	}
 }

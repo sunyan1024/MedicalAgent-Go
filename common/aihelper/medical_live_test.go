@@ -27,7 +27,7 @@ func TestMedicalLiveSmoke(t *testing.T) {
 	r := medical.NewRuntime("live-smoke", medical.Dependencies{Model: m.llm, Search: func(context.Context, string) ([]medical.Source, error) {
 		return []medical.Source{{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_1", Title: "合成软件测试资料", Content: "这是软件测试资料，没有医学事实。演示标识是 DEMO_OK。"}}, nil
 	}})
-	answer, err := r.Run(ctx, []*schema.Message{schema.UserMessage("这是软件演示验收，不是医疗咨询。请委派医学检索子Agent查询测试资料中的演示标识，并引用来源。")})
+	answer, err := r.Run(ctx, []*schema.Message{schema.UserMessage("请调用 medical_researcher 检索知识库中的合成测试资料，查询演示标识。必须先检索，依据工具返回的原文报告演示标识，不要自行推断或补充医学事实。")})
 	if err != nil {
 		for _, event := range r.Events {
 			if event.Type == "tool_end" || event.Type == "subagent_end" {
