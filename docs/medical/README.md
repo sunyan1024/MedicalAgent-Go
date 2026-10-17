@@ -129,6 +129,6 @@ timeoutSeconds = 15
 
 医疗 Agent 新生成的回答不要求输出来源 ID，后端在发送和保存前清理残留的内部来源标记。子 Agent 的 `evidence` ID 校验及执行轨迹中的来源 ID、标题、链接、内容保留；已有历史正文不迁移。此处理仅作用于医疗 Agent，不改变 RAG 分支或共用 Markdown 渲染。评测字段 `answer_source_marker_free` 和 `trace_source_count` 替代原 `citation_id_valid`，不代表医学结论正确性。
 
-## 用户长期记忆
+## 个人档案
 
-医疗 Agent 每轮自动注入当前用户的 Markdown 记忆，并可通过工具自主维护。菜单和聊天页的“长期记忆”入口支持预览、编辑和清空，使用版本检查避免并发覆盖。存储、接口、预算与验证说明见 [MEMORY.md](MEMORY.md)。
+医疗 Agent 每轮自动注入当前用户的 Markdown 记忆，并可通过工具自主维护。菜单和聊天页的“个人档案”入口支持预览、编辑和清空，使用版本检查避免并发覆盖。存储、接口、预算与验证说明见 [MEMORY.md](MEMORY.md)。

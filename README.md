@@ -8,7 +8,7 @@
 
 ## 医疗 Agent Demo
 
-新增医疗报告解读、症状咨询和医学知识检索，包含主 Agent、两个独立子 Agent、受限工具调用循环、MCP 检索、报告确认与运行轨迹。支持 [用户长期记忆](docs/medical/MEMORY.md)：MySQL 保存每用户一篇 Markdown，Agent 自主读写，页面支持预览、编辑和清空。
+新增医疗报告解读、症状咨询和医学知识检索，包含主 Agent、两个独立子 Agent、受限工具调用循环、MCP 检索、报告确认与运行轨迹。支持 [个人档案](docs/medical/MEMORY.md)：MySQL 保存每用户一篇 Markdown，Agent 自主读写，页面支持预览、编辑和清空。
 
 启动、资料导入、接口、评测与录屏脚本见 [医疗 Demo 文档](docs/medical/README.md)。公共知识库在界面显示为“医学知识库”，仍沿用原管理员权限；原 RAG 行为保留。
 

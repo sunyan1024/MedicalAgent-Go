@@ -7,6 +7,9 @@
       >
     </div>
     <p class="current-task">{{ currentTask }}</p>
+    <p v-if="hasRunningTool" class="waiting-hint" role="status">
+      工具执行可能需要一些时间，请耐心等待。
+    </p>
     <div class="card-bottom">
       <span
         >{{ stepCount(currentEvents) }} 个调用步骤 <span class="separator">·</span>
@@ -44,6 +47,9 @@
             >
             <h3>{{ displayQuestion || '发送问题，开启一次 Agent 协作' }}</h3>
             <p>{{ stepCount(displayEvents) }} 个调用步骤 · {{ sources.length }} 个来源</p>
+            <p v-if="!selectedRun && hasRunningTool" class="waiting-hint" role="status">
+              工具执行可能需要一些时间，请耐心等待。
+            </p>
           </div>
           <div v-if="parseError" class="notice error" role="alert">
             {{ parseError }}<button @click="loadRuns">刷新记录</button>
@@ -223,6 +229,15 @@ export default {
         ? props.requestStatus
         : 'unknown'
     })
+    const hasRunningTool = computed(() => {
+      if (!props.busy || currentStatus.value !== 'running') return false
+      const ended = new Set(
+        currentEvents.value.filter((event) => event.type === 'tool_end').map((event) => event.parentId)
+      )
+      return currentEvents.value.some(
+        (event) => event.type === 'tool_start' && !ended.has(event.id)
+      )
+    })
     const selectedRun = computed(() => runs.value.find((r) => r.runId === selectedId.value))
     const displayParsed = computed(() =>
       selectedRun.value ? parseEvents(selectedRun.value.eventsJson) : currentParsed.value
@@ -322,6 +337,7 @@ export default {
       currentEvents,
       currentStatus,
       currentTask,
+      hasRunningTool,
       selectedRun,
       displayEvents,
       displayStatus,
@@ -418,6 +434,12 @@ export default {
   font-size: 12px;
   color: var(--app-text-muted);
   flex-wrap: wrap;
+}
+.waiting-hint {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
 }
 .separator {
   padding: 0 6px;

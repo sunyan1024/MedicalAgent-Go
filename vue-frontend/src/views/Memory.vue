@@ -1,10 +1,10 @@
 <template>
   <main class="memory-page">
     <header class="memory-header">
-      <div><el-button @click="$router.push('/menu')">返回菜单</el-button><h1>我的长期记忆</h1></div>
-      <el-button type="primary" :disabled="!loaded || loading" @click="openEditor">编辑记忆</el-button>
+      <div><el-button @click="$router.push('/menu')">返回菜单</el-button><h1>个人档案</h1></div>
+      <el-button type="primary" :disabled="!loaded || loading" @click="openEditor">编辑个人档案</el-button>
     </header>
-    <p class="muted">医疗 Agent 会跨会话使用这份记忆，并在对话中维护你的回答偏好和健康背景。你也可以在这里更正或删除内容。</p>
+    <p class="muted">医疗 Agent 会跨会话使用这份个人档案，并在对话中维护你的回答偏好和健康背景。你也可以在这里更正或删除内容。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <div class="memory-meta">
       <span>更新时间：{{ updatedAt }}</span>
@@ -12,10 +12,10 @@
     </div>
     <section v-loading="loading" class="memory-document">
       <article v-if="doc.contentMarkdown" class="markdown-body" v-html="renderMarkdown(doc.contentMarkdown)"></article>
-      <el-empty v-else-if="loaded" description="还没有长期记忆，可以在聊天中告诉 Agent，或点击编辑添加。" />
+      <el-empty v-else-if="loaded" description="还没有个人档案，可以在聊天中告诉 Agent，或点击编辑添加。" />
     </section>
-    <p class="muted">删除或清空此文档只影响长期记忆，原聊天和执行记录仍然保留。</p>
-    <el-drawer v-model="editing" title="编辑长期记忆" size="min(720px, 100%)" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" :before-close="closeEditor">
+    <p class="muted">删除或清空此文档只影响个人档案，原聊天和执行记录仍然保留。</p>
+    <el-drawer v-model="editing" title="编辑个人档案" size="min(720px, 100%)" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving" :before-close="closeEditor">
       <p class="muted">请区分本人和家属。建议使用“回答偏好”“本人健康背景”“家属情况”三个章节。</p>
       <el-alert v-if="saveError" :title="saveError" type="error" :closable="false" show-icon />
       <div v-if="conflict" class="conflict-panel">
@@ -27,10 +27,10 @@
         <pre>{{ doc.contentMarkdown || '（空文档）' }}</pre>
         <el-checkbox v-model="merged">已核对并合并最新内容</el-checkbox>
       </details>
-      <el-input v-model="draft" type="textarea" :rows="20" :disabled="saving" aria-label="记忆 Markdown 文档" />
+      <el-input v-model="draft" type="textarea" :rows="20" :disabled="saving" aria-label="个人档案 Markdown 文档" />
       <p :class="{ invalid: count > 8000 }">{{ count }} / 8000 字符</p>
       <template #footer>
-        <el-button type="danger" plain :disabled="saving || conflict || mergeRequired || loading" @click="clear">清空记忆</el-button>
+        <el-button type="danger" plain :disabled="saving || conflict || mergeRequired || loading" @click="clear">清空个人档案</el-button>
         <el-button :disabled="saving" @click="editing = false">取消</el-button>
         <el-button type="primary" :loading="saving" :disabled="count > 8000 || conflict || (mergeRequired && !merged) || loading" @click="save(draft)">保存</el-button>
       </template>
@@ -72,7 +72,7 @@ async function load() {
     loaded.value = true
     return true
   } catch (e) {
-    error.value = getApiErrorMessage(e, '读取记忆失败，请重试')
+    error.value = getApiErrorMessage(e, '读取个人档案失败，请重试')
     return false
   } finally { loading.value = false }
 }
@@ -102,7 +102,7 @@ async function save(content) {
   try {
     doc.value = (await api.put('/memory', { contentMarkdown: content, expectedVersion: expectedVersion.value })).data
     editing.value = false
-    ElMessage.success(content ? '记忆已保存' : '长期记忆已清空')
+    ElMessage.success(content ? '个人档案已保存' : '个人档案已清空')
   } catch (e) {
     conflict.value = e.response?.status === 409
     saveError.value = getApiErrorMessage(e, '保存失败，请重试')
@@ -110,7 +110,7 @@ async function save(content) {
 }
 async function clear() {
   try {
-    await ElMessageBox.confirm('清空长期记忆？原聊天和执行记录仍会保留。', '清空记忆', { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' })
+    await ElMessageBox.confirm('清空个人档案？原聊天和执行记录仍会保留。', '清空个人档案', { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' })
   } catch { return }
   draft.value = ''
   await save('')

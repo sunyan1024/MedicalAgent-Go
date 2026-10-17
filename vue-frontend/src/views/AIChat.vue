@@ -18,7 +18,7 @@
     <div class="chat-section">
       <div class="top-bar">
         <button class="back-btn" @click="$router.push('/menu')">← 返回</button>
-        <button class="back-btn" @click="$router.push('/memory')">长期记忆</button>
+        <button class="back-btn" @click="$router.push('/memory')">个人档案</button>
         <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
         <label for="modelType">选择模型：</label>
         <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">
@@ -47,7 +47,11 @@
             <button v-if="message.role === 'assistant'" class="tts-btn" @click="playTTS(message.content)">🔊</button>
             <span v-if="message.meta && message.meta.status === 'streaming'" class="streaming-indicator"> ··</span>
           </div>
-          <div class="message-content" v-html="renderMarkdown(message.content)"></div>
+          <p v-if="message === pendingMedicalMessage && loading && medicalRequestStatus === 'running' && message.meta?.status === 'streaming' && !message.content"
+            class="agent-waiting-hint" role="status">
+            Agent 正在处理，分析和工具调用可能需要一些时间，请耐心等待。
+          </p>
+          <div v-else class="message-content" v-html="renderMarkdown(message.content)"></div>
         </div>
       </div>
 
@@ -100,6 +104,7 @@ export default {
     const medicalRequestStatus = ref('')
     const medicalReportId = ref('')
     const medicalReportReady = ref(true)
+    const pendingMedicalMessage = ref(null)
     let medicalAbort = null
     const cancelMedical = () => medicalAbort?.abort()
     const isStreaming = ref(false)
@@ -601,6 +606,7 @@ export default {
 
     async function handleMedical(question) {
       const assistant = { role: 'assistant', content: '', meta: { status: 'streaming' } }
+      pendingMedicalMessage.value = assistant
       currentMessages.value.push(assistant)
       medicalEvents.value = []
       medicalQuestion.value = question; medicalRequestStatus.value = 'running'
@@ -622,6 +628,8 @@ export default {
         currentMessages.value = [...currentMessages.value]
       }
       try {
+        await nextTick()
+        scrollToBottom()
         if (!isStreaming.value) {
           const { data } = await api.post(isNew ? '/AI/chat/send-new-session' : '/AI/chat/send', body, { signal: medicalAbort.signal })
           if (data.status_code !== 1000) throw new Error(data.status_msg || '发送失败')
@@ -660,6 +668,7 @@ export default {
         if (!assistant.content) assistant.content = medicalAbort.signal.aborted ? '已停止本次回答。' : (e.message || '运行失败')
         if (!medicalAbort.signal.aborted) ElMessage.error(getApiErrorMessage(e, '运行失败'))
       } finally {
+        pendingMedicalMessage.value = null
         if (!tempSession.value && sessions.value[currentSessionId.value]) {
           sessions.value[currentSessionId.value].messages = [...currentMessages.value]
           sessions.value[currentSessionId.value].updated_at = new Date()
@@ -902,6 +911,7 @@ export default {
 
     // expose to template
     return {
+      pendingMedicalMessage,
       medicalEvents, medicalQuestion, medicalRequestStatus, medicalReportId, medicalReportReady, cancelMedical,
       // sessions: computed(() => Object.values(sessions.value)),
       sortedSessions,
@@ -1082,6 +1092,12 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.agent-waiting-hint {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--app-text-muted);
 }
 
 .message {
