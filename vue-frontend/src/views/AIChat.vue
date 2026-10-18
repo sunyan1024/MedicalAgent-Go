@@ -22,10 +22,12 @@
         <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
         <label for="modelType">选择模型：</label>
         <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">
-          <option value="ollama">Ollama</option>
-          <option value="qwen">阿里百炼</option>
-          <option value="rag">阿里百炼 RAG</option>
-          <option value="mcp">阿里百炼 MCP</option>
+          <!-- 暂时隐藏 ollama 本地部署，后端能力保留。 -->
+          <!-- <option value="ollama">Ollama</option> -->
+          <option value="qwen">AI对话</option>
+          <option value="rag">RAG</option>
+          <!-- 暂时隐藏 MCP 选项，后端能力保留。 -->
+          <!-- <option value="mcp">阿里百炼 MCP</option> -->
           <option value="medical_agent">医疗 Agent</option>
         </select>
         <label for="streamingMode" style="margin-left: 20px;">
@@ -34,7 +36,7 @@
         </label>
       </div>
 
-      <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与企业知识库</p>
+      <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与医学知识库</p>
 
       <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading" :question="medicalQuestion" :request-status="medicalRequestStatus"
         @report="medicalReportId = $event" @ready="medicalReportReady = $event" @example="inputMessage = $event" />

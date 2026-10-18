@@ -1,6 +1,6 @@
 <template>
   <section class="medical-panel">
-    <div class="medical-heading"><strong>医疗信息助理</strong><span>报告解读 · 症状咨询 · 医学知识检索</span></div>
+    <div class="medical-heading"><strong>医疗助理</strong><span>症状咨询 · 医学知识检索 · 联网搜索 · 报告解读</span></div>
     <p>用于辅助理解和就医准备，不能替代医生诊断。请先核对报告识别结果。</p>
     <div class="medical-actions">
       <label class="upload-button">上传报告<input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" :disabled="busy || parsing" @change="uploadFile" /></label>

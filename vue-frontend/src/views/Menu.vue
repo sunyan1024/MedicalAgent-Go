@@ -13,7 +13,7 @@
           <div class="card-content">
             <el-icon size="48" color="#409eff"><ChatDotRound /></el-icon>
             <h3>医疗 Agent</h3>
-            <p>报告解读、症状咨询与医学证据检索</p>
+            <p>症状咨询、医学知识检索、联网搜索、报告解读</p>
           </div>
         </el-card>
         <el-card class="menu-item" @click="$router.push('/knowledge-base')">
