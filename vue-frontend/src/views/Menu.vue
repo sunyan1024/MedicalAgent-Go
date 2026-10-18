@@ -1,14 +1,11 @@
 <template>
   <div class="menu-container">
     <el-header class="header">
-      <h1>AI应用平台 <el-tag v-if="currentUser?.role === 'admin'">管理员</el-tag></h1>
+      <h1>AI医疗助理 <el-tag v-if="currentUser?.role === 'admin'">管理员</el-tag></h1>
       <el-button type="danger" @click="handleLogout">退出登录</el-button>
     </el-header>
     <el-main class="main">
       <div class="menu-grid">
-        <el-card class="menu-item" @click="$router.push('/memory')">
-          <div class="card-content"><el-icon size="48" color="#8b5cf6"><Document /></el-icon><h3>个人档案</h3><p>查看和编辑 Agent 记住的偏好与健康背景</p></div>
-        </el-card>
         <el-card class="menu-item" @click="$router.push('/ai-chat')">
           <div class="card-content">
             <el-icon size="48" color="#409eff"><ChatDotRound /></el-icon>
@@ -21,6 +18,13 @@
             <el-icon size="48" color="#e6a23c"><Document /></el-icon>
             <h3>个人知识库</h3>
             <p>管理仅本人可访问的问答文档</p>
+          </div>
+        </el-card>
+        <el-card class="menu-item" @click="$router.push('/memory')">
+          <div class="card-content">
+            <el-icon size="48" color="#8b5cf6"><Document /></el-icon>
+            <h3>个人档案</h3>
+            <p>查看和编辑 Agent 记住的偏好与健康背景</p>
           </div>
         </el-card>
       </div>
