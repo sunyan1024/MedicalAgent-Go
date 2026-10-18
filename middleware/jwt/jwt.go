@@ -72,13 +72,12 @@ func Auth() gin.HandlerFunc {
 }
 
 func maskToken(token string) string {
-	return token
-	// const visibleChars = 20
-	// if len(token) <= visibleChars*2 {
-	// 	return "<redacted>"
-	// }
+	const visibleChars = 20
+	if len(token) <= visibleChars*2 {
+		return "<redacted>"
+	}
 
-	// return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
+	return token[:visibleChars] + "..." + token[len(token)-visibleChars:]
 }
 
 // Auth loads the current role from the database for every request.
