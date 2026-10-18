@@ -11,3 +11,19 @@ node_modules/
 
 .DS_Store
 Thumbs.db
+
+# Local credentials and environment files
+/config/config.toml
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Generated binaries, Python caches and evaluation reports
+/mcp-server/GoAI-mcp
+__pycache__/
+*.py[cod]
+/eval/rag_eval_result.json
+/eval/medical/report.json
+/eval/medical/report.txt

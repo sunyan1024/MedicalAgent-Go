@@ -2,6 +2,18 @@
 
 当前项目版本：`v0.3`。
 
+## 本地配置
+
+首次运行前复制配置模板：
+
+```sh
+cp config/config.example.toml config/config.toml
+```
+
+在 `config/config.toml` 中填写本地服务连接信息、模型 API Key 和随机生成的 JWT 签名密钥，再启动项目。管理员配置三项可全部留空。此文件已加入 `.gitignore`，请勿提交真实凭据。
+
+前端依赖通过 `cd vue-frontend && npm ci` 安装，`node_modules` 不随源码发布。RAG 评测脚本需要通过环境变量 `GOAI_TOKEN` 或 `--token` 提供登录 JWT，不包含默认令牌。
+
 ## 日志文件
 
 主 Go 后端日志同时输出到终端和工作目录下的 `logs/YYYY-MM-DD.log`，目录自动创建。标准业务日志、GORM 日志和 Gin 请求、调试及 Recovery 错误日志共用每日文件；终端保留颜色，文件为带时间戳的纯文本。

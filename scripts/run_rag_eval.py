@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--token",
         default=os.getenv("GOAI_TOKEN", DEFAULT_GOAI_TOKEN),
-        help=f"JWT token. Defaults to GOAI_TOKEN or {DEFAULT_GOAI_TOKEN}.",
+        help="JWT token. Set GOAI_TOKEN or pass --token; no token is stored in the script.",
     )
     parser.add_argument(
         "--batch-size",

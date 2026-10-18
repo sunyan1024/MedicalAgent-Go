@@ -1,0 +1,97 @@
+# Copy to config/config.toml and fill in local credentials. Never commit the local config.
+[mainConfig]
+appName = "GoAI"
+host = "127.0.0.1"
+port = 9090
+
+[adminConfig]
+# 三项全部留空时跳过初始化；填齐后启动创建管理员，已有账号不会重置密码。
+uid = ""
+email = ""
+password = ""
+
+[emailConfig]
+authcode = ""
+email = ""
+
+[redisConfig]
+host = "127.0.0.1"
+port = 6379
+password = ""
+db = 0
+
+[mysqlConfig]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = ""
+databaseName = "GoAI"
+charset = "utf8mb4"
+
+[rabbitmqConfig]
+host = "127.0.0.1"
+port = 5672
+username = "guest"
+password = ""
+vhost = "/"
+
+[jwtConfig]
+expire_duration = 168
+issuer = "sy"
+subject = "GoAI"
+key = ""
+
+[QwenConfig]
+api_key = ""
+baseurl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+modelname = "qwen3.7-flash-2026-07-15"
+enable_thinking = false
+
+[ragModelConfig]
+api_key = ""
+baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+chatModelName = "qwen3.7-flash"
+embeddingModel = "qwen3.7-text-embedding-flash"
+dimension = 1024
+docDir = "./docs"
+enable_thinking = false
+queryRewriteEnabled = true
+queryRewriteModelName = "qwen3.8-27b"
+queryRewriteTimeoutSeconds = 8
+hybridRetrievalEnabled = true
+vectorTopK = 10
+keywordTopK = 10
+rrfK = 60
+rerankEnabled = true
+rerankModel = "qwen3.7-text-rerank"
+rerankBaseUrl = "https://dashscope.aliyuncs.com"
+rerankCandidateTopK = 50
+rerankTopK = 5
+rerankTimeoutSeconds = 15
+ocrAccessToken = ""
+ocrTimeoutSeconds = 600
+ocrModel = "PaddleOCR-VL-1.6"
+judgeModelName = "qwen3.8-max"
+judgeBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+judgeApiKey = ""
+judgeTimeoutSeconds = 30
+judgeThreshold = 4
+
+[OllamaConfig]
+baseurl = "http://127.0.0.1:11434"
+modelname = "deepseek-r1:14b"
+enable_thinking = false
+
+[ttsConfig]
+baseurl = "https://aip.baidubce.com/rpc/2.0/tts/v1"
+tokenurl = "https://aip.baidubce.com/oauth/2.0/token"
+client_id = ""
+client_secret = ""
+
+[mcpConfig]
+baseUrl = "http://localhost:8081/mcp"
+
+[tavilyConfig]
+enabled = true
+apiKey = ""
+timeoutSeconds = 30
