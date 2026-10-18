@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-container">
+  <div class="ai-chat-container" :style="viewportStyle">
     <!-- 左侧会话列表 -->
     <div class="session-list">
       <div class="session-list-header">
@@ -14,33 +14,50 @@
       </ul>
     </div>
 
+    <el-drawer v-model="sessionsOpened" title="会话列表" direction="ltr" size="min(320px, 90vw)" append-to-body>
+      <button class="new-chat-btn" :disabled="loading || savingModel" @click="createNewSession">＋ 新聊天</button>
+      <ul class="session-list-ul mobile-session-list">
+        <li v-for="session in sortedSessions" :key="session.id">
+          <button :class="['session-item', { active: currentSessionId === session.id }]"
+            :disabled="loading || savingModel" @click="switchSession(session.id)">
+            {{ session.title || `会话 ${session.id}` }}
+          </button>
+        </li>
+      </ul>
+    </el-drawer>
+
     <!-- 右侧聊天区域 -->
     <div class="chat-section">
       <div class="top-bar">
         <button class="back-btn" @click="$router.push('/menu')">← 返回</button>
-        <button class="back-btn" @click="$router.push('/memory')">个人档案</button>
-        <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
-        <label for="modelType">选择模型：</label>
-        <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">
-          <!-- 暂时隐藏 ollama 本地部署，后端能力保留。 -->
-          <!-- <option value="ollama">Ollama</option> -->
-          <option value="qwen">AI对话</option>
-          <option value="rag">RAG</option>
-          <!-- 暂时隐藏 MCP 选项，后端能力保留。 -->
-          <!-- <option value="mcp">阿里百炼 MCP</option> -->
-          <option value="medical_agent">医疗 Agent</option>
-        </select>
-        <label for="streamingMode" style="margin-left: 20px;">
-          <input type="checkbox" id="streamingMode" v-model="isStreaming" />
-          流式响应
-        </label>
+        <button class="back-btn mobile-control" @click="sessionsOpened = true">会话列表</button>
+        <button class="back-btn mobile-control options-toggle" :aria-expanded="optionsOpened" aria-controls="chat-options"
+          @click="optionsOpened = !optionsOpened">{{ optionsOpened ? '收起设置' : '聊天设置' }}</button>
+        <div id="chat-options" :class="['chat-options', { 'is-open': optionsOpened }]">
+          <button class="back-btn" @click="$router.push('/memory')">个人档案</button>
+          <button class="sync-btn" @click="syncHistory" :disabled="!currentSessionId || tempSession">同步历史数据</button>
+          <label for="modelType">选择模型：</label>
+          <select id="modelType" v-model="selectedModel" class="model-select" @change="saveSessionModel" :disabled="loading || savingModel">
+            <!-- 暂时隐藏 ollama 本地部署，后端能力保留。 -->
+            <!-- <option value="ollama">Ollama</option> -->
+            <option value="qwen">AI对话</option>
+            <option value="rag">RAG</option>
+            <!-- 暂时隐藏 MCP 选项，后端能力保留。 -->
+            <!-- <option value="mcp">阿里百炼 MCP</option> -->
+            <option value="medical_agent">医疗 Agent</option>
+          </select>
+          <label for="streamingMode" class="streaming-option">
+            <input type="checkbox" id="streamingMode" v-model="isStreaming" />
+            流式响应
+          </label>
+        </div>
       </div>
 
       <p v-if="selectedModel === 'rag'" style="padding: 0 16px; color: var(--app-text-muted);">检索个人与医学知识库</p>
 
       <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading" :question="medicalQuestion" :request-status="medicalRequestStatus"
         @report="medicalReportId = $event" @ready="medicalReportReady = $event" @example="inputMessage = $event" />
-      <button v-if="loading && selectedModel === 'medical_agent'" @click="cancelMedical">停止本次回答</button>
+      <button v-if="loading && selectedModel === 'medical_agent'" class="cancel-medical" @click="cancelMedical">停止本次回答</button>
       <div class="chat-messages" ref="messagesRef">
         <div v-for="(message, index) in currentMessages" :key="index"
           :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']">
@@ -99,6 +116,20 @@ export default {
     const loading = ref(false)
     const messagesRef = ref(null)
     const messageInput = ref(null)
+    const sessionsOpened = ref(false)
+    const optionsOpened = ref(false)
+    const viewportStyle = ref({})
+    // Mobile keyboards can resize only the visual viewport, leaving 100vh unchanged.
+    const updateViewport = () => {
+      const viewport = window.visualViewport
+      if (viewport && viewport.scale !== 1) return
+      const height = viewport?.height || window.innerHeight
+      viewportStyle.value = {
+        '--chat-viewport-height': `${height}px`,
+        '--chat-viewport-top': `${viewport?.offsetTop || 0}px`,
+        '--chat-panel-max-height': height < 500 ? '26%' : '38%'
+      }
+    }
     const selectedModel = ref('medical_agent')
     const savingModel = ref(false)
     const medicalEvents = ref([])
@@ -485,6 +516,7 @@ export default {
 
     const createNewSession = () => {
       if (loading.value || savingModel.value) return
+      sessionsOpened.value = false
       medicalEvents.value = []
       medicalQuestion.value = ''; medicalRequestStatus.value = ''
       currentSessionId.value = 'temp'
@@ -498,6 +530,7 @@ export default {
 
     const switchSession = async (sessionId) => {
       if (!sessionId || loading.value || savingModel.value) return
+      sessionsOpened.value = false
       medicalEvents.value = []
       medicalQuestion.value = ''; medicalRequestStatus.value = ''
       currentSessionId.value = String(sessionId)
@@ -903,10 +936,17 @@ export default {
     }
 
     onMounted(() => {
+      updateViewport()
+      window.addEventListener('resize', updateViewport)
+      window.visualViewport?.addEventListener('resize', updateViewport)
+      window.visualViewport?.addEventListener('scroll', updateViewport)
       loadSessions()
     })
 
     onUnmounted(() => {
+      window.removeEventListener('resize', updateViewport)
+      window.visualViewport?.removeEventListener('resize', updateViewport)
+      window.visualViewport?.removeEventListener('scroll', updateViewport)
       cancelMedical()
       isRecording.value = false
       cleanupRecorder()
@@ -914,6 +954,7 @@ export default {
 
     // expose to template
     return {
+      sessionsOpened, optionsOpened, viewportStyle,
       pendingMedicalMessage,
       medicalEvents, medicalQuestion, medicalRequestStatus, medicalReportId, medicalReportReady, cancelMedical,
       // sessions: computed(() => Object.values(sessions.value)),
@@ -948,6 +989,7 @@ export default {
 <style scoped>
 .ai-chat-container {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   background: var(--app-bg);
   overflow: hidden;
@@ -956,7 +998,8 @@ export default {
 
 .session-list {
   width: 280px;
-  height: 100vh;
+  flex-shrink: 0;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1005,7 +1048,16 @@ export default {
   transition: background 0.18s ease, color 0.18s ease;
   color: var(--app-text);
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
+
+.mobile-control { display: none; }
+.mobile-session-list { margin-top: 12px; }
+.mobile-session-list .session-item { width: 100%; text-align: left; border: 0; background: transparent; font: inherit; }
+.mobile-session-list .session-item.active { background: var(--app-primary-soft); }
+.chat-options { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.streaming-option { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cancel-medical { flex-shrink: 0; padding: 6px; }
 
 .session-item.active {
   background: var(--app-primary-soft);
@@ -1028,6 +1080,8 @@ export default {
 }
 
 .top-bar {
+  flex-shrink: 0;
+  position: relative;
   min-height: 64px;
   background: var(--app-surface);
   color: var(--app-text);
@@ -1104,6 +1158,7 @@ export default {
 }
 
 .message {
+  flex-shrink: 0;
   max-width: 70%;
   padding: 12px 14px;
   border-radius: var(--app-radius);
@@ -1239,6 +1294,7 @@ export default {
 
 /* input area */
 .chat-input {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -1325,35 +1381,50 @@ export default {
   cursor: not-allowed;
 }
 
-@media (max-width: 480px) {
-  .chat-input textarea {
-    grid-column: 1 / -1;
-  }
-
-  .voice-btn {
-    grid-column: 2;
-  }
-}
-
-@media (max-width: 820px) {
+@media (max-width: 820px), (max-height: 500px) and (pointer: coarse) {
   .ai-chat-container {
-    flex-direction: column;
+    position: fixed;
+    top: var(--chat-viewport-top, 0px);
+    left: 0;
+    width: 100%;
+    height: var(--chat-viewport-height, 100dvh);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
-  .session-list {
-    width: 100%;
-    height: auto;
-    max-height: 220px;
-    border-right: none;
-    border-bottom: 1px solid var(--app-border-soft);
-  }
+  .session-list { display: none; }
+  .mobile-control { display: inline-block; }
+  .options-toggle { margin-left: auto; }
 
   .top-bar {
-    align-items: flex-start;
+    min-height: 52px;
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    gap: 8px;
+    flex-wrap: nowrap;
   }
 
-  .message {
-    max-width: 88%;
+  .chat-options {
+    display: none;
+    position: absolute;
+    z-index: 10;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 12px;
+    max-height: 60dvh;
+    overflow-y: auto;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--app-border);
+    box-shadow: var(--app-shadow);
   }
+  .chat-options.is-open { display: flex; }
+  .model-select { font-size: 16px; }
+  .chat-messages { padding: 12px; gap: 12px; overscroll-behavior-y: contain; }
+  .message { max-width: 94%; }
+  .chat-input { padding: 8px 10px max(8px, env(safe-area-inset-bottom)); gap: 6px; }
+  .chat-input textarea { padding: 10px; font-size: 16px; }
+  .voice-btn { min-width: 40px; height: 44px; padding: 0 8px; }
+  .send-btn { height: 44px; padding: 0 10px; }
 }
 </style>

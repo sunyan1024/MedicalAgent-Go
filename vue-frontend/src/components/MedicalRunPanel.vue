@@ -644,9 +644,10 @@ h3 {
   background: var(--app-surface-subtle);
   padding: 10px;
 }
-@media (max-width: 480px) {
+@media (max-width: 820px), (max-height: 500px) and (pointer: coarse) {
   .run-card {
-    padding: 12px;
+    margin-top: 8px;
+    padding: 8px;
   }
   .card-top {
     gap: 6px;
@@ -654,8 +655,12 @@ h3 {
   .card-title {
     gap: 6px;
   }
+  .agent-mark { width: 24px; height: 24px; }
+  .current-task { margin: 6px 0; }
+  .card-bottom { gap: 6px; }
   .card-actions {
     width: 100%;
+    gap: 6px;
   }
   .card-actions button {
     flex: 1;
