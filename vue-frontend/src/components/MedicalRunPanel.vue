@@ -1,25 +1,28 @@
 <template>
   <section class="run-card" aria-label="Agent 运行概览">
-    <div class="card-top">
-      <div class="card-title"><span class="agent-mark">A</span><strong>Agent 执行轨迹</strong></div>
-      <span :class="['status-pill', currentStatus]"
-        >{{ statusIcon(currentStatus) }} {{ statusText(currentStatus) }}</span
-      >
-    </div>
-    <p class="current-task">{{ currentTask }}</p>
-    <p v-if="hasRunningTool" class="waiting-hint" role="status">
-      工具执行可能需要一些时间，请耐心等待。
-    </p>
-    <div class="card-bottom">
-      <span
-        >{{ stepCount(currentEvents) }} 个调用步骤 <span class="separator">·</span>
-        {{ traceSources(currentEvents).length }} 个来源</span
-      >
-      <div class="card-actions">
-        <button @click="openCurrent">查看执行详情 <span aria-hidden="true">↗</span></button
-        ><button @click="openHistory">历史记录</button>
+    <details class="run-overview">
+      <summary class="card-top">
+        <span class="card-title"><span class="agent-mark">A</span><strong>Agent 执行轨迹</strong></span>
+        <span :class="['status-pill', currentStatus]"
+          >{{ statusIcon(currentStatus) }} {{ statusText(currentStatus) }}</span
+        >
+        <span class="overview-chevron" aria-hidden="true">⌄</span>
+      </summary>
+      <p class="current-task">{{ currentTask }}</p>
+      <p v-if="hasRunningTool" class="waiting-hint" role="status">
+        工具执行可能需要一些时间，请耐心等待。
+      </p>
+      <div class="card-bottom">
+        <span
+          >{{ stepCount(currentEvents) }} 个调用步骤 <span class="separator">·</span>
+          {{ traceSources(currentEvents).length }} 个来源</span
+        >
+        <div class="card-actions">
+          <button @click="openCurrent">查看执行详情 <span aria-hidden="true">↗</span></button
+          ><button @click="openHistory">历史记录</button>
+        </div>
       </div>
-    </div>
+    </details>
     <el-drawer
       v-model="opened"
       title="Agent 运行详情"
@@ -390,6 +393,20 @@ export default {
 .card-title {
   justify-content: flex-start;
 }
+.card-top {
+  cursor: pointer;
+  list-style: none;
+  min-height: 32px;
+}
+.card-top::-webkit-details-marker { display: none; }
+.card-top:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.card-top .status-pill { margin-left: auto; }
+.overview-chevron { flex-shrink: 0; color: var(--app-text-muted); }
+.run-overview[open] .overview-chevron { transform: rotate(180deg); }
 .agent-mark {
   display: grid;
   place-items: center;
