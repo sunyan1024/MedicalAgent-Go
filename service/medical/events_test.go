@@ -208,6 +208,12 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			if terminalFailure && run.Status != "running" {
 				t.Fatal("terminal transaction did not roll back", run.Status)
 			}
+			if !terminalFailure {
+				var answer model.Message
+				if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, false).First(&answer).Error; err != nil || answer.DurationMS < 0 {
+					t.Fatalf("partial/disconnected answer duration missing: %+v %v", answer, err)
+				}
+			}
 			if !terminalFailure && run.Answer != finalAnswer {
 				t.Fatal("final answer not saved after disconnect")
 			}

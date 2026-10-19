@@ -37,3 +37,12 @@ export function createReplyTimer({
     },
   }
 }
+
+// Historical assistant messages use the persisted server duration.
+export function restoreHistoryMessage(item) {
+  const message = { role: item.is_user ? 'user' : 'assistant', content: item.content }
+  if (!item.is_user) {
+    message.meta = { timing: { elapsedMs: item.duration_ms, running: false } }
+  }
+  return message
+}

@@ -334,7 +334,7 @@ func GetChatHistory(uid string, sessionID string) ([]model.History, code.Code) {
 		}
 		history := make([]model.History, 0, len(records))
 		for _, msg := range records {
-			history = append(history, model.History{IsUser: msg.IsUser, Content: msg.Content})
+			history = append(history, model.History{IsUser: msg.IsUser, Content: msg.Content, DurationMS: msg.DurationMS})
 		}
 		return history, code.CodeSuccess
 	}
@@ -345,8 +345,9 @@ func GetChatHistory(uid string, sessionID string) ([]model.History, code.Code) {
 	// 转换model.Message为model.History（直接使用消息的IsUser字段）
 	for _, msg := range messages {
 		history = append(history, model.History{
-			IsUser:  msg.IsUser,
-			Content: msg.Content,
+			IsUser:     msg.IsUser,
+			Content:    msg.Content,
+			DurationMS: msg.DurationMS,
 		})
 	}
 

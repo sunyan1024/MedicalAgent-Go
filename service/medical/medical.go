@@ -210,7 +210,9 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		msgs = append(msgs, schema.SystemMessage("当前会话有用户已确认的报告，可委派 report_analyst 读取。报告内容不得从历史推测。"))
 	}
 	msgs = append(msgs, schema.UserMessage(req.Question))
+	startedAt := time.Now()
 	run.Answer, err = runtime.Run(ctx, msgs)
+	durationMS := time.Since(startedAt).Milliseconds()
 	run.Status = "completed"
 	if err != nil {
 		run.Status = "partial"
@@ -223,7 +225,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		if e := tx.Save(run).Error; e != nil {
 			return e
 		}
-		messages := []model.Message{{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, {SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false}}
+		messages := []model.Message{{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, {SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false, DurationMS: durationMS}}
 		if e := tx.Create(&messages).Error; e != nil {
 			return e
 		}

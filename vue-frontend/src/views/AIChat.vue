@@ -103,7 +103,7 @@ import { ElMessage } from 'element-plus'
 import { renderMarkdown } from '../utils/markdown'
 import api, { getApiErrorMessage } from '../utils/api'
 import MedicalPanel from '../components/MedicalPanel.vue'
-import { createReplyTimer, formatReplyDuration } from '../utils/replyTimer.mjs'
+import { createReplyTimer, formatReplyDuration, restoreHistoryMessage } from '../utils/replyTimer.mjs'
 
 export default {
   name: 'AIChat',
@@ -545,10 +545,7 @@ export default {
         try {
           const response = await api.post('/AI/chat/history', { sessionId: currentSessionId.value })
           if (response.data && response.data.status_code === 1000 && Array.isArray(response.data.history)) {
-            const messages = response.data.history.map(item => ({
-              role: item.is_user ? 'user' : 'assistant',
-              content: item.content
-            }))
+            const messages = response.data.history.map(restoreHistoryMessage)
             sessions.value[sessionId].messages = messages
           }
         } catch (err) {
@@ -570,10 +567,7 @@ export default {
       try {
         const response = await api.post('/AI/chat/history', { sessionId: currentSessionId.value })
         if (response.data && response.data.status_code === 1000 && Array.isArray(response.data.history)) {
-          const messages = response.data.history.map(item => ({
-            role: item.is_user ? 'user' : 'assistant',
-            content: item.content
-          }))
+          const messages = response.data.history.map(restoreHistoryMessage)
           sessions.value[currentSessionId.value].messages = messages
           currentMessages.value = [...messages]
           await nextTick()

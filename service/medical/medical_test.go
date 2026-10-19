@@ -118,6 +118,13 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 	if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, false).First(&savedMessage).Error; err != nil || savedMessage.Content != displayed {
 		t.Fatalf("saved message mismatch: %+v %v", savedMessage, err)
 	}
+	if savedMessage.DurationMS < 0 {
+		t.Fatalf("saved reply duration missing: %+v", savedMessage)
+	}
+	var userMessage model.Message
+	if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, true).First(&userMessage).Error; err != nil || userMessage.DurationMS != 0 {
+		t.Fatalf("unexpected user message duration: %+v %v", userMessage, err)
+	}
 	restored, err := Runs(ctx, "alice", run.SessionID)
 	if err != nil || len(restored) != 1 {
 		t.Fatal(restored, err)

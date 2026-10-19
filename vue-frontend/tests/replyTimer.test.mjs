@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { setImmediate } from 'node:timers/promises'
-import { createReplyTimer, formatReplyDuration } from '../src/utils/replyTimer.mjs'
+import { createReplyTimer, formatReplyDuration, restoreHistoryMessage } from '../src/utils/replyTimer.mjs'
 
 const { ref, reactive, nextTick } = createRequire(import.meta.url)('vue')
 
@@ -174,3 +174,33 @@ test('普通流式连接提前结束时也清理计时', async () => {
   assert.deepEqual(c.state.currentMessages.value[1].meta.timing, { elapsedMs: 7000, running: false })
   assert.equal(c.callbacks.size, 0)
 })
+
+
+for (const action of ['switchSession', 'syncHistory']) {
+  test(`${action} 恢复持久化用时，保留零值并隐藏用户消息用时`, async () => {
+    const state = {
+      loading: ref(false), savingModel: ref(false), sessionsOpened: ref(false),
+      medicalEvents: ref([]), medicalQuestion: ref(''), medicalRequestStatus: ref(''),
+      currentSessionId: ref('session'), tempSession: ref(false), selectedModel: ref('qwen'),
+      sessions: ref({ session: { messages: [], modelType: 'qwen' } }), currentMessages: ref([]),
+      nextTick, scrollToBottom: () => {}, restoreHistoryMessage,
+      ElMessage: { warning: assert.fail, error: assert.fail },
+      api: { post: async () => ({ data: { status_code: 1000, history: [
+        { is_user: true, content: 'question', duration_ms: 500 },
+        { is_user: false, content: 'zero', duration_ms: 0 },
+        { is_user: false, content: 'answer', duration_ms: 65000 },
+      ] } }) },
+    }
+    const source = readFileSync(new URL('../src/views/AIChat.vue', import.meta.url), 'utf8')
+    const handlers = source.slice(source.indexOf('const switchSession ='), source.indexOf('const sendMessage ='))
+    const run = new Function(...Object.keys(state), `${handlers}; return ${action}`)(...Object.values(state))
+    await run('session')
+    const messages = state.currentMessages.value
+    assert.equal(messages.length, 3)
+    assert.equal(messages[0].meta, undefined)
+    assert.deepEqual(messages[1].meta.timing, { elapsedMs: 0, running: false })
+    assert.deepEqual(messages[2].meta.timing, { elapsedMs: 65000, running: false })
+    assert.equal(formatReplyDuration(messages[2].meta.timing.elapsedMs), '1 分 05 秒')
+    assert.equal(state.sessions.value.session.messages[2], messages[2])
+  })
+}

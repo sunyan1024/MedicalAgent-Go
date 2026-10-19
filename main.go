@@ -53,7 +53,7 @@ func readDataFromDB() error {
 		}
 		log.Println("[readDataFromDB] init: ", helper.SessionID)
 		// 添加消息到内存中(不开启存储功能)
-		helper.AddMessage(m.Content, m.UID, m.IsUser, false)
+		helper.AppendMessage(m, false)
 	}
 
 	log.Println("[AIHelperManager] init success ")
