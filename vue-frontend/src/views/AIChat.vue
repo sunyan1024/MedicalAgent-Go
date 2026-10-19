@@ -65,6 +65,7 @@
             <b>{{ message.role === 'user' ? '你' : 'AI' }}:</b>
             <button v-if="message.role === 'assistant'" class="tts-btn" @click="playTTS(message.content)">🔊</button>
             <span v-if="message.meta && message.meta.status === 'streaming'" class="streaming-indicator"> ··</span>
+            <span v-if="message.meta?.timing" class="reply-duration">{{ message.meta.timing.running ? '已用时' : '用时' }} {{ formatReplyDuration(message.meta.timing.elapsedMs) }}</span>
           </div>
           <p v-if="message === pendingMedicalMessage && loading && medicalRequestStatus === 'running' && message.meta?.status === 'streaming' && !message.content"
             class="agent-waiting-hint" role="status">
@@ -97,11 +98,12 @@
 <script>
 
 
-import { ref, nextTick, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { renderMarkdown } from '../utils/markdown'
 import api, { getApiErrorMessage } from '../utils/api'
 import MedicalPanel from '../components/MedicalPanel.vue'
+import { createReplyTimer, formatReplyDuration } from '../utils/replyTimer.mjs'
 
 export default {
   name: 'AIChat',
@@ -138,6 +140,7 @@ export default {
     const medicalReportId = ref('')
     const medicalReportReady = ref(true)
     const pendingMedicalMessage = ref(null)
+    const replyTimer = createReplyTimer()
     let medicalAbort = null
     const cancelMedical = () => medicalAbort?.abort()
     const isStreaming = ref(false)
@@ -605,44 +608,40 @@ export default {
       inputMessage.value = ''
 
 
-      currentMessages.value.push(userMessage)
-      await nextTick()
-      scrollToBottom()
-
+      loading.value = true
+      const assistant = reactive({ role: 'assistant', content: '', meta: { status: 'streaming' } })
+      currentMessages.value.push(userMessage, assistant)
+      replyTimer.start(assistant)
       try {
-        loading.value = true
+        await nextTick()
+        scrollToBottom()
         if (selectedModel.value === 'medical_agent') {
-          await handleMedical(currentInput)
+          await handleMedical(currentInput, assistant)
         } else if (isStreaming.value) {
-          await handleStreaming(currentInput)
+          await handleStreaming(currentInput, assistant)
         } else {
-
-          await handleNormal(currentInput)
+          await handleNormal(currentInput, assistant)
         }
       } catch (err) {
         console.error('Send message error:', err)
-        ElMessage.error('发送失败，请重试')
-
-        if (!tempSession.value && currentSessionId.value && sessions.value[currentSessionId.value] && sessions.value[currentSessionId.value].messages) {
-
-          const sessionArr = sessions.value[currentSessionId.value].messages
-          if (sessionArr && sessionArr.length) sessionArr.pop()
-        }
-        currentMessages.value.pop()
+        assistant.meta.status = 'error'
+        if (!assistant.content) assistant.content = getApiErrorMessage(err, '发送失败，请重试')
+        ElMessage.error(getApiErrorMessage(err, '发送失败，请重试'))
       } finally {
-        if (!isStreaming.value || selectedModel.value === 'medical_agent') {
-          loading.value = false
+        replyTimer.finish(assistant)
+        if (!tempSession.value && sessions.value[currentSessionId.value]) {
+          sessions.value[currentSessionId.value].messages = [...currentMessages.value]
+          sessions.value[currentSessionId.value].updated_at = new Date()
         }
+        loading.value = false
         await nextTick()
         scrollToBottom()
       }
     }
 
 
-    async function handleMedical(question) {
-      const assistant = { role: 'assistant', content: '', meta: { status: 'streaming' } }
+    async function handleMedical(question, assistant) {
       pendingMedicalMessage.value = assistant
-      currentMessages.value.push(assistant)
       medicalEvents.value = []
       medicalQuestion.value = question; medicalRequestStatus.value = 'running'
       medicalAbort = new AbortController()
@@ -660,7 +659,10 @@ export default {
         if (event.type === 'answer_delta') assistant.content += event.delta || ''
         if (event.type === 'answer_final') assistant.content = event.delta || ''
         if (event.type === 'error') throw new Error(event.summary || '运行失败')
-        if (event.type === 'run_end') assistant.meta.status = event.status
+        if (event.type === 'run_end') {
+          assistant.meta.status = event.status
+          replyTimer.finish(assistant)
+        }
         currentMessages.value = [...currentMessages.value]
       }
       try {
@@ -669,6 +671,7 @@ export default {
         if (!isStreaming.value) {
           const { data } = await api.post(isNew ? '/AI/chat/send-new-session' : '/AI/chat/send', body, { signal: medicalAbort.signal })
           if (data.status_code !== 1000) throw new Error(data.status_msg || '发送失败')
+          replyTimer.finish(assistant)
           bindSession(data.sessionId)
           assistant.content = data.Information || ''
           assistant.meta.status = data.run?.status || 'completed'
@@ -704,6 +707,7 @@ export default {
         if (!assistant.content) assistant.content = medicalAbort.signal.aborted ? '已停止本次回答。' : (e.message || '运行失败')
         if (!medicalAbort.signal.aborted) ElMessage.error(getApiErrorMessage(e, '运行失败'))
       } finally {
+        replyTimer.finish(assistant)
         pendingMedicalMessage.value = null
         if (!tempSession.value && sessions.value[currentSessionId.value]) {
           sessions.value[currentSessionId.value].messages = [...currentMessages.value]
@@ -714,24 +718,7 @@ export default {
       }
     }
 
-    async function handleStreaming(question) {
-
-      const aiMessage = {
-        role: 'assistant',
-        content: '',
-        meta: { status: 'streaming' } // mark streaming
-      }
-
-
-      const aiMessageIndex = currentMessages.value.length
-      currentMessages.value.push(aiMessage)
-
-      if (!tempSession.value && currentSessionId.value && sessions.value[currentSessionId.value]) {
-        if (!sessions.value[currentSessionId.value].messages) sessions.value[currentSessionId.value].messages = []
-        sessions.value[currentSessionId.value].messages.push({ role: 'assistant', content: '' })
-      }
-
-
+    async function handleStreaming(question, assistant) {
       const url = tempSession.value
         ? '/api/AI/chat/send-stream-new-session'
         : '/api/AI/chat/send-stream'
@@ -755,7 +742,6 @@ export default {
         })
 
         if (!response.ok) {
-          loading.value = false
           throw new Error('Network response was not ok')
         }
 
@@ -788,14 +774,14 @@ export default {
               if (data === '[DONE]') {
                 // 流结束
                 console.log('[SSE] Stream done')
-                loading.value = false
+                replyTimer.finish(assistant)
 
                 if (!tempSession.value && currentSessionId.value && sessions.value[currentSessionId.value]) {
                   // 更新会话的更新时间
                   sessions.value[currentSessionId.value].updated_at = new Date()
                 }
 
-                currentMessages.value[aiMessageIndex].meta = { status: 'done' }
+                assistant.meta.status = 'done'
               } else if (data.startsWith('{')) {
                 // 尝试解析 JSON（如 sessionId）
                 try {
@@ -816,14 +802,14 @@ export default {
                   }
                 } catch (e) {
                   // 不是 JSON，当作普通文本处理
-                  currentMessages.value[aiMessageIndex].content += data
-                  console.log('[SSE] Content updated:', currentMessages.value[aiMessageIndex].content.length)
+                  assistant.content += data
+                  console.log('[SSE] Content updated:', assistant.content.length)
                 }
               } else {
                 // 普通文本数据，直接追加
                 // 使用数组索引直接更新，强制 Vue 响应式系统检测变化
-                currentMessages.value[aiMessageIndex].content += data
-                console.log('[SSE] Content updated:', currentMessages.value[aiMessageIndex].content.length)
+                assistant.content += data
+                console.log('[SSE] Content updated:', assistant.content.length)
               }
               // 页面隐藏时跳过 DOM 更新，避免触发浏览器窗口恢复
               if (!document.hidden) {
@@ -840,26 +826,17 @@ export default {
         }
 
         // 流读取完成后的处理
-        loading.value = false
-        currentMessages.value[aiMessageIndex].meta = { status: 'done' }
+        replyTimer.finish(assistant)
+        assistant.meta.status = 'done'
         if (!document.hidden) {
           currentMessages.value = [...currentMessages.value]
         }
 
-        // 同步到 sessions 存储
-        if (!tempSession.value && currentSessionId.value && sessions.value[currentSessionId.value]) {
-          const sessMsgs = sessions.value[currentSessionId.value].messages
-          if (Array.isArray(sessMsgs) && sessMsgs.length) {
-            const lastIndex = sessMsgs.length - 1
-            if (sessMsgs[lastIndex] && sessMsgs[lastIndex].role === 'assistant') {
-              sessMsgs[lastIndex].content = currentMessages.value[aiMessageIndex].content
-            }
-          }
-        }
       } catch (err) {
         console.error('Stream error:', err)
-        loading.value = false
-        currentMessages.value[aiMessageIndex].meta = { status: 'error' }
+        replyTimer.finish(assistant)
+        assistant.meta.status = 'error'
+        if (!assistant.content) assistant.content = '流式传输出错，请重试。'
         if (!document.hidden) {
           currentMessages.value = [...currentMessages.value]
         }
@@ -867,59 +844,23 @@ export default {
       }
     }
 
-    // 修改发送消息相关的函数，更新会话的更新时间戳
-    async function handleNormal(question) {
-      if (tempSession.value) {
-
-        const response = await api.post('/AI/chat/send-new-session', {
-          question: question,
-          modelType: selectedModel.value
-        })
-        if (response.data && response.data.status_code === 1000) {
-          const sessionId = String(response.data.sessionId)
-          const aiMessage = {
-            role: 'assistant',
-            content: response.data.Information || ''
-          }
-
-          sessions.value[sessionId] = {
-            id: sessionId,
-            modelType: selectedModel.value,
-            title: '新会话',
-            messages: [ { role: 'user', content: question }, aiMessage ]
-          }
-          currentSessionId.value = sessionId
-          tempSession.value = false
-          currentMessages.value = [...sessions.value[sessionId].messages]
-          // await loadSessions()  // 创建新会话后刷新会话列表
-        } else {
-          ElMessage.error(response.data?.status_msg || '发送失败')
-
-          currentMessages.value.pop()
+    async function handleNormal(question, assistant) {
+      const isNew = tempSession.value || !currentSessionId.value
+      const body = { question, modelType: selectedModel.value }
+      if (!isNew) body.sessionId = currentSessionId.value
+      const { data } = await api.post(isNew ? '/AI/chat/send-new-session' : '/AI/chat/send', body)
+      replyTimer.finish(assistant)
+      if (!data || data.status_code !== 1000) throw new Error(data?.status_msg || '发送失败')
+      assistant.content = data.Information || ''
+      assistant.meta.status = 'done'
+      if (isNew) {
+        const sessionId = String(data.sessionId)
+        sessions.value[sessionId] = {
+          id: sessionId, modelType: selectedModel.value, title: '新会话',
+          messages: [...currentMessages.value], updated_at: new Date()
         }
-      } else {
-
-        const sessionMsgs = sessions.value[currentSessionId.value].messages
-
-        sessionMsgs.push({ role: 'user', content: question })
-
-        const response = await api.post('/AI/chat/send', {
-          question: question,
-          modelType: selectedModel.value,
-          sessionId: currentSessionId.value
-        })
-        if (response.data && response.data.status_code === 1000) {
-          const aiMessage = { role: 'assistant', content: response.data.Information || '' }
-          sessionMsgs.push(aiMessage)
-
-          // 更新会话的更新时间
-          sessions.value[currentSessionId.value].updated_at = new Date()
-          currentMessages.value = [...sessionMsgs]
-        } else {
-          ElMessage.error(response.data?.status_msg || '发送失败')
-          sessionMsgs.pop() // rollback
-          currentMessages.value.pop()
-        }
+        currentSessionId.value = sessionId
+        tempSession.value = false
       }
     }
 
@@ -948,6 +889,7 @@ export default {
       window.visualViewport?.removeEventListener('resize', updateViewport)
       window.visualViewport?.removeEventListener('scroll', updateViewport)
       cancelMedical()
+      replyTimer.dispose()
       isRecording.value = false
       cleanupRecorder()
     })
@@ -975,6 +917,7 @@ export default {
       voiceButtonText,
       voiceButtonTitle,
       renderMarkdown,
+      formatReplyDuration,
       playTTS,
       toggleVoiceInput,
       createNewSession,
@@ -1183,6 +1126,7 @@ export default {
 
 .message-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
@@ -1212,6 +1156,12 @@ export default {
   color: var(--app-text-muted);
   font-weight: 600;
   margin-left: 6px;
+}
+
+.reply-duration {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* message content */

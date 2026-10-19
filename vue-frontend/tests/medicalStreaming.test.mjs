@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { formatReplyDuration } from '../src/utils/replyTimer.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { setImmediate } from 'node:timers/promises'
@@ -24,7 +25,7 @@ function medicalChat(isStreaming = true, responseData) {
     medicalQuestion: ref(''), medicalRequestStatus: ref(''), medicalReportId: ref(''),
     tempSession: ref(false), currentSessionId: ref('session'),
     sessions: ref({ session: { messages: [] } }), isStreaming: ref(isStreaming),
-    nextTick, scrollToBottom: () => {},
+    nextTick, scrollToBottom: () => {}, replyTimer: { finish: () => {} },
     localStorage: { getItem: () => 'test-token' },
     fetch: async () => ({ ok: true, body }),
     api: { post: async () => ({ data: responseData }) },
@@ -32,7 +33,11 @@ function medicalChat(isStreaming = true, responseData) {
   }
   const handleMedical = new Function(...Object.keys(state), `let medicalAbort; ${handler}; return handleMedical;`)(...Object.values(state))
   return {
-    state, errors, run: () => handleMedical('解释指标'),
+    state, errors, run: () => {
+      const assistant = Vue.reactive({ role: 'assistant', content: '', meta: { status: 'streaming' } })
+      state.currentMessages.value.push(assistant)
+      return handleMedical('解释指标', assistant)
+    },
     send: text => controller.enqueue(new TextEncoder().encode(text)),
     event: value => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`)),
     close: () => controller.close(),
@@ -57,7 +62,7 @@ function mountMessages(state) {
     },
   })
   const app = renderer.createApp({
-    setup: () => ({ ...state, loading: ref(true), messagesRef: ref(null), playTTS: () => {}, renderMarkdown }),
+    setup: () => ({ ...state, loading: ref(true), messagesRef: ref(null), playTTS: () => {}, renderMarkdown, formatReplyDuration }),
     render: new Function('Vue', compile(template, { mode: 'function', prefixIdentifiers: true }).code)(Vue),
   })
   app.mount({ children: [] })
