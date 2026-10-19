@@ -3,11 +3,36 @@ package aihelper
 import (
 	"GoAI/common/medical"
 	"context"
+
+	"github.com/cloudwego/eino-ext/components/model/qwen"
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
 type MedicalModel struct{ base *QwenModel }
 type medicalRuntimeKey struct{}
+
+// medicalChatModel keeps Qwen's forced function choice compatible with thinking
+// mode. Only the first forced knowledge search disables thinking for that request;
+// subsequent requests inherit the configured default without mutating the model.
+type medicalChatModel struct{ model.BaseChatModel }
+
+func medicalModelOptions(opts []model.Option) []model.Option {
+	common := model.GetCommonOptions(nil, opts...)
+	if common.ToolChoice != nil && *common.ToolChoice == schema.ToolChoiceForced &&
+		len(common.AllowedToolNames) == 1 && common.AllowedToolNames[0] == "search_medical_knowledge" {
+		return append(append([]model.Option(nil), opts...), qwen.WithEnableThinking(false))
+	}
+	return opts
+}
+
+func (m *medicalChatModel) Generate(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return m.BaseChatModel.Generate(ctx, msgs, medicalModelOptions(opts)...)
+}
+
+func (m *medicalChatModel) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return m.BaseChatModel.Stream(ctx, msgs, medicalModelOptions(opts)...)
+}
 
 // WithMedicalRuntime keeps request state out of cached model instances.
 func WithMedicalRuntime(ctx context.Context, r *medical.Runtime) context.Context {
@@ -25,7 +50,7 @@ func (m *MedicalModel) GetModelType() string { return "medical_agent" }
 func (m *MedicalModel) GenerateResponse(ctx context.Context, msgs []*schema.Message) (*schema.Message, error) {
 	r, ok := ctx.Value(medicalRuntimeKey{}).(*medical.Runtime)
 	if !ok {
-		r = medical.NewRuntime("", medical.Dependencies{Model: m.base.llm, Search: medical.PublicSearch, WebSearch: medical.ConfiguredWebSearch()})
+		r = medical.NewRuntime("", medical.Dependencies{Model: &medicalChatModel{m.base.llm}, Search: medical.PublicSearch, WebSearch: medical.ConfiguredWebSearch()})
 	}
 	answer, err := r.Run(ctx, msgs)
 	return schema.AssistantMessage(answer, nil), err
@@ -44,7 +69,7 @@ func NewMedicalRuntime(ctx context.Context, id string, uid string, read func(con
 	if err != nil {
 		return nil, err
 	}
-	return medical.NewRuntime(id, medical.Dependencies{Model: m.llm, ReadReport: read, Search: medical.UserSearch(uid), WebSearch: medical.ConfiguredWebSearch(), Emit: emit}), nil
+	return medical.NewRuntime(id, medical.Dependencies{Model: &medicalChatModel{m.llm}, ReadReport: read, Search: medical.UserSearch(uid), WebSearch: medical.ConfiguredWebSearch(), Emit: emit}), nil
 }
 
 // ExtractMedicalIndicators is separate from the reasoning agents: users review
