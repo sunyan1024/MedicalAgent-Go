@@ -55,11 +55,25 @@ func (r *Runtime) memoryContext(ctx context.Context) string {
 	if r.deps.Memory.Read == nil {
 		return "\n长期记忆暂不可用。"
 	}
-	doc, err := r.deps.Memory.Read(ctx)
+	userMemory, err := r.deps.Memory.Read(ctx)
 	if err != nil {
 		return "\n长期记忆暂不可用。"
 	}
-	return "\n本轮长期记忆数据（JSON）：\n" + JSON(doc)
+	return "\n本轮长期记忆数据（JSON）：\n" + JSON(userMemory)
+}
+
+// withTurnBackground keeps dynamic data after history and before the current
+// question. Allocate a new slice: the caller may own the conversation history.
+func withTurnBackground(messages []*schema.Message, background string) []*schema.Message {
+	at := len(messages)
+	if at > 0 && messages[at-1].Role == schema.User {
+		at--
+	}
+	out := make([]*schema.Message, 0, len(messages)+1)
+	out = append(out, messages[:at]...)
+	out = append(out, schema.SystemMessage(background))
+	out = append(out, messages[at:]...)
+	return out
 }
 
 func (r *Runtime) memoryTools(local *int) []tool.BaseTool {

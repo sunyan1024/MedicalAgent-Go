@@ -396,7 +396,9 @@ func (r *Runtime) Run(ctx context.Context, messages []*schema.Message) (string, 
 	ts = append(ts, r.memoryTools(&local)...)
 	instruction := mainInstruction
 	if r.deps.Memory != nil {
-		instruction += memoryInstruction + r.memoryContext(ctx)
+		instruction += memoryInstruction
+		userMemoryContext := r.memoryContext(ctx)
+		messages = withTurnBackground(messages, userMemoryContext)
 	}
 	if r.deps.WebSearch == nil {
 		instruction += "\n当前联网搜索不可用，仅可委派检索本地资料。"
