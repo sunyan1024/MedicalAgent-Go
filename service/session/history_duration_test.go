@@ -67,5 +67,10 @@ func TestHistoryDurationFromDatabaseAndRestoredMemory(t *testing.T) {
 	if err := db.Create(&model.MedicalRun{ID: "run", UID: "alice", SessionID: "duration-history"}).Error; err != nil {
 		t.Fatal(err)
 	}
-	t.Run("medical_database_history", check)
+	t.Run("medical_memory_history", check)
+	helper.AppendMessage(&model.Message{SessionID: "duration-history", UID: "alice", Content: "pending answer", DurationMS: 123}, false)
+	history, status := GetChatHistory("alice", "duration-history")
+	if status != code.CodeSuccess || len(history) != 4 || history[3].Content != "pending answer" || history[3].DurationMS != 123 {
+		t.Fatalf("medical history ignored pending in-memory message: %+v %v", history, status)
+	}
 }

@@ -87,3 +87,20 @@ func TestFailedGenerationDoesNotPersistAnAssistantMessage(t *testing.T) {
 		t.Fatal("failed generation should not introduce a new assistant record")
 	}
 }
+
+func TestAppendMessageReportsSaveFailureAndKeepsHistory(t *testing.T) {
+	helper := NewAIHelper(&durationModel{}, "session")
+	wantErr := errors.New("publish failed")
+	calls := 0
+	helper.SetSaveFunc(func(msg *model.Message) (*model.Message, error) {
+		calls++
+		return msg, wantErr
+	})
+	msg := &model.Message{SessionID: "session", UID: "alice", Content: "answer", DurationMS: 123}
+	if err := helper.AppendMessage(msg, true); !errors.Is(err, wantErr) {
+		t.Fatalf("save error lost: %v", err)
+	}
+	if got := helper.GetMessages(); len(got) != 1 || got[0] != msg || calls != 1 {
+		t.Fatal("message lost or retried after publication failure")
+	}
+}

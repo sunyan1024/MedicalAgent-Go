@@ -13,6 +13,7 @@ import (
 	"GoAI/common/mysql"
 	"GoAI/model"
 	memoryservice "GoAI/service/memory"
+	"GoAI/utils"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -22,6 +23,9 @@ var ErrNotFound = errors.New("记录不存在或无权访问")
 var ErrBusy = errors.New("该会话正在回答，请稍后重试")
 var sessions sync.Map
 var newRuntime = aihelper.NewMedicalRuntime
+var getHelper = func(user, session string) (*aihelper.AIHelper, error) {
+	return aihelper.GetGlobalManager().GetOrCreateAIHelper(user, session, "medical_agent", map[string]interface{}{"uid": user})
+}
 
 func ownedReport(ctx context.Context, user, id string) (*model.MedicalReport, error) {
 	var report model.MedicalReport
@@ -89,8 +93,8 @@ type ChatRequest struct {
 	ReportID  string `json:"reportId"`
 }
 
-// Run creates fresh request-scoped agents. Conversation state is loaded from SQL
-// so follow-up questions survive process restarts and model cache eviction.
+// Run creates fresh request-scoped agents and shares conversation history with
+// ordinary chat. Startup restores persisted messages into the same helpers.
 func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event)) (*RunResponse, error) {
 	if len(req.Question) == 0 || len(req.Question) > 12000 {
 		return nil, fmt.Errorf("问题长度应在 1～12000 字节之间")
@@ -189,27 +193,24 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 			},
 		})
 	}
-	var history []model.Message
+	var helper *aihelper.AIHelper
 	if err == nil {
-		err = mysql.DB.WithContext(ctx).Where("session_id = ? AND uid = ?", req.SessionID, user).Order("message_id desc").Limit(20).Find(&history).Error
+		helper, err = getHelper(user, req.SessionID)
 	}
 	if err != nil {
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
 		return nil, err
 	}
-	msgs := make([]*schema.Message, 0, len(history)+2)
-	for i := len(history) - 1; i >= 0; i-- {
-		m := history[i]
-		if m.IsUser {
-			msgs = append(msgs, schema.UserMessage(m.Content))
-		} else {
-			msgs = append(msgs, schema.AssistantMessage(m.Content, nil))
-		}
+	if err = helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, true); err != nil {
+		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
+		return nil, fmt.Errorf("问题消息保存失败: %w", err)
 	}
+	msgs := utils.ConvertToSchemaMessages(helper.GetMessages())
 	if report != nil {
-		msgs = append(msgs, schema.SystemMessage("当前会话有用户已确认的报告，可委派 report_analyst 读取。报告内容不得从历史推测。"))
+		// Keep the current question last; this hint belongs only to this run.
+		last := msgs[len(msgs)-1]
+		msgs = append(msgs[:len(msgs)-1], schema.SystemMessage("当前会话有用户已确认的报告，可委派 report_analyst 读取。报告内容不得从历史推测。"), last)
 	}
-	msgs = append(msgs, schema.UserMessage(req.Question))
 	startedAt := time.Now()
 	run.Answer, err = runtime.Run(ctx, msgs)
 	durationMS := time.Since(startedAt).Milliseconds()
@@ -217,6 +218,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	if err != nil {
 		run.Status = "partial"
 	}
+	messageErr := helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false, DurationMS: durationMS}, true)
 	eventErr := writer.finish()
 	// Persist terminal state even when the browser has disconnected.
 	finishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -225,14 +227,13 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		if e := tx.Save(run).Error; e != nil {
 			return e
 		}
-		messages := []model.Message{{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, {SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false, DurationMS: durationMS}}
-		if e := tx.Create(&messages).Error; e != nil {
-			return e
-		}
 		return tx.Model(&model.Session{}).Where("session_id = ? AND uid = ?", req.SessionID, user).Update("updated_at", time.Now()).Error
 	})
 	if persistErr != nil {
-		return nil, fmt.Errorf("结果持久化失败: %w", errors.Join(persistErr, eventErr))
+		return nil, fmt.Errorf("结果持久化失败: %w", errors.Join(persistErr, eventErr, messageErr))
+	}
+	if messageErr != nil {
+		return nil, fmt.Errorf("回答消息保存失败: %w", errors.Join(messageErr, eventErr))
 	}
 	if eventErr != nil {
 		return nil, fmt.Errorf("事件持久化失败: %w", eventErr)

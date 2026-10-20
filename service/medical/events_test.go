@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"GoAI/common/aihelper"
 	core "GoAI/common/medical"
 	"GoAI/common/mysql"
 	"GoAI/internal/testutil"
@@ -138,6 +139,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			db := testutil.MySQL(t)
+			installImmediateChatConsumer(t)
 			oldDB, oldRuntime := mysql.DB, newRuntime
 			mysql.DB = db
 			t.Cleanup(func() { mysql.DB = oldDB; newRuntime = oldRuntime })
@@ -148,8 +150,8 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 				return core.NewRuntime(id, core.Dependencies{Model: &followupModel{}, Emit: emit}), nil
 			}
 			if terminalFailure {
-				if err := db.Callback().Create().Before("gorm:create").Register("test:terminal_failure", func(tx *gorm.DB) {
-					if tx.Statement.Table == "messages" {
+				if err := db.Callback().Update().Before("gorm:update").Register("test:terminal_failure", func(tx *gorm.DB) {
+					if tx.Statement.Table == "medical_runs" {
 						tx.AddError(errors.New("test terminal failure"))
 					}
 				}); err != nil {
@@ -207,6 +209,10 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			}
 			if terminalFailure && run.Status != "running" {
 				t.Fatal("terminal transaction did not roll back", run.Status)
+			}
+			helper, ok := aihelper.GetGlobalManager().GetAIHelper("alice", run.SessionID)
+			if !ok || len(helper.GetMessages()) != 2 || helper.GetMessages()[1].Content != finalAnswer {
+				t.Fatal("final answer missing from memory after terminal processing")
 			}
 			if !terminalFailure {
 				var answer model.Message

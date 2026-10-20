@@ -321,13 +321,7 @@ func GetChatHistory(uid string, sessionID string) ([]model.History, code.Code) {
 	// 获取AIHelper中的消息历史
 	manager := aihelper.GetGlobalManager()
 	helper, exists := manager.GetAIHelper(uid, sessionID)
-	var medicalCount int64
-	if mysql.DB.Migrator().HasTable(&model.MedicalRun{}) {
-		if err := mysql.DB.Model(&model.MedicalRun{}).Where("uid = ? AND session_id = ?", uid, sessionID).Count(&medicalCount).Error; err != nil {
-			return nil, code.CodeServerBusy
-		}
-	}
-	if !exists || medicalCount > 0 {
+	if !exists {
 		var records []model.Message
 		if err := mysql.DB.Where("uid = ? AND session_id = ?", uid, sessionID).Order("message_id asc").Find(&records).Error; err != nil {
 			return nil, code.CodeServerBusy

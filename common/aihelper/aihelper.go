@@ -49,14 +49,16 @@ func (a *AIHelper) AddMessage(Content string, UID string, IsUser bool, Save bool
 }
 
 // AppendMessage 保留完整消息元数据，供生成结果保存和启动时恢复使用。
-func (a *AIHelper) AppendMessage(msg *model.Message, save bool) {
+func (a *AIHelper) AppendMessage(msg *model.Message, save bool) error {
 	a.mu.Lock()
 	a.messages = append(a.messages, msg) // 内存中维护消息历史
 	a.mu.Unlock()
 
 	if save {
-		a.saveFunc(msg) // 异步存储到消息队列
+		_, err := a.saveFunc(msg) // 异步存储到消息队列
+		return err
 	}
+	return nil
 }
 
 // SetSaveFunc 设置消息保存函数，用于自定义消息持久化逻辑

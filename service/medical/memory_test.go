@@ -26,6 +26,7 @@ func (m *memoryProbe) Stream(ctx context.Context, msgs []*schema.Message, opts .
 }
 func TestMemoryAcrossMedicalSessionsAndClear(t *testing.T) {
 	db := testutil.MySQL(t)
+	installImmediateChatConsumer(t)
 	oldDB, oldRuntime := mysql.DB, newRuntime
 	mysql.DB = db
 	t.Cleanup(func() { mysql.DB = oldDB; newRuntime = oldRuntime })

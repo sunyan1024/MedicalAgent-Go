@@ -40,6 +40,7 @@ func (m *followupModel) Stream(ctx context.Context, msgs []*schema.Message, opts
 
 func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 	db := testutil.MySQL(t)
+	installImmediateChatConsumer(t)
 	previous := mysql.DB
 	mysql.DB = db
 	t.Cleanup(func() { mysql.DB = previous })
