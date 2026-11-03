@@ -138,6 +138,10 @@ func (a *AIHelper) compressSummary(ctx context.Context, r summaryRepository, uid
 }
 
 func generateSummary(ctx context.Context, previous string, messages []*model.Message) (string, error) {
+	return generateSummaryObserved(ctx, previous, messages, nil)
+}
+
+func generateSummaryObserved(ctx context.Context, previous string, messages []*model.Message, observe func(*schema.TokenUsage)) (string, error) {
 	type entry struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
@@ -170,6 +174,9 @@ func generateSummary(ctx context.Context, previous string, messages []*model.Mes
 	}
 	if reply == nil {
 		return "", fmt.Errorf("empty summary response")
+	}
+	if observe != nil && reply.ResponseMeta != nil {
+		observe(reply.ResponseMeta.Usage)
 	}
 	return reply.Content, nil
 }

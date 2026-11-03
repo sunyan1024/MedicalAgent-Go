@@ -7,6 +7,7 @@ deploy/
 node_modules/
 
 docs/medical/benchmarks/
+experiments/
 
 .idea/
 .vscode/
