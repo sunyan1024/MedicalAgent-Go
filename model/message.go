@@ -6,7 +6,8 @@ import (
 
 // Message 表示聊天消息的数据结构
 type Message struct {
-	DurationMS int64 `gorm:"column:duration_ms;not null;default:0" json:"duration_ms"` // 后端处理耗时（毫秒）
+	StableID   string `gorm:"type:varchar(36);index" json:"-"`
+	DurationMS int64  `gorm:"column:duration_ms;not null;default:0" json:"duration_ms"` // 后端处理耗时（毫秒）
 
 	ID        uint      `gorm:"column:message_id;primaryKey;autoIncrement" json:"id"` // 消息的唯一标识符，自动递增
 	SessionID string    `gorm:"index;not null;type:varchar(36)" json:"session_id"`    // 会话的唯一标识符，不能为空

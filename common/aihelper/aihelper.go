@@ -6,15 +6,21 @@ import (
 	"GoAI/utils"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"sync"
 	"time"
 )
 
 // AIHelper AI助手结构体，包含消息历史和AI模型
 type AIHelper struct {
-	model    AIModel          // AI模型接口，支持OpenAI、Ollama
-	messages []*model.Message // 消息历史列表，存储用户和AI助手的对话记录
-	mu       sync.RWMutex     // 读写锁，保护消息历史并发访问
+	model        AIModel          // AI模型接口，支持OpenAI、Ollama
+	messages     []*model.Message // 消息历史列表，存储用户和AI助手的对话记录
+	turnMu       sync.Mutex
+	contextMu    sync.Mutex // Protects summary cache and its load/generate/save lifecycle.
+	summary      summaryCache
+	summaryStore summaryRepository
+	summarize    summaryGenerator
+	mu           sync.RWMutex // 读写锁，保护消息历史并发访问
 	// 一个会话绑定一个AIHelper
 	SessionID string                                       // 会话唯一标识，用于绑定消息和上下文
 	saveFunc  func(*model.Message) (*model.Message, error) // 消息存储回调函数，默认异步发布到RabbitMQ
@@ -28,7 +34,7 @@ func NewAIHelper(model_ AIModel, SessionID string) *AIHelper {
 		//异步推送到消息队列中
 		saveFunc: func(msg *model.Message) (*model.Message, error) {
 			// 将消息参数序列化为 JSON 字节数组
-			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser, msg.DurationMS)
+			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser, msg.DurationMS, msg.StableID)
 			// 异步推送到消息队列中
 			err := rabbitmq.RMQMessage.Publish(data)
 			return msg, err
@@ -51,6 +57,9 @@ func (a *AIHelper) AddMessage(Content string, UID string, IsUser bool, Save bool
 // AppendMessage 保留完整消息元数据，供生成结果保存和启动时恢复使用。
 func (a *AIHelper) AppendMessage(msg *model.Message, save bool) error {
 	a.mu.Lock()
+	if msg.StableID == "" {
+		msg.StableID = uuid.NewString()
+	}
 	a.messages = append(a.messages, msg) // 内存中维护消息历史
 	a.mu.Unlock()
 
@@ -79,16 +88,21 @@ func (a *AIHelper) GetMessages() []*model.Message {
 	return out
 }
 
+// LockTurn serializes model input and history updates across model paths.
+func (a *AIHelper) LockTurn() func() { a.turnMu.Lock(); return a.turnMu.Unlock }
+
 // 同步生成
 func (a *AIHelper) GenerateResponse(uid string, ctx context.Context, userQuestion string) (*model.Message, error) {
 	//调用存储函数
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
+	unlock := a.LockTurn()
+	defer unlock()
 	a.AddMessage(userQuestion, uid, true, true)
 
-	a.mu.RLock()
-	//将model.Message转化成schema.Message
-	messages := utils.ConvertToSchemaMessages(a.messages) // 转化所有消息
-	a.mu.RUnlock()
+	messages, err := a.ContextMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	//调用模型生成回复
 	startedAt := time.Now()
@@ -112,12 +126,14 @@ func (a *AIHelper) GenerateResponse(uid string, ctx context.Context, userQuestio
 func (a *AIHelper) StreamResponse(uid string, ctx context.Context, cb StreamCallback, userQuestion string) (*model.Message, error) {
 	//调用存储函数
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
+	unlock := a.LockTurn()
+	defer unlock()
 	a.AddMessage(userQuestion, uid, true, true)
 
-	a.mu.RLock()
-	// 将model.Message转化成schema.Message
-	messages := utils.ConvertToSchemaMessages(a.messages) // 转化所有消息
-	a.mu.RUnlock()
+	messages, err := a.ContextMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// 调用模型生成回复
 	startedAt := time.Now()

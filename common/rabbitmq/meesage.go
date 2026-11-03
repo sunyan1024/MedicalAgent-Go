@@ -11,6 +11,7 @@ import (
 
 // 用于消息传输的数据结构
 type MessageMQParam struct {
+	StableID   string `json:"stable_id"`
 	DurationMS int64  `json:"duration_ms"`
 	SessionID  string `json:"session_id"`
 	Content    string `json:"content"`
@@ -19,13 +20,16 @@ type MessageMQParam struct {
 }
 
 // 将消息参数序列化为 JSON 字节数组
-func GenerateMessageMQParam(sessionID string, content string, uid string, IsUser bool, durationMS int64) []byte {
+func GenerateMessageMQParam(sessionID string, content string, uid string, IsUser bool, durationMS int64, stableID ...string) []byte {
 	param := MessageMQParam{
 		DurationMS: durationMS,
 		SessionID:  sessionID,
 		Content:    content,
 		UID:        uid,
 		IsUser:     IsUser,
+	}
+	if len(stableID) > 0 {
+		param.StableID = stableID[0]
 	}
 	data, _ := json.Marshal(param) // 将 MessageMQParam 结构体 序列化为 JSON 字节数组
 	return data
@@ -41,6 +45,7 @@ func MQMessage(msg *amqp.Delivery) error {
 	}
 	// 构建 model.Message 对象用于数据库存储
 	newMsg := &model.Message{
+		StableID:   param.StableID,
 		DurationMS: param.DurationMS,
 		SessionID:  param.SessionID,
 		Content:    param.Content,

@@ -13,7 +13,6 @@ import (
 	"GoAI/common/mysql"
 	"GoAI/model"
 	memoryservice "GoAI/service/memory"
-	"GoAI/utils"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -201,11 +200,17 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
 		return nil, err
 	}
+	unlock := helper.LockTurn()
+	defer unlock()
 	if err = helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, true); err != nil {
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
 		return nil, fmt.Errorf("问题消息保存失败: %w", err)
 	}
-	msgs := utils.ConvertToSchemaMessages(helper.GetMessages())
+	msgs, contextErr := helper.ContextMessages(ctx)
+	if contextErr != nil {
+		mysql.DB.Model(run).Update("status", "failed")
+		return nil, contextErr
+	}
 	if report != nil {
 		// Keep the current question last; this hint belongs only to this run.
 		last := msgs[len(msgs)-1]

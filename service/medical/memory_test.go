@@ -17,7 +17,10 @@ import (
 type memoryProbe struct{ instruction string }
 
 func (m *memoryProbe) Generate(_ context.Context, msgs []*schema.Message, _ ...einomodel.Option) (*schema.Message, error) {
-	m.instruction = msgs[0].Content
+	m.instruction = ""
+	for _, msg := range msgs {
+		m.instruction += msg.Content + "\n"
+	}
 	return schema.AssistantMessage("已读取背景", nil), nil
 }
 func (m *memoryProbe) Stream(ctx context.Context, msgs []*schema.Message, opts ...einomodel.Option) (*schema.StreamReader[*schema.Message], error) {
