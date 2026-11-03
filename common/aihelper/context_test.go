@@ -19,7 +19,7 @@ func TestContextWindowPreservesArchive(t *testing.T) {
 	}
 	a.AppendMessage(&model.Message{Content: "current", IsUser: true}, false)
 	msgs, err := a.ContextMessages(context.Background())
-	if err != nil || len(msgs) != 21 || msgs[len(msgs)-1].Content != "current" {
+	if err != nil || len(msgs) != 33 || msgs[len(msgs)-1].Content != "current" {
 		t.Fatalf("window: %d %v", len(msgs), err)
 	}
 	if len(a.GetMessages()) != 33 {

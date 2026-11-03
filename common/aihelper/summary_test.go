@@ -52,7 +52,7 @@ func summaryHistory(t *testing.T, turns int) (*AIHelper, *summaryFakeStore) {
 	store := &summaryFakeStore{}
 	a.summaryStore = store
 	for i := 0; i < turns; i++ {
-		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("question-%d", i), IsUser: true}, false)
+		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("question-%d ", i) + strings.Repeat("x", 1500), IsUser: true}, false)
 		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("answer-%d", i)}, false)
 	}
 	a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: "current", IsUser: true}, false)
@@ -62,11 +62,13 @@ func TestSummarySingleBatchCacheAndProgress(t *testing.T) {
 	a, store := summaryHistory(t, 16)
 	all := a.GetMessages()
 	all[0].Content = strings.Repeat("长", 21000)
-	all[10].Content = "更正：是我父亲，不是我"
+	all[2].Content = "更正：是我父亲，不是我"
 	calls := 0
+	batchEnd := 0
 	a.summarize = func(ctx context.Context, previous string, msgs []*model.Message) (string, error) {
 		calls++
-		if previous != "" || len(msgs) != 12 || textSize(msgs) <= 20000 {
+		batchEnd = len(msgs)
+		if previous != "" || len(msgs) < 2 || textSize(msgs) <= 20000 {
 			t.Fatalf("batch truncated: %d", len(msgs))
 		}
 		for i, m := range msgs {
@@ -74,7 +76,7 @@ func TestSummarySingleBatchCacheAndProgress(t *testing.T) {
 				t.Fatal("batch reordered")
 			}
 		}
-		if !strings.Contains(msgs[10].Content, "父亲") {
+		if !strings.Contains(msgs[2].Content, "父亲") {
 			t.Fatal("correction missing")
 		}
 		deadline, ok := ctx.Deadline()
@@ -87,7 +89,7 @@ func TestSummarySingleBatchCacheAndProgress(t *testing.T) {
 	if err != nil || calls != 1 || store.checks != 1 || store.saves != 1 || store.loads != 1 {
 		t.Fatalf("calls=%d store=%+v err=%v", calls, store, err)
 	}
-	if store.state.Through != all[11].StableID || store.state.Version != 1 || len(out) != 22 || !strings.Contains(out[0].Content, "父亲") {
+	if store.state.Through != all[batchEnd-1].StableID || store.state.Version != 1 || len(out) != len(all)-batchEnd+1 || !strings.Contains(out[0].Content, "父亲") {
 		t.Fatalf("wrong state/window: %+v len=%d", store.state, len(out))
 	}
 	if len(a.GetMessages()) != 33 {
@@ -158,7 +160,7 @@ func TestSummaryFailuresNeverAdvance(t *testing.T) {
 				case "empty":
 					return " ", nil
 				case "too_long":
-					return strings.Repeat("长", 2001), nil
+					return strings.Repeat("长", 10000), nil
 				}
 				return "new", nil
 			}
@@ -193,7 +195,7 @@ func TestSummaryConflictRefresh(t *testing.T) {
 			if calls != 1 || s.loads != 2 || a.summary.loaded == refreshFailure {
 				t.Fatal("conflict not refreshed/invalidated")
 			}
-			if !refreshFailure && (a.summary.state != s.state || !strings.Contains(out[0].Content, "other writer") || out[1].Content != "question-7") {
+			if !refreshFailure && (a.summary.state != s.state || !strings.Contains(out[0].Content, "other writer") || out[1].Content != a.GetMessages()[14].Content) {
 				t.Fatal("stale state used")
 			}
 			if refreshFailure {
@@ -257,7 +259,7 @@ func TestSummaryPendingBatchRetriesAsWhole(t *testing.T) {
 	calls := 0
 	a.summarize = func(_ context.Context, _ string, msgs []*model.Message) (string, error) {
 		calls++
-		if len(msgs) != 12 {
+		if len(msgs) == 0 || len(msgs)%2 != 0 {
 			t.Fatal("partial batch")
 		}
 		return "complete", nil

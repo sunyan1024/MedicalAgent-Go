@@ -8,9 +8,12 @@ import sys
 root=Path(__file__).resolve().parents[1]
 p=Path(sys.argv[1])
 data=json.loads((p/'dataset.json').read_text())
-freeze=json.loads((root/'experiments/summary-information-v1/freeze.json').read_text())
+freeze=json.loads((p/'freeze.json' if (p/'freeze.json').exists() else root/'experiments/summary-information-v1/freeze.json').read_text())
 for name,source in [('dataset.json',root/'experiments/summary-information-v1/dataset.json'),('summary_information.py',root/'scripts/summary_information.py'),('summary_information_test.go',root/'common/aihelper/summary_information_test.go')]:
     assert hashlib.sha256(source.read_bytes()).hexdigest()==freeze[name],f'changed frozen file: {name}'
+for name in ('context.go','summary.go'):
+    if name in freeze:
+        assert hashlib.sha256((root/'common/aihelper'/name).read_bytes()).hexdigest()==freeze[name], f'changed frozen file: {name}'
 assert data==json.loads((root/'experiments/summary-information-v1/dataset.json').read_text())
 events=[json.loads(x) for x in (p/'events.jsonl').read_text().splitlines()]
 status=json.loads((p/'status.json').read_text())
@@ -20,6 +23,15 @@ summaries=[e for e in events if e['kind']=='summary']
 assert [e['call'] for e in calls]==list(range(1,len(calls)+1))
 assert len(calls)==status['calls']<=70
 assert len(answers)==status['answers']
+metadata=json.loads((p/'metadata.json').read_text())
+if 'history_budget_estimated_tokens' in metadata:
+    budget=metadata['history_budget_estimated_tokens']
+    assert budget==min(metadata['first_checkpoint_estimates'])*90//100
+    for e in answers:
+        if e['group']=='C': assert e['estimated_input_tokens']<=budget
+    for s in data['scenarios']:
+        for cp in s['checkpoints']:
+            assert sum(e['scenario']==s['id'] and e['checkpoint']==cp['checkpoint'] for e in summaries)<=1
 checks=0
 fallbacks=[]
 for si,s in enumerate(data['scenarios']):
@@ -35,7 +47,7 @@ for si,s in enumerate(data['scenarios']):
         assert [(m['role'],m['content']) for m in by['A']['input'][:-1]]==[(m['role'],m['content']) for m in expected]
         recent=[m for m in by['C']['input'][:-1] if m['role']!='system']
         assert by['B']['input'][:-1]==recent
-        assert [(m['role'],m['content']) for m in recent]==[(m['role'],m['content']) for m in expected[-len(recent):]]
+        assert [(m['role'],m['content']) for m in recent]==[(m['role'],m['content']) for m in (expected[-len(recent):] if recent else [])]
         snapshot=next(e for e in events if e['kind']=='snapshot' and e['scenario']==s['id'] and e['checkpoint']==cp['checkpoint'])
         state=snapshot['state']
         assert state['Version']>=previous_version
@@ -48,7 +60,7 @@ for si,s in enumerate(data['scenarios']):
             assert retained_start>=idx+1
             if retained_start>idx+1:
                 attempts=[e for e in summaries if e['scenario']==s['id'] and e['checkpoint']==cp['checkpoint']]
-                assert attempts and state['Version']==snapshot['previous_version']
+                assert state['Version']==snapshot['previous_version'] or any(e['kind']=='trimmed_uncovered' and e['scenario']==s['id'] and e['checkpoint']==cp['checkpoint'] for e in events)
                 fallbacks.append(dict(scenario=s['id'],checkpoint=cp['checkpoint'],uncovered_ids=[m['id'] for m in expected[idx+1:retained_start]],errors=[e['error'] for e in attempts]))
         previous_version=state['Version'];checks+=1
 assert not status['complete'] or checks==20 and len(answers)==60

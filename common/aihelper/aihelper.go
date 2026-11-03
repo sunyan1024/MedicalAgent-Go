@@ -13,14 +13,16 @@ import (
 
 // AIHelper AI助手结构体，包含消息历史和AI模型
 type AIHelper struct {
-	model        AIModel          // AI模型接口，支持OpenAI、Ollama
-	messages     []*model.Message // 消息历史列表，存储用户和AI助手的对话记录
-	turnMu       sync.Mutex
-	contextMu    sync.Mutex // Protects summary cache and its load/generate/save lifecycle.
-	summary      summaryCache
-	summaryStore summaryRepository
-	summarize    summaryGenerator
-	mu           sync.RWMutex // 读写锁，保护消息历史并发访问
+	model                  AIModel          // AI模型接口，支持OpenAI、Ollama
+	messages               []*model.Message // 消息历史列表，存储用户和AI助手的对话记录
+	turnMu                 sync.Mutex
+	contextMu              sync.Mutex // Protects summary cache and its load/generate/save lifecycle.
+	summary                summaryCache
+	summaryFailure         string
+	summaryFailurePosition int
+	summaryStore           summaryRepository
+	summarize              summaryGenerator
+	mu                     sync.RWMutex // 读写锁，保护消息历史并发访问
 	// 一个会话绑定一个AIHelper
 	SessionID string                                       // 会话唯一标识，用于绑定消息和上下文
 	saveFunc  func(*model.Message) (*model.Message, error) // 消息存储回调函数，默认异步发布到RabbitMQ
