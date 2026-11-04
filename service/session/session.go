@@ -2,6 +2,7 @@ package session
 
 import (
 	"GoAI/common/aihelper"
+	"GoAI/common/chattrace"
 	"GoAI/common/code"
 	"GoAI/common/mysql"
 	"GoAI/dao/session"
@@ -168,6 +169,10 @@ func CreateStreamSessionOnly(uid string, userQuestion string, modelType string) 
 //  3. 通过回调函数实时发送SSE格式的AI响应
 //  4. 最后发送[DONE]标记表示流结束
 func StreamMessageToExistingSession(uid string, sessionID string, userQuestion string, modelType string, writer http.ResponseWriter) code.Code {
+	return StreamMessageWithContext(ctx, uid, sessionID, userQuestion, modelType, writer)
+}
+
+func StreamMessageWithContext(ctx context.Context, uid, sessionID, userQuestion, modelType string, writer http.ResponseWriter) code.Code {
 	if status := SaveSessionModel(uid, sessionID, modelType); status != code.CodeSuccess {
 		return status
 	}
@@ -187,6 +192,8 @@ func StreamMessageToExistingSession(uid string, sessionID string, userQuestion s
 		return code.AIModelFail
 	}
 
+	chattrace.Mark(ctx, "session_helper_ready")
+
 	// 定义回调函数，用于实时发送SSE格式的AI响应
 	cb := func(msg string) {
 		// JSON 编码保留换行、空格和代码缩进，避免正文破坏 SSE 帧。
@@ -199,8 +206,23 @@ func StreamMessageToExistingSession(uid string, sessionID string, userQuestion s
 			return
 		}
 		flusher.Flush() // 每次必须 flush
+		chattrace.Mark(ctx, "first_body_flushed")
+		chattrace.Mark(ctx, "first_visible_flushed")
 	}
 
+	if modelType == "qwen" {
+		ctx = aihelper.WithReasoningCallback(ctx, func(text string) {
+			data, _ := json.Marshal(struct {
+				Delta string `json:"delta"`
+			}{text})
+			if _, err := writer.Write(append(append([]byte("event: reasoning_delta\ndata: "), data...), '\n', '\n')); err != nil {
+				return
+			}
+			flusher.Flush()
+			chattrace.Mark(ctx, "first_reasoning_flushed")
+			chattrace.Mark(ctx, "first_visible_flushed")
+		})
+	}
 	// 调用流式生成函数
 	_, err_ := helper.StreamResponse(uid, ctx, cb, userQuestion)
 	if err_ != nil {

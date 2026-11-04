@@ -1,6 +1,7 @@
 package aihelper
 
 import (
+	"GoAI/common/chattrace"
 	"GoAI/common/rabbitmq"
 	"GoAI/model"
 	"GoAI/utils"
@@ -129,14 +130,18 @@ func (a *AIHelper) StreamResponse(uid string, ctx context.Context, cb StreamCall
 	//调用存储函数
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
 	unlock := a.LockTurn()
+	chattrace.Mark(ctx, "turn_lock_acquired")
 	defer unlock()
 	a.AddMessage(userQuestion, uid, "user", true)
+	chattrace.Mark(ctx, "user_mq_published")
 
 	messages, err := a.ContextMessages(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	chattrace.Mark(ctx, "context_ready")
+	chattrace.Mark(ctx, "model_start")
 	// 调用模型生成回复
 	startedAt := time.Now()
 	content, err := a.model.StreamResponse(ctx, messages, cb)

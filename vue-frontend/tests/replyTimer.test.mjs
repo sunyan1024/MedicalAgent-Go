@@ -204,3 +204,27 @@ for (const action of ['switchSession', 'syncHistory']) {
     assert.equal(state.sessions.value.session.messages[2], messages[2])
   })
 }
+
+test('思考计时独立停止，总计时继续，异常结束清理', () => {
+  const c = clock()
+  const msg = { meta: {} }
+  c.timer.start(msg)
+  c.advance(100)
+  c.timer.startReasoning(msg)
+  c.advance(300)
+  c.timer.startReasoning(msg)
+  c.timer.finishReasoning(msg)
+  assert.equal(msg.meta.reasoning.elapsedMs, 300)
+  c.advance(200)
+  assert.equal(msg.meta.timing.elapsedMs, 600)
+  assert.equal(msg.meta.reasoning.elapsedMs, 300)
+  c.timer.finish(msg)
+  const other = { meta: {} }
+  c.timer.start(other)
+  c.timer.startReasoning(other)
+  c.advance(50)
+  c.timer.dispose()
+  assert.equal(other.meta.reasoning.elapsedMs, 50)
+  assert.equal(other.meta.reasoning.interrupted, true)
+  assert.equal(c.callbacks.size, 0)
+})

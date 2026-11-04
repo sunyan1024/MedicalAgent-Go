@@ -1,5 +1,5 @@
 // Parse complete SSE events; network chunks may split UTF-8 characters or frames.
-export async function consumeChatStream(body, { onSession, onDelta }) {
+export async function consumeChatStream(body, { onSession, onDelta, onReasoning = () => {} }) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -21,10 +21,11 @@ export async function consumeChatStream(body, { onSession, onDelta }) {
       try { message = JSON.parse(data).message || data } catch { /* plain error */ }
       throw new Error(message)
     }
-    if (event === 'delta') {
+    if (event === 'delta' || event === 'reasoning_delta') {
       const payload = JSON.parse(data)
       if (typeof payload.delta !== 'string') throw new Error('无效的流式文本')
-      onDelta(payload.delta)
+      if (event === 'reasoning_delta') onReasoning(payload.delta)
+      else onDelta(payload.delta)
     } else if (data === '[DONE]') {
       completed = true
     } else {

@@ -64,16 +64,26 @@
           <div class="message-header">
             <b>{{ message.role === 'user' ? '你' : 'AI' }}:</b>
             <button v-if="message.role === 'assistant'" class="tts-btn" @click="playTTS(message.content)">🔊</button>
-            <span v-if="message.meta && message.meta.status === 'streaming'" class="streaming-indicator"> ··</span>
-            <span v-if="message.meta?.timing" class="reply-duration">{{ message.meta.timing.running ? '已用时' : '用时' }} {{ formatReplyDuration(message.meta.timing.elapsedMs) }}</span>
+            <span v-if="message.meta?.timing && !message.meta?.reasoning?.running && (!message.meta.chatTiming || message.content || !message.meta.timing.running)" class="reply-duration">{{ message.meta.timing.running ? '已用时' : '用时' }} {{ formatReplyDuration(message.meta.timing.elapsedMs) }}</span>
+            <span v-if="message.meta?.reasoning" class="reply-duration">{{ message.meta.reasoning.running ? '' : '· ' }}{{ message.meta.reasoning.interrupted ? '思考已中断' : '思考' }} {{ formatReplyDuration(message.meta.reasoning.elapsedMs) }}</span>
+            <button v-if="message.reasoningContent" type="button" class="reasoning-toggle"
+              :aria-label="message.meta.reasoning.running ? '展开或收起思考内容' : undefined"
+              :aria-expanded="message.meta.reasoning.expanded ?? message.meta.reasoning.running"
+              @click="message.meta.reasoning.expanded = !(message.meta.reasoning.expanded ?? message.meta.reasoning.running)">
+              {{ message.meta.reasoning.running ? '' : '思考过程' }}
+              {{ (message.meta.reasoning.expanded ?? message.meta.reasoning.running) ? '▾' : '▸' }}
+            </button>
+          </div>
+          <div v-if="message.reasoningContent && (message.meta.reasoning.expanded ?? message.meta.reasoning.running)" class="reasoning-content">
+            <div style="white-space: pre-wrap; color: var(--app-text-muted); padding: 8px 0">{{ message.reasoningContent }}</div>
           </div>
           <p v-if="message === pendingMedicalMessage && loading && medicalRequestStatus === 'running' && message.meta?.status === 'streaming' && !message.content"
             class="agent-waiting-hint" role="status">
             Agent 正在处理，分析和工具调用可能需要一些时间，请耐心等待。
           </p>
-          <p v-else-if="loading && message.role === 'assistant' && message.meta?.status === 'streaming' && !message.content && (selectedModel === 'qwen' || selectedModel === 'rag')"
+          <p v-else-if="loading && message.role === 'assistant' && message.meta?.status === 'streaming' && !message.content && !message.reasoningContent && selectedModel === 'rag'"
             class="agent-waiting-hint" role="status">
-            {{ selectedModel === 'rag' ? '正在检索中' : '正在思考中' }}
+            正在检索中
           </p>
           <div v-else class="message-content" v-html="renderMarkdown(message.content)"></div>
         </div>
@@ -632,6 +642,7 @@ export default {
       const assistant = reactive({ role: 'assistant', content: '', meta: { status: 'streaming' } })
       currentMessages.value.push(userMessage, assistant)
       replyTimer.start(assistant)
+      if (selectedModel.value === 'qwen' && isStreaming.value) assistant.meta.chatTiming = { startedAt: performance.now(), stages: {} }
       try {
         await nextTick()
         scrollToBottom()
@@ -740,6 +751,13 @@ export default {
     }
 
     async function handleStreaming(question, assistant) {
+      const timing = assistant.meta.chatTiming
+      const mark = name => {
+        if (timing && timing.stages[name] === undefined) timing.stages[name] = Math.round(performance.now() - timing.startedAt)
+      }
+      let traceId = null
+      let timingStatus = 'failed'
+
       const url = (tempSession.value || !currentSessionId.value)
         ? '/api/AI/chat/send-stream-new-session'
         : '/api/AI/chat/send-stream'
@@ -756,12 +774,15 @@ export default {
 
       try {
         // 创建 fetch 连接读取 SSE 流
+        mark('request_sent')
         const response = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(body)
         })
 
+        traceId = response.headers.get('X-Chat-Trace-ID')
+        mark('response_headers')
         if (!response.ok) {
           throw new Error('Network response was not ok')
         }
@@ -779,11 +800,31 @@ export default {
               tempSession.value = false
             }
           },
+          onReasoning: delta => {
+            if (!delta || selectedModel.value !== 'qwen') return
+            mark('first_reasoning_received')
+            mark('first_visible_received')
+            replyTimer.startReasoning(assistant)
+            assistant.reasoningContent = (assistant.reasoningContent || '') + delta
+            if (timing && !timing.reasoningDomScheduled) {
+              timing.reasoningDomScheduled = true
+              nextTick(() => { mark('first_reasoning_dom_updated'); mark('first_visible_dom_updated') })
+            }
+            nextTick(() => { if (followLatest) scrollToBottom() })
+          },
           onDelta: delta => {
+            if (delta) { replyTimer.finishReasoning(assistant); mark('first_visible_received') }
+            if (delta) mark('first_body_received')
             assistant.content += delta
+            if (delta && timing && !timing.domScheduled) {
+              timing.domScheduled = true
+              nextTick(() => { mark('first_body_dom_updated'); mark('first_visible_dom_updated') })
+            }
             nextTick(() => { if (followLatest) scrollToBottom() })
           }
         })
+        await nextTick()
+        timingStatus = 'completed'
         replyTimer.finish(assistant)
         assistant.meta.status = 'done'
 
@@ -796,6 +837,9 @@ export default {
           currentMessages.value = [...currentMessages.value]
         }
         ElMessage.error('流式传输出错')
+      } finally {
+        mark('finished')
+        if (timing) console.info('[ChatTiming]', { traceId, status: timingStatus, stagesMs: { ...timing.stages } })
       }
     }
 
@@ -1110,16 +1154,37 @@ export default {
   border-color: #bfdbfe;
 }
 
-.streaming-indicator {
-  color: var(--app-text-muted);
-  font-weight: 600;
-  margin-left: 6px;
+.message-header .reply-duration,
+.message-header .reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 28px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .reply-duration {
   color: var(--app-text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.reasoning-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
 }
 
 /* message content */

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"GoAI/common/chattrace"
 	"GoAI/common/code"
 	"GoAI/controller"
 	medical "GoAI/controller/medical"
@@ -140,6 +141,19 @@ func CreateStreamSessionAndSendMessage(c *gin.Context) {
 		return
 	}
 
+	traceCtx := c.Request.Context()
+	if req.ModelType == "qwen" {
+		var trace *chattrace.Trace
+		traceCtx, trace = chattrace.Start(traceCtx)
+		c.Header("X-Chat-Trace-ID", trace.ID)
+		defer func() {
+			status := "completed"
+			if len(c.Errors) > 0 || c.Writer.Status() >= 400 {
+				status = "failed"
+			}
+			trace.Finish(status)
+		}()
+	}
 	// 设置SSE头
 	c.Header("Content-Type", "text/event-stream") // 设置为SSE流式传输
 	c.Header("Cache-Control", "no-cache, no-transform")
@@ -162,8 +176,9 @@ func CreateStreamSessionAndSendMessage(c *gin.Context) {
 	c.Writer.Flush() // 确保数据立即发送，不被缓冲
 
 	// 然后开始把本次回答进行流式发送（包含最后的 [DONE]）
-	code_ = session.StreamMessageToExistingSession(uid, sessionID, req.UserQuestion, req.ModelType, http.ResponseWriter(c.Writer))
+	code_ = session.StreamMessageWithContext(traceCtx, uid, sessionID, req.UserQuestion, req.ModelType, http.ResponseWriter(c.Writer))
 	if code_ != code.CodeSuccess {
+		_ = c.Error(fmt.Errorf("stream failed: %v", code_))
 		// SSE 错误通过特殊事件类型发送
 		c.SSEvent("error", gin.H{"message": "Failed to send message"})
 		return
@@ -237,6 +252,19 @@ func ChatStreamSend(c *gin.Context) {
 		return
 	}
 
+	traceCtx := c.Request.Context()
+	if req.ModelType == "qwen" {
+		var trace *chattrace.Trace
+		traceCtx, trace = chattrace.Start(traceCtx)
+		c.Header("X-Chat-Trace-ID", trace.ID)
+		defer func() {
+			status := "completed"
+			if len(c.Errors) > 0 || c.Writer.Status() >= 400 {
+				status = "failed"
+			}
+			trace.Finish(status)
+		}()
+	}
 	// 设置SSE头
 	c.Header("Content-Type", "text/event-stream") // 设置为SSE流式传输
 	c.Header("Cache-Control", "no-cache, no-transform")
@@ -245,8 +273,9 @@ func ChatStreamSend(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")          // 禁止代理缓存
 
 	// 调用服务层处理流式消息
-	code_ := session.ChatStreamSend(uid, req.SessionID, req.UserQuestion, req.ModelType, http.ResponseWriter(c.Writer))
+	code_ := session.StreamMessageWithContext(traceCtx, uid, req.SessionID, req.UserQuestion, req.ModelType, http.ResponseWriter(c.Writer))
 	if code_ != code.CodeSuccess {
+		_ = c.Error(fmt.Errorf("stream failed: %v", code_))
 		// 通过SSE的error事件发送错误
 		c.SSEvent("error", gin.H{"message": "Failed to send message"})
 		return

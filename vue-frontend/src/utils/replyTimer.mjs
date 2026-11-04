@@ -16,6 +16,11 @@ export function createReplyTimer({
     const { startedAt, interval } = active
     message.meta.timing.elapsedMs = Math.max(0, now() - startedAt)
     message.meta.timing.running = false
+    if (message.meta.reasoning?.running) {
+      message.meta.reasoning.elapsedMs = Math.max(0, now() - message.meta.reasoning.startedAt)
+      message.meta.reasoning.running = false
+      message.meta.reasoning.interrupted = true
+    }
     unschedule(interval)
     active = null
   }
@@ -27,9 +32,20 @@ export function createReplyTimer({
       const interval = schedule(() => {
         if (active?.message === message) {
           message.meta.timing.elapsedMs = Math.max(0, now() - startedAt)
+          if (message.meta.reasoning?.running) message.meta.reasoning.elapsedMs = Math.max(0, now() - message.meta.reasoning.startedAt)
         }
       })
       active = { message, startedAt, interval }
+    },
+    startReasoning(message) {
+      if (!active || active.message !== message || message.meta.reasoning) return
+      message.meta.reasoning = { startedAt: now(), elapsedMs: 0, running: true }
+    },
+    finishReasoning(message) {
+      const r = message.meta.reasoning
+      if (!r?.running) return
+      r.elapsedMs = Math.max(0, now() - r.startedAt)
+      r.running = false
     },
     finish,
     dispose() {

@@ -1,6 +1,7 @@
 package aihelper
 
 import (
+	"GoAI/common/chattrace"
 	"GoAI/config"
 	"context"
 	"encoding/json"
@@ -126,7 +127,15 @@ func (o *QwenModel) StreamResponse(ctx context.Context, messages []*schema.Messa
 		if err != nil {
 			return "", fmt.Errorf("qwen stream recv failed: %v", err)
 		}
+		chattrace.Mark(ctx, "first_sdk_message")
+		if msg.ReasoningContent != "" {
+			chattrace.Mark(ctx, "first_reasoning")
+			chattrace.Mark(ctx, "first_visible")
+			emitReasoning(ctx, msg.ReasoningContent)
+		}
 		if len(msg.Content) > 0 {
+			chattrace.Mark(ctx, "first_body")
+			chattrace.Mark(ctx, "first_visible")
 			fullResp.WriteString(msg.Content) // 聚合
 			cb(msg.Content)                   // 实时调用cb函数，方便主动发送给前端
 		}
