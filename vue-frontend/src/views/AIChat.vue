@@ -58,7 +58,7 @@
       <MedicalPanel v-if="selectedModel === 'medical_agent'" :session-id="currentSessionId" :events="medicalEvents" :busy="loading" :question="medicalQuestion" :request-status="medicalRequestStatus"
         @report="medicalReportId = $event" @ready="medicalReportReady = $event" @example="inputMessage = $event" />
       <button v-if="loading && selectedModel === 'medical_agent'" class="cancel-medical" @click="cancelMedical">停止本次回答</button>
-      <div class="chat-messages" ref="messagesRef">
+      <div class="chat-messages" ref="messagesRef" @scroll="updateScrollFollowing" @wheel.passive="handleMessageWheel">
         <div v-for="(message, index) in currentMessages" :key="index"
           :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']">
           <div class="message-header">
@@ -70,6 +70,10 @@
           <p v-if="message === pendingMedicalMessage && loading && medicalRequestStatus === 'running' && message.meta?.status === 'streaming' && !message.content"
             class="agent-waiting-hint" role="status">
             Agent 正在处理，分析和工具调用可能需要一些时间，请耐心等待。
+          </p>
+          <p v-else-if="loading && message.role === 'assistant' && message.meta?.status === 'streaming' && !message.content && (selectedModel === 'qwen' || selectedModel === 'rag')"
+            class="agent-waiting-hint" role="status">
+            {{ selectedModel === 'rag' ? '正在检索中' : '正在思考中' }}
           </p>
           <div v-else class="message-content" v-html="renderMarkdown(message.content)"></div>
         </div>
@@ -101,6 +105,7 @@
 import { ref, reactive, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { renderMarkdown } from '../utils/markdown'
+import { consumeChatStream } from '../utils/chatStream.mjs'
 import api, { getApiErrorMessage } from '../utils/api'
 import MedicalPanel from '../components/MedicalPanel.vue'
 import { createReplyTimer, formatReplyDuration, restoreHistoryMessage } from '../utils/replyTimer.mjs'
@@ -117,6 +122,14 @@ export default {
     const inputMessage = ref('')
     const loading = ref(false)
     const messagesRef = ref(null)
+    let followLatest = true
+    const updateScrollFollowing = () => {
+      const el = messagesRef.value
+      if (el) followLatest = el.scrollHeight - el.scrollTop - el.clientHeight <= 32
+    }
+    const handleMessageWheel = event => {
+      if (event.deltaY < 0) followLatest = false
+    }
     const messageInput = ref(null)
     const sessionsOpened = ref(false)
     const optionsOpened = ref(false)
@@ -143,7 +156,7 @@ export default {
     const replyTimer = createReplyTimer()
     let medicalAbort = null
     const cancelMedical = () => medicalAbort?.abort()
-    const isStreaming = ref(false)
+    const isStreaming = ref(true)
     const isRecording = ref(false)
     const isTranscribing = ref(false)
     const voiceButtonText = computed(() => {
@@ -487,6 +500,19 @@ export default {
       }
     }
 
+    const refreshSessionTitles = async () => {
+      try {
+        const { data } = await api.get('/AI/chat/sessions')
+        if (data?.status_code !== 1000 || !Array.isArray(data.sessions)) return
+        data.sessions.forEach(session => {
+          const cached = sessions.value[String(session.sessionId)]
+          if (cached && session.title) cached.title = session.title
+        })
+      } catch (error) {
+        console.error('Refresh session titles error:', error)
+      }
+    }
+
     // 添加一个新的计算属性，按更新时间降序排列会话
     const sortedSessions = computed(() => {
       return Object.values(sessions.value).sort((a, b) => {
@@ -616,6 +642,7 @@ export default {
         } else {
           await handleNormal(currentInput, assistant)
         }
+        if (selectedModel.value !== 'medical_agent') await refreshSessionTitles()
       } catch (err) {
         console.error('Send message error:', err)
         assistant.meta.status = 'error'
@@ -629,7 +656,7 @@ export default {
         }
         loading.value = false
         await nextTick()
-        scrollToBottom()
+        if (followLatest) scrollToBottom()
       }
     }
 
@@ -713,7 +740,7 @@ export default {
     }
 
     async function handleStreaming(question, assistant) {
-      const url = tempSession.value
+      const url = (tempSession.value || !currentSessionId.value)
         ? '/api/AI/chat/send-stream-new-session'
         : '/api/AI/chat/send-stream'
 
@@ -723,7 +750,7 @@ export default {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
 
-      const body = tempSession.value
+      const body = (tempSession.value || !currentSessionId.value)
         ? { question: question, modelType: selectedModel.value }
         : { question: question, modelType: selectedModel.value, sessionId: currentSessionId.value }
 
@@ -739,92 +766,26 @@ export default {
           throw new Error('Network response was not ok')
         }
 
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        // 读取流数据
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          buffer += chunk
-
-          // 按行分割
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || '' // 保留未完成的行
-
-          for (const line of lines) {
-            const trimmedLine = line.trim()
-            if (!trimmedLine) continue
-
-            // 处理 SSE 格式：data: <content>
-            if (trimmedLine.startsWith('data:')) {
-              const data = trimmedLine.slice(5).trim()
-              console.log('[SSE] Received:', data) // 调试日志
-
-              if (data === '[DONE]') {
-                // 流结束
-                console.log('[SSE] Stream done')
-                replyTimer.finish(assistant)
-
-                if (!tempSession.value && currentSessionId.value && sessions.value[currentSessionId.value]) {
-                  // 更新会话的更新时间
-                  sessions.value[currentSessionId.value].updated_at = new Date()
-                }
-
-                assistant.meta.status = 'done'
-              } else if (data.startsWith('{')) {
-                // 尝试解析 JSON（如 sessionId）
-                try {
-                  const parsed = JSON.parse(data)
-                  if (parsed.sessionId) {
-                    const newSid = String(parsed.sessionId)
-                    console.log('[SSE] Session ID:', newSid)
-                    if (tempSession.value) {
-                      sessions.value[newSid] = {
-                        id: newSid,
-                        modelType: selectedModel.value,
-                        title: '新会话',
-                        messages: [...currentMessages.value]
-                      }
-                      currentSessionId.value = newSid
-                      tempSession.value = false
-                    }
-                  }
-                } catch (e) {
-                  // 不是 JSON，当作普通文本处理
-                  assistant.content += data
-                  console.log('[SSE] Content updated:', assistant.content.length)
-                }
-              } else {
-                // 普通文本数据，直接追加
-                // 使用数组索引直接更新，强制 Vue 响应式系统检测变化
-                assistant.content += data
-                console.log('[SSE] Content updated:', assistant.content.length)
+        await consumeChatStream(response.body, {
+          onSession: sessionId => {
+            const newSid = String(sessionId)
+            if (tempSession.value || !currentSessionId.value) {
+              sessions.value[newSid] = {
+                id: newSid, modelType: selectedModel.value,
+                title: question.slice(0, 30),
+                messages: [...currentMessages.value], updated_at: new Date()
               }
-              // 页面隐藏时跳过 DOM 更新，避免触发浏览器窗口恢复
-              if (!document.hidden) {
-                currentMessages.value = [...currentMessages.value]
-                await new Promise(resolve => {
-                  requestAnimationFrame(() => {
-                    scrollToBottom()
-                    resolve()
-                  })
-                })
-              }
+              currentSessionId.value = newSid
+              tempSession.value = false
             }
+          },
+          onDelta: delta => {
+            assistant.content += delta
+            nextTick(() => { if (followLatest) scrollToBottom() })
           }
-        }
-
-        // 流读取完成后的处理
+        })
         replyTimer.finish(assistant)
         assistant.meta.status = 'done'
-        if (!document.hidden) {
-          currentMessages.value = [...currentMessages.value]
-        }
 
       } catch (err) {
         console.error('Stream error:', err)
@@ -850,7 +811,7 @@ export default {
       if (isNew) {
         const sessionId = String(data.sessionId)
         sessions.value[sessionId] = {
-          id: sessionId, modelType: selectedModel.value, title: '新会话',
+          id: sessionId, modelType: selectedModel.value, title: question.slice(0, 30),
           messages: [...currentMessages.value], updated_at: new Date()
         }
         currentSessionId.value = sessionId
@@ -863,6 +824,7 @@ export default {
       if (document.hidden) return
       if (messagesRef.value) {
         try {
+          followLatest = true
           messagesRef.value.scrollTop = messagesRef.value.scrollHeight
         } catch (e) {
           // ignore
@@ -901,6 +863,8 @@ export default {
       inputMessage,
       loading,
       messagesRef,
+      updateScrollFollowing,
+      handleMessageWheel,
       messageInput,
       selectedModel,
       savingModel,

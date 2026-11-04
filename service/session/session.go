@@ -8,6 +8,7 @@ import (
 	"GoAI/model"
 	"GoAI/utils"
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"unicode/utf8"
@@ -188,17 +189,16 @@ func StreamMessageToExistingSession(uid string, sessionID string, userQuestion s
 
 	// 定义回调函数，用于实时发送SSE格式的AI响应
 	cb := func(msg string) {
-		// 直接发送数据，不转义
-		// SSE 格式：data: <content>\n\n
-		log.Printf("[SSE] Sending chunk: %s (len=%d)\n", msg, len(msg))
-
-		_, err := writer.Write([]byte("data: " + msg + "\n\n"))
+		// JSON 编码保留换行、空格和代码缩进，避免正文破坏 SSE 帧。
+		data, _ := json.Marshal(struct {
+			Delta string `json:"delta"`
+		}{Delta: msg})
+		_, err := writer.Write(append(append([]byte("event: delta\ndata: "), data...), '\n', '\n'))
 		if err != nil {
 			log.Println("[SSE] Write error: ", err)
 			return
 		}
 		flusher.Flush() // 每次必须 flush
-		log.Println("[SSE] Flushed")
 	}
 
 	// 调用流式生成函数
