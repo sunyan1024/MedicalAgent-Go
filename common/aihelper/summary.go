@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+const summaryTimeout = 90 * time.Second
+
 type summaryState struct {
 	Text    string
 	Through string
@@ -104,7 +106,7 @@ func (a *AIHelper) compressSummary(ctx context.Context, r summaryRepository, uid
 		record(map[string]any{"kind": "summary_decision", "status": status, "replaced_estimated_tokens": historyTokens(old.Text, messages), "version_before": old.Version})
 		log.Printf("[ContextSummary] status=%s messages=%d characters=%d version=%d elapsed_ms=%d", status, len(messages), textSize(messages), old.Version, time.Since(started).Milliseconds())
 	}()
-	work, cancel := context.WithTimeout(ctx, 30*time.Second)
+	work, cancel := context.WithTimeout(ctx, summaryTimeout)
 	defer cancel()
 	ids := make([]string, len(messages))
 	for i, m := range messages {

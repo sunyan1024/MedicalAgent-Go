@@ -80,7 +80,7 @@ func TestSummarySingleBatchCacheAndProgress(t *testing.T) {
 			t.Fatal("correction missing")
 		}
 		deadline, ok := ctx.Deadline()
-		if !ok || time.Until(deadline) > 30*time.Second {
+		if !ok || time.Until(deadline) > summaryTimeout {
 			t.Fatal("missing total deadline")
 		}
 		return "父亲的背景摘要", nil

@@ -79,6 +79,10 @@ func TestSummaryInformationLive(t *testing.T) {
 	if os.Getenv("SUMMARY_LONG_LIVE") == "1" {
 		datasetPath = "experiments/summary-information-long-v1/dataset.json"
 	}
+	medical := os.Getenv("SUMMARY_MEDICAL_ROLLING_LIVE") == "1"
+	if medical {
+		datasetPath = "experiments/summary-medical-rolling-v1/dataset.json"
+	}
 	raw, err := os.ReadFile(datasetPath)
 	if err != nil {
 		t.Fatal(err)
@@ -108,12 +112,25 @@ func TestSummaryInformationLive(t *testing.T) {
 	mustWrite("freeze.json", frozen)
 	budget, firstEstimates := informationBudget(data)
 	budgetRule := "floor(0.9 * min(first checkpoint inputs)), frozen before calls"
-	if os.Getenv("SUMMARY_LONG_LIVE") == "1" {
+	if os.Getenv("SUMMARY_LONG_LIVE") == "1" || medical {
 		budget = historyTokenBudget
 		budgetRule = "production Helper history budget, frozen before calls"
 	}
 	conf := config.GetConfig()
-	mustWrite("metadata.json", map[string]any{"history_budget_estimated_tokens": budget, "first_checkpoint_estimates": firstEstimates, "budget_rule": budgetRule, "model": conf.QwenConfig.QwenModelName, "thinking": conf.QwenConfig.EnableThinking, "summary_thinking": conf.QwenConfig.EnableThinking, "dataset_sha256": fmt.Sprintf("%x", sha256.Sum256(raw)), "started_at": time.Now().UTC(), "summary_timeout_seconds": 30, "call_cap": 70, "configuration": "NewQwenModel for all calls, unchanged defaults"})
+	if medical && strings.TrimSpace(conf.QwenConfig.QwenModelName) == "" {
+		t.Fatal("medical rolling requires a configured model")
+	}
+	if medical {
+		for _, path := range []string{"scripts/summary_medical_rolling.py", "common/aihelper/summary_medical_rolling_test.go", "common/aihelper/model.go", "config/config.go"} {
+			source, e := os.ReadFile(path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			frozen[filepath.Base(path)] = fmt.Sprintf("%x", sha256.Sum256(source))
+		}
+		mustWrite("freeze.json", frozen)
+	}
+	mustWrite("metadata.json", map[string]any{"history_budget_estimated_tokens": budget, "first_checkpoint_estimates": firstEstimates, "budget_rule": budgetRule, "model": conf.QwenConfig.QwenModelName, "thinking": conf.QwenConfig.EnableThinking, "summary_thinking": conf.QwenConfig.EnableThinking, "dataset_sha256": fmt.Sprintf("%x", sha256.Sum256(raw)), "started_at": time.Now().UTC(), "summary_timeout_seconds": int(summaryTimeout / time.Second), "call_cap": 70, "configuration": "NewQwenModel for all calls, unchanged defaults"})
 	f, err := os.Create(filepath.Join(dir, "events.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +226,12 @@ func TestSummaryInformationLive(t *testing.T) {
 				t.Fatal(e)
 			}
 			state := a.summary.state
+			if medical {
+				persisted, err := a.summaryStore.Load(context.Background(), "synthetic", sid)
+				if err != nil || persisted != state {
+					t.Fatalf("persisted summary mismatch: %v", err)
+				}
+			}
 			write(map[string]any{"kind": "snapshot", "scenario": s.ID, "checkpoint": cp.Checkpoint, "state": state, "previous_version": old.Version, "fallback": state.Version == old.Version && len(bounded) < len(trial.GetMessages()), "history_through": cp.Through})
 			recent := bounded
 			if len(recent) > 0 && recent[0].Role == schema.System {
