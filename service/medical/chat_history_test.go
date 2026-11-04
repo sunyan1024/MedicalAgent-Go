@@ -81,7 +81,7 @@ func installChatHelpers(t *testing.T, save func(*model.Message) (*model.Message,
 func installImmediateChatConsumer(t *testing.T) {
 	t.Helper()
 	installChatHelpers(t, func(msg *model.Message) (*model.Message, error) {
-		payload := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser, msg.DurationMS)
+		payload := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.Role, msg.DurationMS)
 		return msg, rabbitmq.MQMessage(&amqp.Delivery{Body: payload})
 	})
 }
@@ -115,7 +115,7 @@ func TestModelSwitchSharesFullHistoryBeforeQueueConsumption(t *testing.T) {
 			db := historyDB(t)
 			var pending [][]byte
 			save := func(msg *model.Message) (*model.Message, error) {
-				pending = append(pending, rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser, msg.DurationMS))
+				pending = append(pending, rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.Role, msg.DurationMS))
 				return msg, nil
 			}
 			ordinary := installChatHelpers(t, save)

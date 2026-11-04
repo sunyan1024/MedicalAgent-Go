@@ -171,7 +171,7 @@ func TestSummaryInformationLive(t *testing.T) {
 		for _, cp := range s.Checkpoints {
 			for position < cp.Through {
 				x := s.Messages[position]
-				msg := &model.Message{UID: "synthetic", SessionID: sid, StableID: x.ID, IsUser: x.Role == "user", Content: x.Content}
+				msg := &model.Message{UID: "synthetic", SessionID: sid, StableID: x.ID, Role: x.Role, Content: x.Content}
 				a.AppendMessage(msg, false)
 				if e := db.Create(msg).Error; e != nil {
 					t.Fatal(e)
@@ -208,7 +208,7 @@ func TestSummaryInformationLive(t *testing.T) {
 			// Build against a fixed copy plus the current evaluation question.
 			trial := NewAIHelper(nil, sid)
 			trial.messages = a.GetMessages()
-			trial.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, IsUser: true, Content: informationQuestion(cp.Question, cp.Fields)}, false)
+			trial.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Role: "user", Content: informationQuestion(cp.Question, cp.Fields)}, false)
 			trial.summary = a.summary
 			trial.summaryFailure = a.summaryFailure
 			trial.summaryFailurePosition = a.summaryFailurePosition
@@ -234,7 +234,7 @@ func TestSummaryInformationLive(t *testing.T) {
 			}
 			write(map[string]any{"kind": "snapshot", "scenario": s.ID, "checkpoint": cp.Checkpoint, "state": state, "previous_version": old.Version, "fallback": state.Version == old.Version && len(bounded) < len(trial.GetMessages()), "history_through": cp.Through})
 			recent := bounded
-			if len(recent) > 0 && recent[0].Role == schema.System {
+			if len(recent) > 0 && recent[0].Role == schema.Assistant {
 				recent = recent[1:]
 			}
 			groups := [][]*schema.Message{utils.ConvertToSchemaMessages(trial.GetMessages()), recent, bounded}

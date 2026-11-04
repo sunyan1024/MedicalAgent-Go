@@ -36,7 +36,7 @@ func NewAIHelper(model_ AIModel, SessionID string) *AIHelper {
 		//异步推送到消息队列中
 		saveFunc: func(msg *model.Message) (*model.Message, error) {
 			// 将消息参数序列化为 JSON 字节数组
-			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.IsUser, msg.DurationMS, msg.StableID)
+			data := rabbitmq.GenerateMessageMQParam(msg.SessionID, msg.Content, msg.UID, msg.Role, msg.DurationMS, msg.StableID)
 			// 异步推送到消息队列中
 			err := rabbitmq.RMQMessage.Publish(data)
 			return msg, err
@@ -46,12 +46,12 @@ func NewAIHelper(model_ AIModel, SessionID string) *AIHelper {
 }
 
 // addMessage 添加消息到内存中并调用自定义存储函数
-func (a *AIHelper) AddMessage(Content string, UID string, IsUser bool, Save bool) {
+func (a *AIHelper) AddMessage(Content string, UID string, Role string, Save bool) {
 	userMsg := model.Message{
 		SessionID: a.SessionID,
 		Content:   Content,
 		UID:       UID,
-		IsUser:    IsUser,
+		Role:      Role,
 	}
 	a.AppendMessage(&userMsg, Save)
 }
@@ -99,7 +99,7 @@ func (a *AIHelper) GenerateResponse(uid string, ctx context.Context, userQuestio
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
 	unlock := a.LockTurn()
 	defer unlock()
-	a.AddMessage(userQuestion, uid, true, true)
+	a.AddMessage(userQuestion, uid, "user", true)
 
 	messages, err := a.ContextMessages(ctx)
 	if err != nil {
@@ -130,7 +130,7 @@ func (a *AIHelper) StreamResponse(uid string, ctx context.Context, cb StreamCall
 	// 这里的userQuestion是用户输入的消息，需要保存到数据库中
 	unlock := a.LockTurn()
 	defer unlock()
-	a.AddMessage(userQuestion, uid, true, true)
+	a.AddMessage(userQuestion, uid, "user", true)
 
 	messages, err := a.ContextMessages(ctx)
 	if err != nil {
@@ -150,7 +150,7 @@ func (a *AIHelper) StreamResponse(uid string, ctx context.Context, cb StreamCall
 		SessionID: a.SessionID,
 		UID:       uid,
 		Content:   content,
-		IsUser:    false,
+		Role:      "assistant",
 	}
 
 	// 添加到内存，并调用存储函数

@@ -13,7 +13,7 @@ import (
 func TestDurationMQSerialization(t *testing.T) {
 	duration := int64(1250)
 	for _, want := range []int64{0, duration} {
-		data := GenerateMessageMQParam("session", "answer", "alice", false, want)
+		data := GenerateMessageMQParam("session", "answer", "alice", "assistant", want)
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(data, &fields); err != nil || fields["duration_ms"] == nil {
 			t.Fatalf("duration_ms must be present, including zero: %s", data)
@@ -42,7 +42,7 @@ func TestDurationMQConsumerPersistence(t *testing.T) {
 	}
 	duration := int64(1250)
 	for _, want := range []int64{0, duration} {
-		payload := GenerateMessageMQParam("session", "answer", "alice", false, want)
+		payload := GenerateMessageMQParam("session", "answer", "alice", "assistant", want)
 		if err := MQMessage(&amqp.Delivery{Body: payload}); err != nil {
 			t.Fatal(err)
 		}

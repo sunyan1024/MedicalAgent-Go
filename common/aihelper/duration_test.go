@@ -70,7 +70,7 @@ func TestRestoreMessagePreservesZeroDurationWithoutSaving(t *testing.T) {
 		return nil, nil
 	})
 	zero := int64(0)
-	helper.AppendMessage(&model.Message{Content: "answer", DurationMS: zero}, false)
+	helper.AppendMessage(&model.Message{Content: "answer", DurationMS: zero, Role: "assistant"}, false)
 	got := helper.GetMessages()[0]
 	if got.DurationMS != 0 {
 		t.Fatal("zero duration lost on restore")
@@ -83,7 +83,7 @@ func TestFailedGenerationDoesNotPersistAnAssistantMessage(t *testing.T) {
 	if _, err := helper.GenerateResponse("alice", context.Background(), "question"); err == nil {
 		t.Fatal("expected generation error")
 	}
-	if messages := helper.GetMessages(); len(messages) != 1 || !messages[0].IsUser {
+	if messages := helper.GetMessages(); len(messages) != 1 || messages[0].Role != "user" {
 		t.Fatal("failed generation should not introduce a new assistant record")
 	}
 }
@@ -96,7 +96,7 @@ func TestAppendMessageReportsSaveFailureAndKeepsHistory(t *testing.T) {
 		calls++
 		return msg, wantErr
 	})
-	msg := &model.Message{SessionID: "session", UID: "alice", Content: "answer", DurationMS: 123}
+	msg := &model.Message{SessionID: "session", UID: "alice", Content: "answer", DurationMS: 123, Role: "assistant"}
 	if err := helper.AppendMessage(msg, true); !errors.Is(err, wantErr) {
 		t.Fatalf("save error lost: %v", err)
 	}

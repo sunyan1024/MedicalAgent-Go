@@ -39,13 +39,13 @@ func TestSummaryInformationBoundaries(t *testing.T) {
 			for _, cp := range s.Checkpoints {
 				for position < cp.Through {
 					x := s.Messages[position]
-					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: s.ID, StableID: x.ID, Content: x.Content, IsUser: x.Role == "user"}, false)
+					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: s.ID, StableID: x.ID, Content: x.Content, Role: x.Role}, false)
 					position++
 				}
 
 				trial := NewAIHelper(nil, s.ID)
 				trial.messages = a.GetMessages()
-				trial.AppendMessage(&model.Message{UID: "synthetic", IsUser: true, Content: informationQuestion(cp.Question, cp.Fields)}, false)
+				trial.AppendMessage(&model.Message{UID: "synthetic", Role: "user", Content: informationQuestion(cp.Question, cp.Fields)}, false)
 				trial.summaryStore = store
 				trial.summarize = a.summarize
 				out, err := trial.ContextMessages(context.Background())
@@ -56,7 +56,7 @@ func TestSummaryInformationBoundaries(t *testing.T) {
 				if len(a.GetMessages()) != cp.Through {
 					t.Fatal("history modified")
 				}
-				if len(out) == 0 || out[0].Role == schema.System {
+				if len(out) == 0 || out[0].Role == schema.Assistant {
 					t.Fatal("short history summarized")
 				}
 

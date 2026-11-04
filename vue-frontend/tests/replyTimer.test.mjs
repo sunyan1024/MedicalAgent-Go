@@ -186,9 +186,9 @@ for (const action of ['switchSession', 'syncHistory']) {
       nextTick, scrollToBottom: () => {}, restoreHistoryMessage,
       ElMessage: { warning: assert.fail, error: assert.fail },
       api: { post: async () => ({ data: { status_code: 1000, history: [
-        { is_user: true, content: 'question', duration_ms: 500 },
-        { is_user: false, content: 'zero', duration_ms: 0 },
-        { is_user: false, content: 'answer', duration_ms: 65000 },
+        { role: 'user', content: 'question', duration_ms: 500 },
+        { role: 'assistant', content: 'zero', duration_ms: 0 },
+        { role: 'assistant', content: 'answer', duration_ms: 65000 },
       ] } }) },
     }
     const source = readFileSync(new URL('../src/views/AIChat.vue', import.meta.url), 'utf8')

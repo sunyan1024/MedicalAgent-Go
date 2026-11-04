@@ -13,7 +13,7 @@ type Message struct {
 	SessionID string    `gorm:"index;not null;type:varchar(36)" json:"session_id"`    // 会话的唯一标识符，不能为空
 	UID       string    `gorm:"type:varchar(20)" json:"uid"`                          // 发送消息的用户 UID
 	Content   string    `gorm:"type:text" json:"content"`                             // 消息的文本内容
-	IsUser    bool      `gorm:"not null;" json:"is_user"`                             // 标识消息是否来自用户
+	Role      string    `gorm:"type:varchar(16);not null;" json:"role"`               // 消息角色
 	CreatedAt time.Time `json:"created_at"`                                           // 消息的创建时间
 }
 
@@ -21,6 +21,6 @@ type Message struct {
 type History struct {
 	DurationMS int64 `json:"duration_ms"`
 
-	IsUser  bool   `json:"is_user"` // 标识消息是否来自用户
+	Role    string `json:"role"`    // 消息角色
 	Content string `json:"content"` // 存储消息内容
 }

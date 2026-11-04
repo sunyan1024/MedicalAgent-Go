@@ -32,7 +32,7 @@ func TestHistoryDurationFromDatabaseAndRestoredMemory(t *testing.T) {
 	}
 	zero, duration := int64(0), int64(65000)
 	messages := []model.Message{
-		{SessionID: "duration-history", UID: "alice", Content: "question", IsUser: true},
+		{SessionID: "duration-history", UID: "alice", Content: "question", Role: "user"},
 		{SessionID: "duration-history", UID: "alice", Content: "fast answer", DurationMS: zero},
 		{SessionID: "duration-history", UID: "alice", Content: "answer", DurationMS: duration},
 		{SessionID: "duration-history", UID: "bob", Content: "private answer", DurationMS: duration},
@@ -68,7 +68,7 @@ func TestHistoryDurationFromDatabaseAndRestoredMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("medical_memory_history", check)
-	helper.AppendMessage(&model.Message{SessionID: "duration-history", UID: "alice", Content: "pending answer", DurationMS: 123}, false)
+	helper.AppendMessage(&model.Message{SessionID: "duration-history", UID: "alice", Content: "pending answer", DurationMS: 123, Role: "assistant"}, false)
 	history, status := GetChatHistory("alice", "duration-history")
 	if status != code.CodeSuccess || len(history) != 4 || history[3].Content != "pending answer" || history[3].DurationMS != 123 {
 		t.Fatalf("medical history ignored pending in-memory message: %+v %v", history, status)

@@ -181,10 +181,7 @@ func summaryModelInput(previous string, messages []*model.Message) ([]*schema.Me
 	}
 	entries := make([]entry, len(messages))
 	for i, m := range messages {
-		role := "assistant"
-		if m.IsUser {
-			role = "user"
-		}
+		role := m.Role
 		entries[i] = entry{Role: role, Content: m.Content}
 	}
 	body, err := json.Marshal(struct {

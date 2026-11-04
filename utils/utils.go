@@ -51,6 +51,7 @@ func ConvertToModelMessage(sessionID string, uid string, msg *schema.Message) *m
 	return &model.Message{
 		SessionID: sessionID,
 		UID:       uid,
+		Role:      string(msg.Role),
 		Content:   msg.Content,
 	}
 }
@@ -59,10 +60,7 @@ func ConvertToModelMessage(sessionID string, uid string, msg *schema.Message) *m
 func ConvertToSchemaMessages(msgs []*model.Message) []*schema.Message {
 	schemaMsgs := make([]*schema.Message, 0, len(msgs))
 	for _, m := range msgs {
-		role := schema.Assistant // 默认设置为AI助手
-		if m.IsUser {            // 如果m.IsUser为true
-			role = schema.User // 则设置为用户
-		}
+		role := schema.RoleType(m.Role)
 		schemaMsgs = append(schemaMsgs, &schema.Message{
 			Role:    role,
 			Content: m.Content,

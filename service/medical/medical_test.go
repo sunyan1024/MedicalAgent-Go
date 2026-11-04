@@ -116,14 +116,14 @@ func TestMedicalOwnershipConfirmationAndPersistentFollowup(t *testing.T) {
 		t.Fatalf("saved answer mismatch: %+v %v", savedRun, err)
 	}
 	var savedMessage model.Message
-	if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, false).First(&savedMessage).Error; err != nil || savedMessage.Content != displayed {
+	if err := db.Where("session_id = ? AND role = ?", run.SessionID, "assistant").First(&savedMessage).Error; err != nil || savedMessage.Content != displayed {
 		t.Fatalf("saved message mismatch: %+v %v", savedMessage, err)
 	}
 	if savedMessage.DurationMS < 0 {
 		t.Fatalf("saved reply duration missing: %+v", savedMessage)
 	}
 	var userMessage model.Message
-	if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, true).First(&userMessage).Error; err != nil || userMessage.DurationMS != 0 {
+	if err := db.Where("session_id = ? AND role = ?", run.SessionID, "user").First(&userMessage).Error; err != nil || userMessage.DurationMS != 0 {
 		t.Fatalf("unexpected user message duration: %+v %v", userMessage, err)
 	}
 	restored, err := Runs(ctx, "alice", run.SessionID)

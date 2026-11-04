@@ -16,17 +16,17 @@ type MessageMQParam struct {
 	SessionID  string `json:"session_id"`
 	Content    string `json:"content"`
 	UID        string `json:"uid"`
-	IsUser     bool   `json:"is_user"`
+	Role       string `json:"role"`
 }
 
 // 将消息参数序列化为 JSON 字节数组
-func GenerateMessageMQParam(sessionID string, content string, uid string, IsUser bool, durationMS int64, stableID ...string) []byte {
+func GenerateMessageMQParam(sessionID string, content string, uid string, Role string, durationMS int64, stableID ...string) []byte {
 	param := MessageMQParam{
 		DurationMS: durationMS,
 		SessionID:  sessionID,
 		Content:    content,
 		UID:        uid,
-		IsUser:     IsUser,
+		Role:       Role,
 	}
 	if len(stableID) > 0 {
 		param.StableID = stableID[0]
@@ -50,7 +50,7 @@ func MQMessage(msg *amqp.Delivery) error {
 		SessionID:  param.SessionID,
 		Content:    param.Content,
 		UID:        param.UID,
-		IsUser:     param.IsUser,
+		Role:       param.Role,
 	}
 	//消费者异步插入到数据库中
 	_, err = message.CreateMessage(newMsg)

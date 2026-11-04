@@ -332,7 +332,7 @@ def main():
                 rows=[r for r in records if r['variant']==s.variant and r['group']==group]
                 expected_contents=[text for r in rows for text in (r['question'],r['answer'])]
                 h=history['body'].get('history',[])
-                checks={key: len(items or [])==12 and [m['content'] for m in items]==expected_contents and [m['is_user'] for m in items]==[True,False]*6 for key,items in [('database',snapshot['database']),('helper',snapshot['helper']),('history',h)]}
+                checks={key: len(items or [])==12 and [m['content'] for m in items]==expected_contents and [m['role'] for m in items]==['user','assistant']*6 for key,items in [('database',snapshot['database']),('helper',snapshot['helper']),('history',h)]}
                 checks['runs_success']=len(snapshot['runs'] or [])==6 and all(r['status']=='completed' for r in snapshot['runs'])
                 # Verify each first model request contains exact preceding user/assistant history.
                 checks['wire_history']=True

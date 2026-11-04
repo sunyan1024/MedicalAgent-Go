@@ -13,7 +13,7 @@ func TestMessageDurationSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := db.Exec("INSERT INTO messages (session_id, uid, content, is_user) VALUES (?, ?, ?, ?)", "session", "alice", "answer", false).Error; err != nil {
+	if err := db.Exec("INSERT INTO messages (session_id, uid, content, role) VALUES (?, ?, ?, ?)", "session", "alice", "answer", "assistant").Error; err != nil {
 		t.Fatal(err)
 	}
 	var message model.Message

@@ -52,10 +52,10 @@ func summaryHistory(t *testing.T, turns int) (*AIHelper, *summaryFakeStore) {
 	store := &summaryFakeStore{}
 	a.summaryStore = store
 	for i := 0; i < turns; i++ {
-		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("question-%d ", i) + strings.Repeat("x", 1500), IsUser: true}, false)
-		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("answer-%d", i)}, false)
+		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("question-%d ", i) + strings.Repeat("x", 1500), Role: "user"}, false)
+		a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: fmt.Sprintf("answer-%d", i), Role: "assistant"}, false)
 	}
-	a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: "current", IsUser: true}, false)
+	a.AppendMessage(&model.Message{SessionID: a.SessionID, UID: "alice", Content: "current", Role: "user"}, false)
 	return a, store
 }
 func TestSummarySingleBatchCacheAndProgress(t *testing.T) {

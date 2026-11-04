@@ -103,6 +103,11 @@ func migration() error {
 	); err != nil {
 		return err
 	}
+	if DB.Migrator().HasColumn(&model.Message{}, "is_user") {
+		if err := DB.Migrator().DropColumn(&model.Message{}, "is_user"); err != nil {
+			return err
+		}
+	}
 	if err := DB.Exec("UPDATE messages SET stable_id = UUID() WHERE stable_id IS NULL OR stable_id = ''").Error; err != nil {
 		return err
 	}

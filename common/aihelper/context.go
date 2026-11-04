@@ -90,7 +90,7 @@ func (a *AIHelper) contextMessagesWithBudget(ctx context.Context, budget int, ob
 			if recentTokens > budget*50/100 {
 				break
 			}
-			if all[i].IsUser {
+			if all[i].Role == "user" {
 				cut = i
 			}
 		}
@@ -143,7 +143,7 @@ func (a *AIHelper) contextMessagesWithBudget(ctx context.Context, budget int, ob
 	for remainingTokens > budget && keep < len(all)-1 {
 		remainingTokens -= estimateMessageTokens(all[keep].Content)
 		keep++
-		for keep < len(all)-1 && !all[keep].IsUser {
+		for keep < len(all)-1 && all[keep].Role != "user" {
 			remainingTokens -= estimateMessageTokens(all[keep].Content)
 			keep++
 		}
@@ -154,7 +154,7 @@ func (a *AIHelper) contextMessagesWithBudget(ctx context.Context, budget int, ob
 	}
 	out := make([]*schema.Message, 0, len(all)-keep+1)
 	if session.Text != "" {
-		out = append(out, schema.SystemMessage(summaryIntroduction+session.Text))
+		out = append(out, schema.AssistantMessage(summaryIntroduction+session.Text, nil))
 	}
 	return append(out, utils.ConvertToSchemaMessages(all[keep:])...), nil
 }

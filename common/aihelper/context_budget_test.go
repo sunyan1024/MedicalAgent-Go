@@ -28,7 +28,7 @@ func TestBudgetCompleteTurnsAndSingleSummary(t *testing.T) {
 	calls := 0
 	a.summarize = func(_ context.Context, _ string, msgs []*model.Message) (string, error) {
 		calls++
-		if len(msgs)%2 != 0 || !msgs[0].IsUser || msgs[len(msgs)-1].IsUser {
+		if len(msgs)%2 != 0 || msgs[0].Role != "user" || msgs[len(msgs)-1].Role == "user" {
 			t.Fatal("partial turn")
 		}
 		return "简短事实", nil
@@ -52,9 +52,9 @@ func TestCompressionTargetIsNotAcceptanceLimit(t *testing.T) {
 		a := NewAIHelper(nil, "gain")
 		s := &summaryFakeStore{}
 		a.summaryStore = s
-		a.AppendMessage(&model.Message{UID: "u", IsUser: true, Content: strings.Repeat("x", 16000)}, false)
-		a.AppendMessage(&model.Message{UID: "u", Content: "answer"}, false)
-		a.AppendMessage(&model.Message{UID: "u", IsUser: true, Content: strings.Repeat("x", 8500)}, false)
+		a.AppendMessage(&model.Message{UID: "u", Role: "user", Content: strings.Repeat("x", 16000)}, false)
+		a.AppendMessage(&model.Message{UID: "u", Content: "answer", Role: "assistant"}, false)
+		a.AppendMessage(&model.Message{UID: "u", Role: "user", Content: strings.Repeat("x", 8500)}, false)
 		a.summarize = func(context.Context, string, []*model.Message) (string, error) {
 			return strings.Repeat("x", tc.size*4), nil
 		}
@@ -104,7 +104,7 @@ func TestFallbackRecordsUncoveredCompleteTurns(t *testing.T) {
 	if err != nil || trim == nil || trim["end"].(int)%2 != 0 || estimateInputTokens(out) > historyTokenBudget || s.state.Version != 0 {
 		t.Fatalf("trim=%v err=%v", trim, err)
 	}
-	if !a.GetMessages()[trim["end"].(int)].IsUser {
+	if a.GetMessages()[trim["end"].(int)].Role != "user" {
 		t.Fatal("partial fallback")
 	}
 }
@@ -114,9 +114,9 @@ func TestRejectSummaryThatExceedsCombinedBudget(t *testing.T) {
 	s := &summaryFakeStore{}
 	a.summaryStore = s
 	for _, m := range []*model.Message{
-		{UID: "u", IsUser: true, Content: strings.Repeat("x", 16000)},
+		{UID: "u", Role: "user", Content: strings.Repeat("x", 16000)},
 		{UID: "u", Content: "answer"},
-		{UID: "u", IsUser: true, Content: strings.Repeat("x", 18000)},
+		{UID: "u", Role: "user", Content: strings.Repeat("x", 18000)},
 	} {
 		a.AppendMessage(m, false)
 	}
@@ -151,8 +151,8 @@ func TestFailedCandidateNotRegenerated(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("same failed candidate generated %d times", calls)
 	}
-	a.AppendMessage(&model.Message{UID: "alice", Content: "answer"}, false)
-	a.AppendMessage(&model.Message{UID: "alice", IsUser: true, Content: "small new question"}, false)
+	a.AppendMessage(&model.Message{UID: "alice", Content: "answer", Role: "assistant"}, false)
+	a.AppendMessage(&model.Message{UID: "alice", Role: "user", Content: "small new question"}, false)
 	a.ContextMessages(context.Background())
 	if calls != 1 {
 		t.Fatal("retried before enough new history")

@@ -216,7 +216,7 @@ func TestRunEventsSurviveDisconnectAndTerminalFailure(t *testing.T) {
 			}
 			if !terminalFailure {
 				var answer model.Message
-				if err := db.Where("session_id = ? AND is_user = ?", run.SessionID, false).First(&answer).Error; err != nil || answer.DurationMS < 0 {
+				if err := db.Where("session_id = ? AND role = ?", run.SessionID, "assistant").First(&answer).Error; err != nil || answer.DurationMS < 0 {
 					t.Fatalf("partial/disconnected answer duration missing: %+v %v", answer, err)
 				}
 			}

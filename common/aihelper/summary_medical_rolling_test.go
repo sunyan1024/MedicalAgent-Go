@@ -36,12 +36,12 @@ func TestSummaryMedicalRollingBoundaries(t *testing.T) {
 			for _, cp := range s.Checkpoints {
 				for position < cp.Through {
 					m := s.Messages[position]
-					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: s.ID, StableID: m.ID, Content: m.Content, IsUser: m.Role == "user"}, false)
+					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: s.ID, StableID: m.ID, Content: m.Content, Role: m.Role}, false)
 					position++
 				}
 				trial := NewAIHelper(nil, s.ID)
 				trial.messages = a.GetMessages()
-				trial.AppendMessage(&model.Message{UID: "synthetic", IsUser: true, Content: informationQuestion(cp.Question, cp.Fields)}, false)
+				trial.AppendMessage(&model.Message{UID: "synthetic", Role: "user", Content: informationQuestion(cp.Question, cp.Fields)}, false)
 				trial.summary = a.summary
 				trial.summaryStore = store
 				trial.summarize = a.summarize

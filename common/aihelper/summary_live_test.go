@@ -66,8 +66,8 @@ func TestSummaryLiveComparison(t *testing.T) {
 				if i == 2 {
 					content += "更正：偏好GREEN，之前BLUE作废。"
 				}
-				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, IsUser: true, Content: content}, false)
-				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录。"}, false)
+				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Role: "user", Content: content}, false)
+				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录。", Role: "assistant"}, false)
 			}
 			rounds := 10
 			if scenario == 3 {
@@ -75,10 +75,10 @@ func TestSummaryLiveComparison(t *testing.T) {
 			}
 			for round := 0; round < rounds; round++ {
 				if round == 4 {
-					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, IsUser: true, Content: "更正：最新偏好YELLOW，GREEN作废。"}, false)
-					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录更正。"}, false)
+					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Role: "user", Content: "更正：最新偏好YELLOW，GREEN作废。"}, false)
+					a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录更正。", Role: "assistant"}, false)
 				}
-				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, IsUser: true, Content: "只输出JSON，字段person、onset、allergy、preference、pending、diagnosis，分别为记录对象、发生时间、过敏信息、最新偏好、待办、明确诊断。无明确依据填unknown。"}, false)
+				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Role: "user", Content: "只输出JSON，字段person、onset、allergy、preference、pending、diagnosis，分别为记录对象、发生时间、过敏信息、最新偏好、待办、明确诊断。无明确依据填unknown。"}, false)
 				all := a.GetMessages()
 				for _, msg := range all {
 					if msg.ID == 0 {
@@ -115,7 +115,7 @@ func TestSummaryLiveComparison(t *testing.T) {
 					t.Fatal(e)
 				}
 				recent := bounded
-				if len(recent) > 0 && recent[0].Role == schema.System {
+				if len(recent) > 0 && recent[0].Role == schema.Assistant {
 					recent = recent[1:]
 				}
 				groups := [][]*schema.Message{utils.ConvertToSchemaMessages(all), recent, bounded}
@@ -166,7 +166,7 @@ func TestSummaryLiveComparison(t *testing.T) {
 						row["fields_correct"] = count
 						row["correct"] = count == 6
 					}
-					row["summary_present"] = len(bounded) > 0 && bounded[0].Role == schema.System
+					row["summary_present"] = len(bounded) > 0 && bounded[0].Role == schema.Assistant
 					row["history_characters"] = textSize(all)
 					row["summary_version"] = a.summary.state.Version
 					if err := enc.Encode(row); err != nil {
@@ -177,7 +177,7 @@ func TestSummaryLiveComparison(t *testing.T) {
 						t.Fatal("three consecutive answer failures")
 					}
 				}
-				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录。"}, false)
+				a.AppendMessage(&model.Message{UID: "synthetic", SessionID: sid, Content: "已记录。", Role: "assistant"}, false)
 			}
 		}
 	}

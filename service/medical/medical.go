@@ -202,7 +202,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	}
 	unlock := helper.LockTurn()
 	defer unlock()
-	if err = helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: req.Question, IsUser: true}, true); err != nil {
+	if err = helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: req.Question, Role: "user"}, true); err != nil {
 		mysql.DB.Model(run).Updates(map[string]any{"status": "failed"})
 		return nil, fmt.Errorf("问题消息保存失败: %w", err)
 	}
@@ -223,7 +223,7 @@ func Run(ctx context.Context, user string, req ChatRequest, emit func(core.Event
 	if err != nil {
 		run.Status = "partial"
 	}
-	messageErr := helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: run.Answer, IsUser: false, DurationMS: durationMS}, true)
+	messageErr := helper.AppendMessage(&model.Message{SessionID: req.SessionID, UID: user, Content: run.Answer, Role: "assistant", DurationMS: durationMS}, true)
 	eventErr := writer.finish()
 	// Persist terminal state even when the browser has disconnected.
 	finishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
